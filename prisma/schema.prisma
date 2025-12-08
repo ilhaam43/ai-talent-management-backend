@@ -20,4 +20,38 @@ model Candidate {
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  // Relations
+  documents CandidateDocument[]
+}
+
+model DocumentType {
+  id           String   @id @default(uuid())
+  documentType String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  documents CandidateDocument[]
+  
+  @@map("document_types")
+}
+
+model CandidateDocument {
+  id               String       @id @default(uuid())
+  candidateId      String
+  documentTypeId   String
+  originalFilename String
+  filePath         String
+  mimeType         String
+  fileSize         Int
+  extractedText    String?      @db.Text
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  
+  // Relations
+  candidate    Candidate    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  documentType DocumentType @relation(fields: [documentTypeId], references: [id])
+  
+  @@map("candidate_documents")
 }

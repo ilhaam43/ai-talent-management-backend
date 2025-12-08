@@ -1,7 +1,8 @@
-version: "3.9"
 services:
+  # PostgreSQL Database
   db:
-    image: postgres:15
+    image: postgres:15-alpine
+    container_name: ai-talent-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -16,9 +17,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - ai-talent-network
 
+  # NestJS Application
   app:
     image: node:20-alpine
+    container_name: ai-talent-app
     working_dir: /usr/src/app
     restart: unless-stopped
     depends_on:
@@ -28,11 +33,29 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/ai_talent_db?schema=public
       JWT_SECRET: supersecretjwt
       PORT: 3000
+      NODE_ENV: development
     volumes:
       - .:/usr/src/app
+      - /usr/src/app/node_modules
+      - uploads:/usr/src/app/uploads
     ports:
       - "3000:3000"
-    command: sh -c "npm install && npm run prisma:generate && npx prisma migrate deploy && npm run start:dev"
+    command: sh -c "npm install && npm run prisma:generate && npx prisma migrate deploy && npm start"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/auth/profile || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ai-talent-network
 
 volumes:
   pgdata:
+    driver: local
+  uploads:
+    driver: local
+
+networks:
+  ai-talent-network:
+    driver: bridge

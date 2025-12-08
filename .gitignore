@@ -22,3 +22,11 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+# Uploaded files
+/uploads
+
+# Test files
+/test-files
+test-server.js
+*.pdf
