@@ -36,24 +36,26 @@ export class TextExtractorService {
   }
 
   /**
-   * Extract text from PDF file using pdf-parse v1.1.1
+   * Extract text from PDF file using pdf-parse
+   * LLM will handle the parsing, so we just need raw text extraction
    */
   private async extractFromPDF(filePath: string): Promise<string> {
     try {
+      console.log('Extracting text from PDF...');
       const dataBuffer = await fs.readFile(filePath);
-      
-      // pdf-parse v1.1.1 works with simple function call
       const data = await pdf(dataBuffer);
       
       if (!data.text || data.text.trim().length === 0) {
         throw new Error('No text content found in PDF');
       }
       
+      console.log(`Text extraction completed. Extracted ${data.text.length} characters.`);
       return data.text;
     } catch (error: any) {
       throw new Error(`PDF extraction failed: ${error.message}`);
     }
   }
+
 
   /**
    * Extract text from DOCX file

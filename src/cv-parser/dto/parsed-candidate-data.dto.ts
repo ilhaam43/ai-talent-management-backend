@@ -1,23 +1,45 @@
 export interface PersonalInfo {
   fullName?: string;
-  email?: string;
-  phone?: string;
-  dateOfBirth?: string;
-  placeOfBirth?: string;
-  address?: string;
-  city?: string;
   idCardNumber?: string;
+  phone?: string;
+  gender?: string;
+  maritalStatus?: string;
+  placeOfBirth?: string;
+  nickname?: string;
+  email?: string;
+  nationality?: string;
+  religion?: string;
+  dateOfBirth?: string;
+}
+
+export interface SocialMedia {
+  linkedin?: string;
+  instagram?: string;
+  facebook?: string;
+  tiktok?: string;
+}
+
+export interface Address {
+  province?: string;
+  city?: string; // city/district
+  subdistrict?: string;
+  postalCode?: string;
 }
 
 export interface Education {
-  institution: string;
-  degree: string;
-  major?: string;
+  educationLevel?: string; // e.g., "Bachelor", "Master", "High School"
+  major?: string; // field of study
+  country?: string;
+  city?: string;
+  university?: string; // institution
   gpa?: string;
-  maxGpa?: string;
+  gpaMax?: string; // maxGpa
+  yearOfStudy?: string; // startYear and endYear combined or just year
   startYear?: string;
   endYear?: string;
-  country?: string;
+  // Legacy fields for backward compatibility
+  institution?: string;
+  degree?: string;
 }
 
 export interface WorkExperience {
@@ -59,6 +81,8 @@ export interface ParsedCandidateData {
   extractedText: string;
   parsedData: {
     personalInfo: PersonalInfo;
+    socialMedia?: SocialMedia;
+    address?: Address;
     education: Education[];
     workExperience: WorkExperience[];
     organizationExperience: OrganizationExperience[];

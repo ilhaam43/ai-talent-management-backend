@@ -6,6 +6,7 @@ Welcome to the documentation for AI Talent Management Backend. This documentatio
 
 ### Main Documentation
 - **[Quick Start Guide](./QUICK_START_CV_API.md)** - Quick start guide for CV Upload & Parse API
+- **[LLM Setup Guide](./LLM_SETUP.md)** - Setup LLM (Llama4 Maverick) for CV parsing
 - **[Docker Deployment](./DOCKER_DEPLOYMENT.md)** - Complete Docker deployment guide
 - **[Docker Improvements](./DOCKER_IMPROVEMENTS.md)** - Docker optimizations and improvements
 - **[Deployment Checklist](./DEPLOYMENT_CHECKLIST.md)** - Step-by-step deployment checklist

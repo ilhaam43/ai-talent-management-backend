@@ -26,12 +26,11 @@ Complete implementation walkthrough with:
 - Testing instructions
 - Troubleshooting
 
-### 3. [API Summary](./CV_API_SUMMARY.md)
-Quick summary of:
-- What was created
-- Key features
-- API endpoints
-- Statistics
+### 3. [Test Results](./CV_TEST_RESULTS.md)
+Test results for all CVs in test-files folder:
+- Success rate: 80% (4/5 CVs)
+- Detailed parsing results
+- Analysis and recommendations
 
 ## 🎯 What Was Implemented
 
@@ -43,8 +42,10 @@ Quick summary of:
 - Authorization checks
 
 ### CV Parser API (Parsing & Extraction)
-- PDF text extraction
-- DOCX text extraction
+- PDF text extraction (pdf-parse)
+- DOCX text extraction (mammoth)
+- **LLM-based parsing** (Llama4 Maverick / OpenAI-compatible) ⭐
+- Regex-based parsing (fallback)
 - Structured data parsing:
   - Personal information
   - Education history
@@ -96,7 +97,9 @@ npx ts-node scripts/test-cv-upload-and-parse.ts
 
 - This implementation handles **upload and parsing only**
 - **Storing parsed data** to candidate profile is handled in separate issues (#4-#13)
-- Parsing uses regex-based extraction (can be upgraded to AI-based in the future)
+- **LLM Parsing**: Uses Llama4 Maverick (or any OpenAI-compatible API) for high-accuracy parsing
+- **Fallback**: Automatically falls back to regex-based parsing if LLM is unavailable
+- **Setup**: See [LLM Setup Guide](../LLM_SETUP.md) for configuration
 
 ---
 

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DocumentsService } from '../documents/documents.service';
 import { TextExtractorService } from './parsers/text-extractor.service';
 import { DataExtractorService } from './parsers/data-extractor.service';
+import { LLMParserService } from './parsers/llm-parser.service';
 import { ParsedCandidateData } from './dto/parsed-candidate-data.dto';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class CVParserService {
     private documentsService: DocumentsService,
     private textExtractor: TextExtractorService,
     private dataExtractor: DataExtractorService,
+    private llmParser: LLMParserService,
   ) {}
 
   /**
@@ -40,8 +42,8 @@ export class CVParserService {
     // Save extracted text to database for future reference
     await this.documentsService.updateExtractedText(documentId, extractedText);
 
-    // Parse structured data from text
-    const parsedData = this.parseText(extractedText);
+    // Parse structured data from text (using LLM if available)
+    const parsedData = await this.parseText(extractedText);
 
     return {
       extractedText,
@@ -61,8 +63,8 @@ export class CVParserService {
       file.mimetype,
     );
 
-    // Parse structured data from text
-    const parsedData = this.parseText(extractedText);
+    // Parse structured data from text (using LLM if available)
+    const parsedData = await this.parseText(extractedText);
 
     // Clean up temporary file
     try {
@@ -81,10 +83,44 @@ export class CVParserService {
 
   /**
    * Parse text and extract structured data
+   * Uses LLM if available, falls back to regex-based extraction
+   * Skips LLM for very long texts to avoid timeout
    */
-  private parseText(text: string) {
+  private async parseText(text: string) {
+    // Try LLM parsing first if available and text is reasonable size
+    // Skip LLM for very long texts (>15k chars) to avoid timeout
+    const shouldUseLLM = this.llmParser.isAvailable() && text.length <= 15000;
+    
+    if (shouldUseLLM) {
+      try {
+        console.log('Using LLM for CV parsing...');
+        const startTime = Date.now();
+        const llmResult = await this.llmParser.parseCVWithLLM(text);
+        const duration = Date.now() - startTime;
+        console.log(`LLM parsing successful (${duration}ms)`);
+        return llmResult;
+      } catch (error: any) {
+        // If timeout or other error, fall back to regex
+        if (error.message?.includes('timeout')) {
+          console.warn('LLM timeout, using regex parsing for faster results');
+        } else {
+          console.warn('LLM parsing failed, falling back to regex:', error.message);
+        }
+        // Fall through to regex parsing
+      }
+    } else if (this.llmParser.isAvailable() && text.length > 15000) {
+      console.log('Text too long for LLM, using regex parsing for faster results');
+    }
+
+    // Fallback to regex-based parsing
+    console.log('Using regex-based parsing...');
+    const socialMedia = this.dataExtractor.extractSocialMedia(text);
+    const address = this.dataExtractor.extractAddress(text);
+    
     return {
       personalInfo: this.dataExtractor.extractPersonalInfo(text),
+      socialMedia: Object.keys(socialMedia).length > 0 ? socialMedia : undefined,
+      address: Object.keys(address).length > 0 ? address : undefined,
       education: this.dataExtractor.extractEducation(text),
       workExperience: this.dataExtractor.extractWorkExperience(text),
       organizationExperience: this.dataExtractor.extractOrganizationExperience(text),

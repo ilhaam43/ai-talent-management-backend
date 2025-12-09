@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
   PersonalInfo,
+  SocialMedia,
+  Address,
   Education,
   WorkExperience,
   OrganizationExperience,
@@ -67,34 +69,128 @@ export class DataExtractorService {
       personalInfo.idCardNumber = idMatch[1];
     }
 
-    // Extract address
-    const addressMatch = text.match(
-      /(?:address|alamat)\s*:?\s*([^\n]{20,150})/i,
-    );
-    if (addressMatch) {
-      personalInfo.address = addressMatch[1].trim();
+    // Note: Address is now extracted separately via extractAddress() method
+
+    // Extract gender
+    const genderMatch = text.match(/(?:gender|jenis kelamin)\s*:?\s*(male|female|pria|wanita|man|woman|laki-laki|perempuan)/i);
+    if (genderMatch) {
+      const gender = genderMatch[1].toLowerCase();
+      if (gender.includes('male') || gender.includes('pria') || gender.includes('laki')) {
+        personalInfo.gender = 'Male';
+      } else if (gender.includes('female') || gender.includes('wanita') || gender.includes('perempuan')) {
+        personalInfo.gender = 'Female';
+      }
     }
 
-    // Extract city/domicile
-    const cityMatch = text.match(
-      /(?:city|domicile|kota|domisili)\s*:?\s*([A-Z][a-zA-Z\s]+?)(?:\n|,|\d)/i,
-    );
-    if (cityMatch) {
-      personalInfo.city = cityMatch[1].trim();
+    // Extract marital status
+    const maritalMatch = text.match(/(?:marital status|status pernikahan|status)\s*:?\s*(single|married|divorced|widowed|belum menikah|menikah|cerai|janda|duda)/i);
+    if (maritalMatch) {
+      const status = maritalMatch[1].toLowerCase();
+      if (status.includes('single') || status.includes('belum')) personalInfo.maritalStatus = 'Single';
+      else if (status.includes('married') || status.includes('menikah')) personalInfo.maritalStatus = 'Married';
+      else if (status.includes('divorced') || status.includes('cerai')) personalInfo.maritalStatus = 'Divorced';
+      else if (status.includes('widowed') || status.includes('janda') || status.includes('duda')) personalInfo.maritalStatus = 'Widowed';
+    }
+
+    // Extract nickname
+    const nicknameMatch = text.match(/(?:nickname|panggilan|nama panggilan|call me)\s*:?\s*([A-Za-z]+)/i);
+    if (nicknameMatch) {
+      personalInfo.nickname = nicknameMatch[1].trim();
+    }
+
+    // Extract nationality
+    const nationalityMatch = text.match(/(?:nationality|kewarganegaraan|warga negara)\s*:?\s*([A-Z][a-zA-Z\s]+?)(?:\n|,|\d)/i);
+    if (nationalityMatch) {
+      personalInfo.nationality = nationalityMatch[1].trim();
+    }
+
+    // Extract religion
+    const religionMatch = text.match(/(?:religion|agama)\s*:?\s*([A-Z][a-zA-Z\s]+?)(?:\n|,|\d)/i);
+    if (religionMatch) {
+      personalInfo.religion = religionMatch[1].trim();
     }
 
     return personalInfo;
   }
 
   /**
+   * Extract social media links from CV text
+   */
+  extractSocialMedia(text: string): SocialMedia {
+    const socialMedia: SocialMedia = {};
+
+    // Extract LinkedIn
+    const linkedinMatch = text.match(/(?:linkedin|linked\.in)\s*:?\s*(?:https?:\/\/)?(?:www\.)?(?:linkedin\.com\/in\/|linkedin\.com\/profile\/)?([\w-]+)/i);
+    if (linkedinMatch) {
+      const username = linkedinMatch[1];
+      socialMedia.linkedin = username.includes('http') ? username : `https://linkedin.com/in/${username}`;
+    }
+
+    // Extract Instagram
+    const instagramMatch = text.match(/(?:instagram|ig)\s*:?\s*(?:https?:\/\/)?(?:www\.)?(?:instagram\.com\/)?@?([\w.]+)/i);
+    if (instagramMatch) {
+      socialMedia.instagram = instagramMatch[1].replace('@', '');
+    }
+
+    // Extract Facebook
+    const facebookMatch = text.match(/(?:facebook|fb)\s*:?\s*(?:https?:\/\/)?(?:www\.)?(?:facebook\.com\/)?([\w.]+)/i);
+    if (facebookMatch) {
+      const username = facebookMatch[1];
+      socialMedia.facebook = username.includes('http') ? username : `https://facebook.com/${username}`;
+    }
+
+    // Extract TikTok
+    const tiktokMatch = text.match(/(?:tiktok|tt)\s*:?\s*(?:https?:\/\/)?(?:www\.)?(?:tiktok\.com\/@)?([\w.]+)/i);
+    if (tiktokMatch) {
+      socialMedia.tiktok = tiktokMatch[1].replace('@', '');
+    }
+
+    return socialMedia;
+  }
+
+  /**
+   * Extract address details from CV text
+   */
+  extractAddress(text: string): Address {
+    const address: Address = {};
+
+    // Extract province
+    const provinceMatch = text.match(/(?:province|provinsi)\s*:?\s*([A-Z][a-zA-Z\s]+?)(?:\n|,|\d)/i);
+    if (provinceMatch) {
+      address.province = provinceMatch[1].trim();
+    }
+
+    // Extract city/district
+    const cityMatch = text.match(/(?:city|kota|district|kabupaten)\s*:?\s*([A-Z][a-zA-Z\s]+?)(?:\n|,|\d)/i);
+    if (cityMatch) {
+      address.city = cityMatch[1].trim();
+    }
+
+    // Extract subdistrict
+    const subdistrictMatch = text.match(/(?:subdistrict|kecamatan|sub-district)\s*:?\s*([A-Z][a-zA-Z\s]+?)(?:\n|,|\d)/i);
+    if (subdistrictMatch) {
+      address.subdistrict = subdistrictMatch[1].trim();
+    }
+
+    // Extract postal code
+    const postalMatch = text.match(/(?:postal code|kode pos|zip code)\s*:?\s*(\d{5})/i);
+    if (postalMatch) {
+      address.postalCode = postalMatch[1];
+    }
+
+    return address;
+  }
+
+  /**
    * Extract education history from CV text
+   * Improved patterns for better accuracy
    */
   extractEducation(text: string): Education[] {
     const educations: Education[] = [];
     
-    // Find education section
+    // Find education section - more flexible matching
     const educationSectionMatch = text.match(
-      /(?:education|pendidikan|academic|riwayat pendidikan)([\s\S]*?)(?=\n(?:experience|work|skill|organization|certification|proyect|interest|reference)|$)/i,
+      /(?:education|pendidikan|academic|riwayat pendidikan|qualification|qualifications)([\s\S]*?)(?=\n(?:experience|work|professional|skill|organization|certification|project|interest|reference|profile|summary)|$)/i,
     );
     
     if (!educationSectionMatch) {
@@ -103,61 +199,141 @@ export class DataExtractorService {
 
     const educationText = educationSectionMatch[1];
 
-    // Common degree patterns
-    const degreePatterns = [
-      /(?:Bachelor|Master|PhD|Diploma|S1|S2|S3|D3|D4|Sarjana|Magister|Doktor)/gi,
-    ];
-
-    // Extract institution and degree
-    const institutionMatches = educationText.matchAll(
-      /(?:university|institut|college|universitas|sekolah|academy|akademi)\s+([^\n]{5,100})/gi,
-    );
-
-    for (const match of institutionMatches) {
-      const context = educationText.slice(
-        Math.max(0, match.index! - 200),
-        Math.min(educationText.length, match.index! + 300),
-      );
-
+    // Split by date patterns or institution patterns
+    // Look for patterns like: "2019 – 08/2023" or "2016 – 2019" or institution names
+    const educationBlocks = educationText.split(/\n(?=\d{4}|(?:university|institut|college|universitas|school|academy|smk|sma|smp))/i);
+    
+    for (const block of educationBlocks) {
+      if (block.trim().length < 30) continue;
+      
       const education: Education = {
-        institution: match[1].trim().split('\n')[0].trim(),
-        degree: 'Bachelor', // Default
+        institution: '',
+        degree: '',
+        university: '',
+        educationLevel: '',
       };
 
-      // Find degree
-      for (const pattern of degreePatterns) {
-        const degreeMatch = context.match(pattern);
-        if (degreeMatch) {
-          education.degree = degreeMatch[0];
+      // Extract date range (various formats: "2019 – 08/2023", "2016 – 2019", "2019-2023")
+      const datePatterns = [
+        /(\d{4})\s*[-–—]\s*(\d{1,2}\/\d{4}|\d{4})/,  // "2019 – 08/2023" or "2019 – 2023"
+        /(\d{4})\s*[-–—]\s*(\d{4})/,                  // "2016 – 2019"
+        /(\d{4})\s*to\s*(\d{4})/i,                    // "2019 to 2023"
+      ];
+      
+      for (const pattern of datePatterns) {
+        const dateMatch = block.match(pattern);
+        if (dateMatch) {
+          education.startYear = dateMatch[1];
+          // Handle formats like "08/2023"
+          if (dateMatch[2].includes('/')) {
+            const parts = dateMatch[2].split('/');
+            education.endYear = parts[1] || parts[0];
+          } else {
+            education.endYear = dateMatch[2];
+          }
           break;
         }
       }
 
-      // Find major
-      const majorMatch = context.match(
-        /(?:major|jurusan|program studi|field of study)\s*:?\s*([^\n]{5,80})/i,
-      );
-      if (majorMatch) {
-        education.major = majorMatch[1].trim();
-      }
-
-      // Find GPA
-      const gpaMatch = context.match(/(?:gpa|ipk)\s*:?\s*(\d+\.?\d*)\s*(?:\/|of|dari)?\s*(\d+\.?\d*)?/i);
-      if (gpaMatch) {
-        education.gpa = gpaMatch[1];
-        if (gpaMatch[2]) {
-          education.maxGpa = gpaMatch[2];
+      // Extract institution (look for university/college/school names)
+      const institutionPatterns = [
+        /(?:university|institut|college|universitas|school|academy|akademi|smk|sma|smp)\s+([^\n,]{5,100})/i,
+        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:University|Institute|College|School|Academy))/i,
+      ];
+      
+      for (const pattern of institutionPatterns) {
+        const instMatch = block.match(pattern);
+        if (instMatch) {
+          const institution = instMatch[1].trim().split(',')[0].trim();
+          education.institution = institution;
+          education.university = institution; // Also set university field
+          break;
         }
       }
 
-      // Find years (various formats)
-      const yearMatch = context.match(/(\d{4})\s*[-–—to]+\s*(\d{4}|present|now|sekarang)/i);
-      if (yearMatch) {
-        education.startYear = yearMatch[1];
-        education.endYear = yearMatch[2].match(/\d{4}/) ? yearMatch[2] : new Date().getFullYear().toString();
+      // Extract degree (Bachelor, Master, PhD, etc.)
+      const degreeMatch = block.match(
+        /(?:Bachelor|Master|PhD|Doctor|Diploma|S1|S2|S3|D3|D4|Sarjana|Magister|Doktor|BSc|MSc|BA|MA|High School|SMA|SMK|SMP)\s+(?:of|in)?\s*([^\n,]{0,80})/i,
+      );
+      if (degreeMatch) {
+        education.degree = degreeMatch[0].trim();
+        // Extract education level from degree
+        const degreeText = degreeMatch[0].toLowerCase();
+        if (degreeText.includes('phd') || degreeText.includes('doctor') || degreeText.includes('doktor') || degreeText.includes('s3')) {
+          education.educationLevel = 'Doctorate';
+        } else if (degreeText.includes('master') || degreeText.includes('magister') || degreeText.includes('s2')) {
+          education.educationLevel = 'Master';
+        } else if (degreeText.includes('bachelor') || degreeText.includes('sarjana') || degreeText.includes('s1')) {
+          education.educationLevel = 'Bachelor';
+        } else if (degreeText.includes('diploma') || degreeText.includes('d3') || degreeText.includes('d4')) {
+          education.educationLevel = 'Diploma';
+        } else if (degreeText.includes('high school') || degreeText.includes('sma') || degreeText.includes('smk')) {
+          education.educationLevel = 'High School';
+        } else if (degreeText.includes('smp')) {
+          education.educationLevel = 'Junior High School';
+        }
+        // Extract major from degree string
+        const majorInDegree = degreeMatch[1]?.trim();
+        if (majorInDegree && majorInDegree.length > 3) {
+          education.major = majorInDegree;
+        }
       }
 
-      educations.push(education);
+      // Extract major separately if not found in degree
+      if (!education.major) {
+        const majorMatch = block.match(
+          /(?:major|jurusan|program studi|field of study|in)\s*:?\s*([^\n,]{5,80})/i,
+        );
+        if (majorMatch) {
+          education.major = majorMatch[1].trim();
+        }
+      }
+
+      // Extract GPA (various formats)
+      const gpaPatterns = [
+        /(?:gpa|ipk|grade)\s*:?\s*(\d+\.?\d*)\s*(?:\/|of|out of|dari)?\s*(\d+\.?\d*)/i,
+        /(?:gpa|ipk)\s*:?\s*(\d+\.?\d*)/i,
+        /(\d+\.?\d*)\s*(?:\/|of|out of|dari)\s*(\d+\.?\d*)\s*(?:gpa|ipk)/i,
+      ];
+      
+      for (const pattern of gpaPatterns) {
+        const gpaMatch = block.match(pattern);
+        if (gpaMatch) {
+          education.gpa = gpaMatch[1];
+          if (gpaMatch[2]) {
+            education.gpaMax = gpaMatch[2]; // Set gpaMax field
+          } else {
+            education.gpaMax = '4.00'; // Default
+          }
+          break;
+        }
+      }
+
+      // Extract country/location
+      const countryMatch = block.match(/(?:in|at|location)\s+([A-Z][a-zA-Z\s]+?)(?:\n|,|$)/i);
+      if (countryMatch) {
+        education.country = countryMatch[1].trim();
+      }
+
+      // Extract city
+      const cityMatch = block.match(/(?:city|kota)\s*:?\s*([A-Z][a-zA-Z\s]+?)(?:\n|,|$)/i);
+      if (cityMatch) {
+        education.city = cityMatch[1].trim();
+      }
+
+      // Set yearOfStudy from startYear and endYear
+      if (education.startYear && education.endYear) {
+        education.yearOfStudy = `${education.startYear}-${education.endYear}`;
+      } else if (education.startYear) {
+        education.yearOfStudy = education.startYear;
+      } else if (education.endYear) {
+        education.yearOfStudy = education.endYear;
+      }
+
+      // Only add if we have at least institution or degree
+      if (education.institution || education.degree) {
+        educations.push(education);
+      }
     }
 
     return educations;
@@ -165,13 +341,14 @@ export class DataExtractorService {
 
   /**
    * Extract work experience from CV text
+   * Improved patterns for better accuracy
    */
   extractWorkExperience(text: string): WorkExperience[] {
     const experiences: WorkExperience[] = [];
 
-    // Find work experience section
+    // Find work experience section - more flexible
     const experienceSectionMatch = text.match(
-      /(?:work experience|professional experience|employment|pengalaman kerja|riwayat pekerjaan)([\s\S]*?)(?=\n(?:education|skill|organization|certification|proyect|interest|reference)|$)/i,
+      /(?:work experience|professional experience|employment|pengalaman kerja|riwayat pekerjaan|experience|career)([\s\S]*?)(?=\n(?:education|skill|organization|certification|project|interest|reference|profile|summary|language)|$)/i,
     );
 
     if (!experienceSectionMatch) {
@@ -180,64 +357,116 @@ export class DataExtractorService {
 
     const experienceText = experienceSectionMatch[1];
 
-    // Split by common separators (years, company patterns)
-    const experienceBlocks = experienceText.split(/\n(?=\d{4}|\w+\s+\d{4})/);
+    // Split by date patterns or company/position patterns
+    // Look for patterns like: "05/2025 - 08/2025" or "Management Trainee" or company names
+    const experienceBlocks = experienceText.split(/\n(?=\d{1,2}\/\d{4}|\d{4}|\w+\s+\d{4}|[A-Z][a-z]+\s+[A-Z][a-z]+)/);
 
     for (const block of experienceBlocks) {
-      if (block.trim().length < 20) continue;
+      if (block.trim().length < 30) continue;
 
       const experience: WorkExperience = {
         company: '',
         position: '',
       };
 
-      // Extract company name (often in bold or first line)
-      const companyMatch = block.match(/^([A-Z][^\n]{5,80})/);
-      if (companyMatch) {
-        const firstLine = companyMatch[1].trim();
-        // Check if it's likely a company (not a position)
-        if (
-          !/(?:manager|engineer|developer|analyst|director|specialist)/i.test(
-            firstLine,
-          )
-        ) {
-          experience.company = firstLine;
+      // Extract date range (various formats)
+      const datePatterns = [
+        /(\d{1,2}\/\d{4})\s*[-–—]\s*(\d{1,2}\/\d{4}|\w+\s+\d{4})/,  // "05/2025 - 08/2025"
+        /(\w+\s+\d{4})\s*[-–—,]\s*(\w+\s+\d{4}|present|now)/i,     // "May 2025 - August 2025"
+        /(\d{4})\s*[-–—]\s*(\d{4}|present|now)/i,                   // "2020 - 2023"
+      ];
+      
+      for (const pattern of datePatterns) {
+        const dateMatch = block.match(pattern);
+        if (dateMatch) {
+          experience.startDate = dateMatch[1].trim();
+          experience.endDate = dateMatch[2].trim();
+          break;
         }
       }
 
-      // Extract position
-      const positionMatch = block.match(
-        /(?:as\s+)?(?:position|role|jabatan)?\s*:?\s*([A-Z][^\n]{5,80})/i,
-      );
-      if (positionMatch) {
-        experience.position = positionMatch[1].trim();
-      } else {
-        // Try to find common job titles
-        const titleMatch = block.match(
-          /(software engineer|developer|manager|analyst|designer|consultant|director|specialist|staff|officer|coordinator)[^\n]*/i,
-        );
-        if (titleMatch) {
-          experience.position = titleMatch[0].trim();
+      // Extract position (usually comes before company or in first lines)
+      const positionPatterns = [
+        /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,4}(?:\s+\d+)?)\s*[-–—,]/m,  // "Management Trainee 2 -"
+        /(?:as\s+)?(?:position|role|jabatan|title)\s*:?\s*([^\n,]{5,80})/i,
+        /(Management Trainee|Software Engineer|Developer|Data Scientist|AI Developer|Intern|Specialist|Analyst|Manager|Director|Coordinator|Officer|Staff)[^\n,]{0,50}/i,
+      ];
+      
+      for (const pattern of positionPatterns) {
+        const posMatch = block.match(pattern);
+        if (posMatch) {
+          experience.position = posMatch[1]?.trim() || posMatch[0].trim();
+          // Clean up position
+          experience.position = experience.position.replace(/[-–—,].*$/, '').trim();
+          break;
         }
       }
 
-      // Extract dates
-      const dateMatch = block.match(
-        /(\w+\s+\d{4}|\d{4}[-/]\d{1,2}|\d{1,2}[-/]\d{4})\s*[-–—to]+\s*(\w+\s+\d{4}|\d{4}[-/]\d{1,2}|\d{1,2}[-/]\d{4}|present|now|sekarang)/i,
+      // Extract company (usually after position or in separate line)
+      const companyPatterns = [
+        /(?:at|company|perusahaan|pt\.?|cv\.?)\s+([A-Z][^\n,]{5,80})/i,
+        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*[,]?\s*(?:Focusing|Led|Implemented|Developed)/i,  // Company before action verbs
+        /^([A-Z][^\n,]{5,80})(?:\s*[-–—]\s*[A-Z])/m,  // Company on its own line
+      ];
+      
+      for (const pattern of companyPatterns) {
+        const compMatch = block.match(pattern);
+        if (compMatch) {
+          const company = compMatch[1].trim();
+          // Filter out positions
+          if (!/(?:engineer|developer|manager|trainee|intern|specialist|analyst)/i.test(company)) {
+            experience.company = company;
+            break;
+          }
+        }
+      }
+
+      // If no company found, try to find it from context
+      if (!experience.company) {
+        const lines = block.split('\n');
+        for (const line of lines) {
+          const lineTrimmed = line.trim();
+          // Look for company-like patterns (capitalized, not a position)
+          if (
+            /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$/.test(lineTrimmed) &&
+            lineTrimmed.length > 5 &&
+            lineTrimmed.length < 50 &&
+            !/(?:engineer|developer|manager|trainee|intern)/i.test(lineTrimmed)
+          ) {
+            experience.company = lineTrimmed;
+            break;
+          }
+        }
+      }
+
+      // Extract description (bullet points or paragraphs)
+      const descriptions: string[] = [];
+      
+      // Pattern 1: Action verbs with descriptions (non-global, use match)
+      const actionVerbMatch = block.match(
+        /(?:Focusing|Led|Implemented|Developed|Created|Managed|Responsible|Key achievement|Achievement)[^\n]{20,500}/i,
       );
-      if (dateMatch) {
-        experience.startDate = dateMatch[1].trim();
-        experience.endDate = dateMatch[2].trim();
+      if (actionVerbMatch) {
+        descriptions.push(actionVerbMatch[0].trim());
+      }
+      
+      // Pattern 2: Bullet points (use match with while loop)
+      const bulletPattern = /[-•·]\s*([^\n]{20,200})/g;
+      let bulletMatch;
+      while ((bulletMatch = bulletPattern.exec(block)) !== null) {
+        const desc = bulletMatch[1] || bulletMatch[0];
+        if (desc && desc.length > 20) {
+          descriptions.push(desc.trim());
+        }
+      }
+      bulletPattern.lastIndex = 0; // Reset regex
+      
+      if (descriptions.length > 0) {
+        experience.description = descriptions.join(' ').slice(0, 500);
       }
 
-      // Extract description (remaining text)
-      const descLines = block.split('\n').slice(2).filter(line => line.trim().length > 10);
-      if (descLines.length > 0) {
-        experience.description = descLines.join(' ').trim().slice(0, 500);
-      }
-
-      // Only add if we have at least company or position
-      if (experience.company || experience.position) {
+      // Only add if we have at least position
+      if (experience.position || experience.company) {
         experiences.push(experience);
       }
     }
@@ -317,13 +546,14 @@ export class DataExtractorService {
 
   /**
    * Extract skills from CV text
+   * Improved patterns for better accuracy
    */
   extractSkills(text: string): string[] {
     const skills: string[] = [];
 
-    // Find skills section
+    // Find skills section - more flexible
     const skillsSectionMatch = text.match(
-      /(?:skills?|expertise|competenc|keahlian|kemampuan)([\s\S]*?)(?=\n(?:education|work|experience|organization|certification|proyect|interest|reference)|$)/i,
+      /(?:skills?|expertise|competenc|keahlian|kemampuan|technical skills?|programming|technologies?|tools?|languages?)([\s\S]*?)(?=\n(?:education|work|experience|organization|certification|project|interest|reference|profile|summary|language|award)|$)/i,
     );
 
     if (!skillsSectionMatch) {
@@ -332,26 +562,90 @@ export class DataExtractorService {
 
     const skillsText = skillsSectionMatch[1];
 
-    // Split by common separators
-    const skillsList = skillsText
-      .split(/[,;\n•·\-–]/)
-      .map(s => s.trim())
-      .filter(s => s.length > 2 && s.length < 50)
-      .filter(s => !/^(?:skill|expertise|technical|soft)/i.test(s))
-      .slice(0, 30); // Limit to 30 skills
+    // Common technical skills patterns
+    const technicalSkills = [
+      // Programming languages
+      /\b(JavaScript|TypeScript|Python|Java|C\+\+|C#|Go|Rust|PHP|Ruby|Swift|Kotlin|Dart|Scala|R|MATLAB)\b/gi,
+      // Frameworks
+      /\b(React|Vue|Angular|Node\.js|Express|Django|Flask|Spring|Laravel|ASP\.NET|Next\.js|Nuxt\.js)\b/gi,
+      // Databases
+      /\b(PostgreSQL|MySQL|MongoDB|Redis|Elasticsearch|Cassandra|SQLite|Oracle|SQL Server)\b/gi,
+      // Cloud & DevOps
+      /\b(AWS|Azure|GCP|Docker|Kubernetes|Jenkins|Git|GitHub|GitLab|CI\/CD|Terraform|Ansible)\b/gi,
+      // ML/AI
+      /\b(TensorFlow|PyTorch|Keras|Scikit-learn|Pandas|NumPy|OpenCV|NLTK|spaCy)\b/gi,
+      // Tools
+      /\b(Git|Jira|Confluence|Slack|VS Code|IntelliJ|Eclipse|Postman|Swagger)\b/gi,
+    ];
 
-    return [...new Set(skillsList)]; // Remove duplicates
+    // Extract known technical skills
+    for (const pattern of technicalSkills) {
+      // Use match instead of matchAll for better compatibility
+      let match;
+      while ((match = pattern.exec(skillsText)) !== null) {
+        const skill = match[0].trim();
+        if (skill && !skills.includes(skill)) {
+          skills.push(skill);
+        }
+        // Prevent infinite loop if pattern is not global
+        if (!pattern.global) {
+          break;
+        }
+      }
+      // Reset regex lastIndex
+      pattern.lastIndex = 0;
+    }
+
+    // Also extract from comma/separator-separated lists
+    const lines = skillsText.split('\n');
+    for (const line of lines) {
+      // Skip lines that are too long (probably descriptions)
+      if (line.length > 100) continue;
+      
+      // Split by common separators
+      const items = line
+        .split(/[,;•·\-–\|]/)
+        .map(s => s.trim())
+        .filter(s => {
+          // Filter valid skills
+          return (
+            s.length >= 2 &&
+            s.length <= 50 &&
+            !/^(?:skill|expertise|technical|soft|language|tool)/i.test(s) &&
+            !/^\d+$/.test(s) && // Not just numbers
+            !/^[a-z]$/i.test(s) && // Not single letters
+            !/^(?:and|or|the|a|an)$/i.test(s) // Not common words
+          );
+        });
+
+      for (const item of items) {
+        // Check if it looks like a skill (capitalized or common tech term)
+        if (
+          /^[A-Z]/.test(item) || // Starts with capital
+          /^[a-z]+(?:\.js|\.py|\.net|\.io)$/i.test(item) || // Tech terms
+          item.length >= 3
+        ) {
+          if (!skills.includes(item)) {
+            skills.push(item);
+          }
+        }
+      }
+    }
+
+    // Remove duplicates and limit
+    return [...new Set(skills)].slice(0, 50);
   }
 
   /**
    * Extract certifications from CV text
+   * Improved patterns to reduce false positives
    */
   extractCertifications(text: string): Certification[] {
     const certifications: Certification[] = [];
 
-    // Find certification section
+    // Find certification section - more flexible
     const certSectionMatch = text.match(
-      /(?:certification|certificate|training|course|sertifikat|pelatihan)([\s\S]*?)(?=\n(?:education|work|experience|organization|skill|proyect|interest|reference)|$)/i,
+      /(?:certification|certificate|training|course|sertifikat|pelatihan|award|achievement)([\s\S]*?)(?=\n(?:education|work|experience|organization|skill|project|interest|reference|profile|summary|language)|$)/i,
     );
 
     if (!certSectionMatch) {
@@ -359,36 +653,82 @@ export class DataExtractorService {
     }
 
     const certText = certSectionMatch[1];
-    const certBlocks = certText.split(/\n(?=[A-Z])/);
+
+    // Split by lines that start with capital letters or numbers (likely cert names)
+    const certBlocks = certText.split(/\n(?=[A-Z0-9])/);
 
     for (const block of certBlocks) {
-      if (block.trim().length < 10) continue;
+      if (block.trim().length < 15) continue;
 
       const cert: Certification = {
         name: '',
       };
 
-      // Extract certification name (usually first line)
-      const nameMatch = block.match(/^([^\n]{10,150})/);
-      if (nameMatch) {
-        cert.name = nameMatch[1].trim();
+      // Extract certification name - look for meaningful text
+      // Skip lines that are too short or look like descriptions
+      const lines = block.split('\n').filter(line => line.trim().length >= 10);
+      
+      for (const line of lines) {
+        const trimmed = line.trim();
+        
+        // Skip if it looks like a description or action verb
+        if (
+          /^(?:Focusing|Led|Implemented|Developed|Created|Managed|Responsible|Key|Achievement|Became|A|The|This|That)/i.test(trimmed) ||
+          trimmed.length > 200 ||
+          /^[-•·]\s/.test(trimmed) // Bullet points are usually descriptions
+        ) {
+          continue;
+        }
+
+        // Look for certification-like patterns
+        if (
+          /(?:certificate|certification|course|training|diploma|certified|certification of|award)/i.test(trimmed) ||
+          /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){2,}/.test(trimmed) // Multiple capitalized words
+        ) {
+          cert.name = trimmed.slice(0, 150);
+          break;
+        }
+      }
+
+      // If no name found from patterns, use first meaningful line
+      if (!cert.name && lines.length > 0) {
+        const firstLine = lines[0].trim();
+        if (firstLine.length >= 15 && firstLine.length <= 150) {
+          cert.name = firstLine;
+        }
       }
 
       // Extract issuer
-      const issuerMatch = block.match(
-        /(?:issued by|from|by|oleh|dari)\s+([A-Z][^\n]{5,100})/i,
-      );
-      if (issuerMatch) {
-        cert.issuer = issuerMatch[1].trim();
+      const issuerPatterns = [
+        /(?:issued by|from|by|oleh|dari|presented by)\s+([A-Z][^\n,]{5,100})/i,
+        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:Certificate|Certification|Award)/i,
+      ];
+      
+      for (const pattern of issuerPatterns) {
+        const issuerMatch = block.match(pattern);
+        if (issuerMatch) {
+          cert.issuer = issuerMatch[1].trim();
+          break;
+        }
       }
 
-      // Extract date
-      const dateMatch = block.match(/(\w+\s+\d{4}|\d{4})/);
-      if (dateMatch) {
-        cert.startDate = dateMatch[1];
+      // Extract date (various formats)
+      const datePatterns = [
+        /(\d{4})/,  // Just year
+        /(\w+\s+\d{4})/,  // "June 2020"
+        /(\d{1,2}\/\d{4})/,  // "06/2020"
+      ];
+      
+      for (const pattern of datePatterns) {
+        const dateMatch = block.match(pattern);
+        if (dateMatch) {
+          cert.startDate = dateMatch[1];
+          break;
+        }
       }
 
-      if (cert.name) {
+      // Only add if name is meaningful
+      if (cert.name && cert.name.length >= 10) {
         certifications.push(cert);
       }
     }

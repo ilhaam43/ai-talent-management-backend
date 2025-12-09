@@ -30,3 +30,6 @@ lerna-debug.log*
 /test-files
 test-server.js
 *.pdf
+
+# Tesseract OCR data files
+*.traineddata
