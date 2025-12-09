@@ -36,7 +36,7 @@ export class CVParserService {
     // Extract text from document
     const extractedText = await this.textExtractor.extractText(
       document.filePath,
-      document.mimeType,
+      document.mimeType || 'application/octet-stream',
     );
 
     // Save extracted text to database for future reference
