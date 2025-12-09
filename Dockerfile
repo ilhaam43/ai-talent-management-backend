@@ -5,6 +5,20 @@ FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
+# Install build dependencies for native modules (canvas, etc.)
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    giflib-dev \
+    pixman-dev
+
+# Set Python for node-gyp
+ENV PYTHON=/usr/bin/python3
+
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -25,6 +39,20 @@ RUN npm run build
 FROM node:20-alpine AS production
 
 WORKDIR /usr/src/app
+
+# Install build dependencies for native modules (canvas, etc.)
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    giflib-dev \
+    pixman-dev
+
+# Set Python for node-gyp
+ENV PYTHON=/usr/bin/python3
 
 # Install production dependencies only
 COPY package*.json ./
