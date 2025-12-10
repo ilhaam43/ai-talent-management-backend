@@ -1,9 +1,3 @@
-/*
-  Warnings:
-
-  - You are about to drop the `Users` table. If the table is not empty, all the data it contains will be lost.
-
-*/
 -- CreateEnum
 CREATE TYPE "JobType" AS ENUM ('FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'FREELANCE');
 
@@ -24,17 +18,6 @@ CREATE TYPE "FamilyStatus" AS ENUM ('FATHER', 'MOTHER', 'SPOUSE', 'CHILD', 'SIBL
 
 -- CreateEnum
 CREATE TYPE "CandidateRating" AS ENUM ('ONE', 'TWO', 'THREE', 'FOUR', 'FIVE');
-
--- DropIndex
-DROP INDEX "Candidate_email_key";
-
--- AlterTable
-ALTER TABLE "candidates" RENAME CONSTRAINT "Candidate_pkey" TO "candidates_pkey";
-ALTER TABLE "candidates" ALTER COLUMN "email" DROP NOT NULL;
-ALTER TABLE "candidates" ALTER COLUMN "password" DROP NOT NULL;
-
--- DropTable
-DROP TABLE "Users";
 
 -- CreateTable
 CREATE TABLE "users" (
@@ -262,6 +245,16 @@ CREATE TABLE "social_media" (
 );
 
 -- CreateTable
+CREATE TABLE "document_types" (
+    "id" TEXT NOT NULL,
+    "document_type" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "document_types_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "provinces" (
     "id" TEXT NOT NULL,
     "province" TEXT NOT NULL,
@@ -435,6 +428,32 @@ CREATE TABLE "candidate_app_pipelines" (
 );
 
 -- CreateTable
+CREATE TABLE "candidates" (
+    "id" TEXT NOT NULL,
+    "email" TEXT,
+    "password" TEXT,
+    "name" TEXT,
+    "candidate_education_id" TEXT,
+    "religion_id" TEXT,
+    "nationality_id" TEXT,
+    "language_proficieny_id" TEXT,
+    "candidate_address_id" TEXT,
+    "candidate_current_address_id" TEXT,
+    "candidate_school" TEXT,
+    "candidate_fullname" TEXT,
+    "candidate_nickname" TEXT,
+    "candidate_email" TEXT,
+    "city_domicile" TEXT,
+    "date_of_birth" DATE,
+    "place_of_birth" TEXT,
+    "id_card_number" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "candidates_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "candidate_work_experiences" (
     "id" TEXT NOT NULL,
     "candidate_id" TEXT NOT NULL,
@@ -553,8 +572,27 @@ CREATE TABLE "candidate_certification" (
     CONSTRAINT "candidate_certification_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "candidate_documents" (
+    "id" TEXT NOT NULL,
+    "candidate_id" TEXT NOT NULL,
+    "document_type_id" TEXT NOT NULL,
+    "original_filename" TEXT,
+    "file_path" TEXT NOT NULL,
+    "mime_type" TEXT,
+    "file_size" INTEGER,
+    "extracted_text" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "candidate_documents_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "document_types_document_type_key" ON "document_types"("document_type");
 
 -- AddForeignKey
 ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_user_role_id_fkey" FOREIGN KEY ("user_role_id") REFERENCES "user_roles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -723,3 +761,9 @@ ALTER TABLE "candidate_skills" ADD CONSTRAINT "candidate_skills_candidate_id_fke
 
 -- AddForeignKey
 ALTER TABLE "candidate_certification" ADD CONSTRAINT "candidate_certification_candidate_id_fkey" FOREIGN KEY ("candidate_id") REFERENCES "candidates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "candidate_documents" ADD CONSTRAINT "candidate_documents_candidate_id_fkey" FOREIGN KEY ("candidate_id") REFERENCES "candidates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "candidate_documents" ADD CONSTRAINT "candidate_documents_document_type_id_fkey" FOREIGN KEY ("document_type_id") REFERENCES "document_types"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
