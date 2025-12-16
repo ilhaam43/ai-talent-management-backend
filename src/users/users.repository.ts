@@ -72,4 +72,20 @@ export class UsersRepository implements Repository<User> {
       row.updatedAt
     );
   }
+
+  async update(id: string, data: {
+    name?: string;
+    email?: string;
+    password?: string;
+  }) {
+    if (data.password) {
+      const hashedPassword = await bcrypt.hash(data.password, await bcrypt.genSalt());
+      data.password = hashedPassword;
+    }
+    const row = await this.prisma.user.update({
+      where: { id },
+      data,
+    });
+    return row;
+  }
 }

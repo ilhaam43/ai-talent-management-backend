@@ -23,4 +23,14 @@ export class UsersService {
   async findByEmail(email: string) {
     return this.repo.findByEmail(email);
   }
+  async update(data: {
+    id: string;
+    name?: string;
+    email?: string;
+    password?: string;
+  }) {
+    const item = await this.repo.findById(data.id);
+    if (!item) throw new NotFoundException("User not found");
+    return this.repo.update(data.id, data);
+  }
 }
