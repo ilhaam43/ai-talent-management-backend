@@ -22,7 +22,8 @@ model User {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  employees Employee[]
+  employees  Employee[]
+  candidates Candidate[]
 
   @@map("users")
 }
@@ -376,38 +377,40 @@ model PostalCode {
 
 model CandidateAddress {
   id               String @id @default(uuid())
-  userId           String @map("user_id")
   provinceId       String @map("province_id")
   candidateAddress String @map("candidate_address")
   cityId           String @map("city_id")
   subdistrictId    String @map("subdistrict_id")
   postalCodeId     String @map("postal_code_id")
 
+  candidateId String @unique @map("candidate_id")
+
   // Relations
   province    Province    @relation(fields: [provinceId], references: [id])
   city        City        @relation(fields: [cityId], references: [id])
   subdistrict Subdistrict @relation(fields: [subdistrictId], references: [id])
   postalCode  PostalCode  @relation(fields: [postalCodeId], references: [id])
-  candidates  Candidate[]
+  candidate   Candidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_addreseses")
 }
 
 model CandidateCurrentAddress {
   id               String @id @default(uuid())
-  userId           String @map("user_id")
   provinceId       String @map("province_id")
   candidateAddress String @map("candidate_address")
   cityId           String @map("city_id")
   subdistrictId    String @map("subdistrict_id")
   postalCodeId     String @map("postal_code_id")
 
+  candidateId String @unique @map("candidate_id")
+
   // Relations
   province    Province    @relation(fields: [provinceId], references: [id])
   city        City        @relation(fields: [cityId], references: [id])
   subdistrict Subdistrict @relation(fields: [subdistrictId], references: [id])
   postalCode  PostalCode  @relation(fields: [postalCodeId], references: [id])
-  candidates  Candidate[]
+  candidate   Candidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_current_addreseses")
 }
@@ -622,36 +625,36 @@ enum CandidateRating {
 }
 
 model Candidate {
-  id                        String    @id @default(uuid())
+  id                   String    @id @default(uuid())
   // Legacy authentication fields (to be migrated to User table)
-  email                     String? // Legacy field - preserve existing data
-  password                  String? // Legacy field - preserve existing data
-  name                      String? // Legacy field - preserve existing data
+  // email                String? // Legacy field - preserve existing data
+  // password             String? // Legacy field - preserve existing data
+  // name                 String? // Legacy field - preserve existing data
   // ERD schema fields
-  candidateEducationId      String?   @map("candidate_education_id")
-  religionId                String?   @map("religion_id")
-  nationalityId             String?   @map("nationality_id")
-  languageProficienyId      String?   @map("language_proficieny_id")
-  candidateAddressId        String?   @map("candidate_address_id")
-  candidateCurrentAddressId String?   @map("candidate_current_address_id")
-  candidateSchool           String?   @map("candidate_school")
-  candidateFullname         String?   @map("candidate_fullname")
-  candidateNickname         String?   @map("candidate_nickname")
-  candidateEmail            String?   @map("candidate_email")
-  cityDomicile              String?   @map("city_domicile")
-  dateOfBirth               DateTime? @map("date_of_birth") @db.Date
-  placeOfBirth              String?   @map("place_of_birth")
-  idCardNumber              String?   @map("id_card_number")
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  userId               String    @map("user_id")
+  candidateEducationId String?   @map("candidate_education_id")
+  religionId           String?   @map("religion_id")
+  nationalityId        String?   @map("nationality_id")
+  languageProficienyId String?   @map("language_proficieny_id")
+  candidateSchool      String?   @map("candidate_school")
+  candidateFullname    String?   @map("candidate_fullname")
+  candidateNickname    String?   @map("candidate_nickname")
+  candidateEmail       String?   @map("candidate_email")
+  cityDomicile         String?   @map("city_domicile")
+  dateOfBirth          DateTime? @map("date_of_birth") @db.Date
+  placeOfBirth         String?   @map("place_of_birth")
+  idCardNumber         String?   @map("id_card_number")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   // Relations
+  user                    User                              @relation(fields: [userId], references: [id], onDelete: Cascade)
   candidateLastEducation  CandidateLastEducation?           @relation(fields: [candidateEducationId], references: [id])
   religion                Religion?                         @relation(fields: [religionId], references: [id])
   nationality             Nationality?                      @relation(fields: [nationalityId], references: [id])
   languageProficiency     LanguageProficiency?              @relation(fields: [languageProficienyId], references: [id])
-  candidateAddress        CandidateAddress?                 @relation(fields: [candidateAddressId], references: [id])
-  candidateCurrentAddress CandidateCurrentAddress?          @relation(fields: [candidateCurrentAddressId], references: [id])
+  candidateAddress        CandidateAddress?
+  candidateCurrentAddress CandidateCurrentAddress?
   documents               CandidateDocument[]
   workExperiences         CandidateWorkExperience[]
   organizationExperiences CandidateOrganizationExperience[]
