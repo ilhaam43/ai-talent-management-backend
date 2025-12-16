@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { CandidatesRepository } from "./candidates.repository";
 import * as bcrypt from "bcrypt";
 import { Prisma } from "@prisma/client";
+import { UpdateCandidateDto } from "./dto/update-candidate.dto";
 
 @Injectable()
 export class CandidatesService {
@@ -25,7 +26,7 @@ export class CandidatesService {
     return this.candidatesRepository.findAll();
   }
 
-  async update(id: string, data: any) {
+  async update(id: string, data: UpdateCandidateDto) {
     return this.candidatesRepository.update(id, data);
   }
 }
