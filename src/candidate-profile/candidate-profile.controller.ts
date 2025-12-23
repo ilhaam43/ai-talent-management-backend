@@ -6,10 +6,13 @@ import {
   Req,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CandidateProfileService } from './candidate-profile.service';
+import { PrismaService } from '../database/prisma.service';
 import {
   StoreParsedDataDto,
   StorePersonalInfoDto,
@@ -27,7 +30,23 @@ import {
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
 export class CandidateProfileController {
-  constructor(private readonly candidateProfileService: CandidateProfileService) {}
+  constructor(
+    private readonly candidateProfileService: CandidateProfileService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  /**
+   * Get candidate ID from user ID
+   */
+  private async getCandidateIdFromUserId(userId: string): Promise<string> {
+    const candidate = await this.prisma.candidate.findFirst({
+      where: { userId },
+    });
+    if (!candidate) {
+      throw new BadRequestException('Candidate profile not found for this user');
+    }
+    return candidate.id;
+  }
 
   @Post('store-parsed-data')
   @HttpCode(HttpStatus.OK)
@@ -36,13 +55,32 @@ export class CandidateProfileController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Candidate not found' })
   async storeParsedData(@Req() req: any, @Body() dto: StoreParsedDataDto) {
-    const candidateId = req.user.id;
-    const results = await this.candidateProfileService.storeParsedData(candidateId, dto.parsedData);
-    return {
-      success: true,
-      message: 'Candidate profile data stored successfully',
-      data: results,
-    };
+    console.log('🚀 storeParsedData endpoint called at', new Date().toISOString());
+
+    try {
+      console.log('DTO.parsedData:', dto?.parsedData);
+
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new UnauthorizedException('User not authenticated');
+      }
+
+      const candidateId = await this.getCandidateIdFromUserId(userId);
+
+      // Call service with actual parsed data
+      console.log('About to call service with candidateId:', candidateId);
+      const results = await this.candidateProfileService.storeParsedData(candidateId, dto.parsedData);
+      console.log('Service call completed with results:', results);
+
+      return {
+        success: true,
+        message: 'Candidate profile data stored successfully',
+        data: results,
+      };
+    } catch (error: any) {
+      console.error('storeParsedData error:', error.message);
+      throw error;
+    }
   }
 
   @Post('personal-info')
@@ -50,7 +88,8 @@ export class CandidateProfileController {
   @ApiOperation({ summary: 'Store personal information' })
   @ApiResponse({ status: 200, description: 'Personal info stored successfully' })
   async storePersonalInfo(@Req() req: any, @Body() dto: StorePersonalInfoDto) {
-    const candidateId = req.user.id;
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     const result = await this.candidateProfileService.storePersonalInfo(candidateId, dto);
     return {
       success: true,
@@ -64,7 +103,8 @@ export class CandidateProfileController {
   @ApiOperation({ summary: 'Store address' })
   @ApiResponse({ status: 200, description: 'Address stored successfully' })
   async storeAddress(@Req() req: any, @Body() dto: StoreAddressDto) {
-    const candidateId = req.user.id;
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     const result = await this.candidateProfileService.storeAddress(
       candidateId,
       dto,
@@ -82,7 +122,8 @@ export class CandidateProfileController {
   @ApiOperation({ summary: 'Store education history' })
   @ApiResponse({ status: 200, description: 'Education stored successfully' })
   async storeEducation(@Req() req: any, @Body() dto: StoreEducationDto) {
-    const candidateId = req.user.id;
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     const results = await this.candidateProfileService.storeEducation(candidateId, dto.education);
     return {
       success: true,
@@ -96,7 +137,8 @@ export class CandidateProfileController {
   @ApiOperation({ summary: 'Store work experience' })
   @ApiResponse({ status: 200, description: 'Work experience stored successfully' })
   async storeWorkExperience(@Req() req: any, @Body() dto: StoreWorkExperienceDto) {
-    const candidateId = req.user.id;
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     const results = await this.candidateProfileService.storeWorkExperience(
       candidateId,
       dto.workExperience,
@@ -113,7 +155,8 @@ export class CandidateProfileController {
   @ApiOperation({ summary: 'Store organization experience' })
   @ApiResponse({ status: 200, description: 'Organization experience stored successfully' })
   async storeOrganizationExperience(@Req() req: any, @Body() dto: StoreOrganizationExperienceDto) {
-    const candidateId = req.user.id;
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     const results = await this.candidateProfileService.storeOrganizationExperience(
       candidateId,
       dto.organizationExperience,
@@ -130,7 +173,8 @@ export class CandidateProfileController {
   @ApiOperation({ summary: 'Store skills' })
   @ApiResponse({ status: 200, description: 'Skills stored successfully' })
   async storeSkills(@Req() req: any, @Body() dto: StoreSkillsDto) {
-    const candidateId = req.user.id;
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     // Convert to string array
     const skills = dto.skills.map((s) => s.skill);
     const results = await this.candidateProfileService.storeSkills(candidateId, skills);
@@ -146,7 +190,8 @@ export class CandidateProfileController {
   @ApiOperation({ summary: 'Store certifications' })
   @ApiResponse({ status: 200, description: 'Certifications stored successfully' })
   async storeCertifications(@Req() req: any, @Body() dto: StoreCertificationsDto) {
-    const candidateId = req.user.id;
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     const results = await this.candidateProfileService.storeCertifications(
       candidateId,
       dto.certifications,
@@ -163,7 +208,8 @@ export class CandidateProfileController {
   @ApiOperation({ summary: 'Store social media links' })
   @ApiResponse({ status: 200, description: 'Social media stored successfully' })
   async storeSocialMedia(@Req() req: any, @Body() dto: StoreSocialMediaDto) {
-    const candidateId = req.user.id;
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     const results = await this.candidateProfileService.storeSocialMedia(candidateId, dto);
     return {
       success: true,

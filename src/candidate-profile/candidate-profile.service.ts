@@ -34,7 +34,9 @@ export class CandidateProfileService {
    * Store all parsed data at once
    */
   async storeParsedData(candidateId: string, parsedData: any) {
-    return await this.prisma.$transaction(async (tx) => {
+    console.log('storeParsedData service called with:', candidateId, parsedData);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
       const results: any = {};
 
       try {
@@ -130,8 +132,13 @@ export class CandidateProfileService {
         throw error;
       }
 
-      return results;
-    });
+        console.log('Transaction completed successfully');
+        return results;
+      });
+    } catch (error) {
+      console.error('Transaction error:', error);
+      throw error;
+    }
   }
 
   /**
@@ -260,18 +267,26 @@ export class CandidateProfileService {
       const startDate = parseDate(edu.startYear);
       const endDate = parseDate(edu.endYear);
 
+      // Build data object - only include candidateLastEducationId if it has a value
+      // Convert GPA to string since Prisma expects String type
+      const educationData: any = {
+        candidateId,
+        candidateSchool: edu.university || edu.institution || '',
+        candidateMajor: edu.major || null,
+        candidateGpa: edu.gpa != null ? String(edu.gpa) : null,
+        candidateMaxGpa: edu.gpaMax != null ? String(edu.gpaMax) : null,
+        candidateCountry: edu.country || null,
+        candidateStartedYearStudy: startDate || null,
+        candidateEndedYearStudy: endDate || null,
+      };
+
+      // Only add candidateLastEducationId if it exists
+      if (educationLevelId) {
+        educationData.candidateLastEducationId = educationLevelId;
+      }
+
       const created = await prisma.candidateEducation.create({
-        data: {
-          candidateId,
-          candidateLastEducationId: educationLevelId || undefined,
-          candidateSchool: edu.university || edu.institution || '',
-          candidateMajor: edu.major || undefined,
-          candidateGpa: edu.gpa || undefined,
-          candidateMaxGpa: edu.gpaMax || undefined,
-          candidateCountry: edu.country || undefined,
-          candidateStartedYearStudy: startDate || undefined,
-          candidateEndedYearStudy: endDate || undefined,
-        },
+        data: educationData,
       });
 
       results.push(created);
@@ -302,8 +317,8 @@ export class CandidateProfileService {
     const results = [];
 
     for (const work of workExperience) {
-      // Parse dates
-      const startDate = parseDate(work.startDate);
+      // Parse dates - use fallback if not available
+      const startDate = parseDate(work.startDate) || new Date(); // Use today as fallback
       const endDate = parseDate(work.endDate);
 
       // Map enums
@@ -313,8 +328,8 @@ export class CandidateProfileService {
       const country = mapCountry(work.country);
       const relationship = mapRelationship(work.referenceRelationship);
 
-      if (!startDate) {
-        // Skip if no start date (required field)
+      // Skip if no company name (minimum required info)
+      if (!work.company || work.company.trim().length < 2) {
         continue;
       }
 

@@ -150,29 +150,36 @@ export class AddressLookupService {
     const subdistrictId = subdistrict ? await this.findOrCreateSubdistrict(cityId, subdistrict) : null;
     const postalCodeId = postalCode && subdistrictId ? await this.findOrCreatePostalCode(subdistrictId, postalCode) : null;
 
-    // Create address record
+    // Schema requires subdistrictId and postalCodeId - skip if not available
+    if (!subdistrictId || !postalCodeId) {
+      console.log('Skipping address storage: subdistrict or postal code not available (required by schema)');
+      return null;
+    }
+
+    // Create address record - use Prisma connect syntax for relations
+    const baseAddressData: any = {
+      user: { connect: { id: userId } },
+      province: { connect: { id: provinceId } },
+      city: { connect: { id: cityId } },
+      candidateAddress: address || '',
+    };
+
+    // Only add optional relations if they have values
+    if (subdistrictId) {
+      baseAddressData.subdistrict = { connect: { id: subdistrictId } };
+    }
+    if (postalCodeId) {
+      baseAddressData.postalCode = { connect: { id: postalCodeId } };
+    }
+
     if (isCurrent) {
       const addressRecord = await prisma.candidateCurrentAddress.create({
-        data: {
-          userId,
-          provinceId,
-          cityId,
-          subdistrictId: subdistrictId || undefined,
-          postalCodeId: postalCodeId || undefined,
-          candidateAddress: address || '',
-        },
+        data: baseAddressData,
       });
       return addressRecord.id;
     } else {
       const addressRecord = await prisma.candidateAddress.create({
-        data: {
-          userId,
-          provinceId,
-          cityId,
-          subdistrictId: subdistrictId || undefined,
-          postalCodeId: postalCodeId || undefined,
-          candidateAddress: address || '',
-        },
+        data: baseAddressData,
       });
       return addressRecord.id;
     }

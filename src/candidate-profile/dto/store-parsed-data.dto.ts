@@ -1,5 +1,5 @@
-import { IsOptional, IsString, IsArray, ValidateNested, IsBoolean } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsArray, ValidateNested, IsBoolean, IsObject } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   PersonalInfo,
@@ -174,17 +174,8 @@ export class StoreSocialMediaDto implements SocialMedia {
 }
 
 export class StoreParsedDataDto {
-  @ApiProperty({ type: Object })
-  @ValidateNested()
-  @Type(() => Object)
-  parsedData!: {
-    personalInfo?: PersonalInfo;
-    socialMedia?: SocialMedia;
-    address?: Address;
-    education?: Education[];
-    workExperience?: WorkExperience[];
-    organizationExperience?: OrganizationExperience[];
-    skills?: string[];
-    certifications?: Certification[];
-  };
+  @ApiProperty({ type: Object, description: 'Parsed CV data to store' })
+  @IsObject()
+  @Transform(({ value }) => value || {})
+  parsedData: any;
 }

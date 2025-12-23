@@ -12,7 +12,7 @@ export class UsersService {
   async list() {
     return this.repo.findAll()
   }
-  async create(data: { id: string; title: string; description: string }) {
+  async create(data: { id: string; name: string; email: string; password: string }) {
     return this.repo.create(data)
   }
 }

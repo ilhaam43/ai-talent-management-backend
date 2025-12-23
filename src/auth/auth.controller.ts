@@ -17,22 +17,31 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Req() req: any, @Res({ passthrough: true }) res: Response) {
-    const tokens = await this.authService.login(req.user)
-    
-    // Set refresh token in httpOnly cookie
-    const isProduction = process.env.NODE_ENV === 'production'
-    res.cookie('refresh_token', tokens.refresh_token, {
-      httpOnly: true, // Prevents XSS attacks
-      secure: isProduction, // Only send over HTTPS in production
-      sameSite: 'strict', // CSRF protection
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
-      path: '/',
-    })
+    try {
+      if (!req.user) {
+        throw new UnauthorizedException('User not found in request')
+      }
+      
+      const tokens = await this.authService.login(req.user)
+      
+      // Set refresh token in httpOnly cookie
+      const isProduction = process.env.NODE_ENV === 'production'
+      res.cookie('refresh_token', tokens.refresh_token, {
+        httpOnly: true, // Prevents XSS attacks
+        secure: isProduction, // Only send over HTTPS in production
+        sameSite: 'strict', // CSRF protection
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+        path: '/',
+      })
 
-    // Return only access token in response (refresh token is in cookie)
-    return {
-      access_token: tokens.access_token,
-      expires_in: 15 * 60, // 15 minutes in seconds
+      // Return only access token in response (refresh token is in cookie)
+      return {
+        access_token: tokens.access_token,
+        expires_in: 15 * 60, // 15 minutes in seconds
+      }
+    } catch (error) {
+      console.error('Login error:', error)
+      throw error
     }
   }
 

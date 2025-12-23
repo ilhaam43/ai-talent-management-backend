@@ -12,10 +12,11 @@ import {
  * Parse various date formats to Date object
  * Supports: DD/MM/YYYY, YYYY-MM-DD, "August 2017", "2017", etc.
  */
-export function parseDate(dateString?: string | null): Date | null {
-  if (!dateString) return null;
+export function parseDate(dateString?: string | number | null): Date | null {
+  if (!dateString && dateString !== 0) return null;
 
-  const trimmed = dateString.trim();
+  // Convert to string if it's a number
+  const trimmed = String(dateString).trim();
 
   // Try ISO format (YYYY-MM-DD)
   const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -28,6 +29,13 @@ export function parseDate(dateString?: string | null): Date | null {
   if (ddmmyyyyMatch) {
     const [, day, month, year] = ddmmyyyyMatch;
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+
+  // Try MM/YYYY or MM-YYYY (e.g., "05/2025", "08-2023")
+  const mmyyyyMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{4})$/);
+  if (mmyyyyMatch) {
+    const [, month, year] = mmyyyyMatch;
+    return new Date(parseInt(year), parseInt(month) - 1, 1);
   }
 
   // Try "Month Year" format (e.g., "August 2017", "Jan 2020")
