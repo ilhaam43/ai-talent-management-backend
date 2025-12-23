@@ -7,9 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model Users {
   id          String @id
   title       String
   description String
+}
+
+model Candidate {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

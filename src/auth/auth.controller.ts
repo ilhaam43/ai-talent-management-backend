@@ -1,4 +1,4 @@
-import { Controller, Post, UseGuards, Req, Get } from '@nestjs/common'
+import { Controller, Post, UseGuards, Req, Get, Body } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { ApiBody, ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { AuthService } from './auth.service'
@@ -7,9 +7,10 @@ import { AuthService } from './auth.service'
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
   @Post('login')
   @UseGuards(AuthGuard('local'))
-  @ApiBody({ schema: { type: 'object', properties: { username: { type: 'string' }, password: { type: 'string' } } } })
+  @ApiBody({ schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' } } } })
   login(@Req() req: any) {
     return this.authService.login(req.user)
   }
