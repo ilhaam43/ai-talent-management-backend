@@ -86,7 +86,11 @@ export class DocumentsController {
       throw new BadRequestException('File is required');
     }
 
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
+
+    if (!candidateId) {
+      throw new BadRequestException('User does not have a candidate profile');
+    }
 
     const document = await this.documentsService.uploadDocument(
       candidateId,
@@ -127,7 +131,7 @@ export class DocumentsController {
     },
   })
   async getDocuments(@Req() req: any) {
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
     const documents = await this.documentsService.getDocumentsByCandidate(
       candidateId,
     );
@@ -164,7 +168,7 @@ export class DocumentsController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Req() req: any,
   ) {
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
     const document = await this.documentsService.getDocumentById(
       documentId,
       candidateId,
@@ -195,7 +199,7 @@ export class DocumentsController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
     const document = await this.documentsService.getDocumentById(
       documentId,
       candidateId,
@@ -233,7 +237,7 @@ export class DocumentsController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Req() req: any,
   ) {
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
     return this.documentsService.deleteDocument(documentId, candidateId);
   }
 }

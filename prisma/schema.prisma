@@ -718,7 +718,7 @@ model CandidateOrganizationExperience {
 model CandidateEducation {
   id                        String    @id @default(uuid())
   candidateId               String    @map("candidate_id")
-  candidateLastEducationId  String    @map("candidate_last_education_id")
+  candidateLastEducationId  String?   @map("candidate_last_education_id")
   candidateSchool           String    @map("candidate_school")
   candidateMajor            String?   @map("candidate_major")
   candidateGpa              String?   @map("candidate_gpa")
@@ -729,7 +729,7 @@ model CandidateEducation {
 
   // Relations
   candidate              Candidate              @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  candidateLastEducation CandidateLastEducation @relation(fields: [candidateLastEducationId], references: [id])
+  candidateLastEducation CandidateLastEducation? @relation(fields: [candidateLastEducationId], references: [id])
 
   @@map("candidate_educations")
 }

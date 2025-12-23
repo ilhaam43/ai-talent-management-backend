@@ -60,7 +60,12 @@ export class AuthService {
         throw new Error('Invalid user object in login')
       }
 
-      const payload = { email: user.email || user.candidateEmail, sub: user.id, type: 'access' }
+      const payload = { 
+        email: user.email || user.candidateEmail, 
+        sub: user.id, 
+        candidateId: user.candidateId,
+        type: 'access' 
+      }
       
       // Generate access token (15 minutes)
       const accessToken = this.jwt.sign(payload)
