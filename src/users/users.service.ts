@@ -6,13 +6,13 @@ export class UsersService {
   constructor(private readonly repo: UsersRepository) {}
   async getById(id: string) {
     const item = await this.repo.findById(id)
-    if (!item) throw new NotFoundException('Users not found')
+    if (!item) throw new NotFoundException('User not found')
     return item
   }
   async list() {
     return this.repo.findAll()
   }
-  async create(data: { id: string; title: string; description: string }) {
+  async create(data: { id: string; name: string; email: string; password: string }) {
     return this.repo.create(data)
   }
 }

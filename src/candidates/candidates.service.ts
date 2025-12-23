@@ -8,19 +8,26 @@ export class CandidatesService {
   constructor(private prisma: PrismaService) {}
 
   async findOne(email: string) {
-    return this.prisma.candidate.findUnique({
+    // Email is not unique in Candidate model, use findFirst
+    return this.prisma.candidate.findFirst({
       where: { email },
     });
   }
 
   async create(data: Prisma.CandidateCreateInput) {
-    const salt = await bcrypt.genSalt();
-    const hashedPassword = await bcrypt.hash(data.password, salt);
+    // Hash password if provided
+    if (data.password) {
+      const salt = await bcrypt.genSalt();
+      const hashedPassword = await bcrypt.hash(data.password as string, salt);
+      return this.prisma.candidate.create({
+        data: {
+          ...data,
+          password: hashedPassword,
+        },
+      });
+    }
     return this.prisma.candidate.create({
-      data: {
-        ...data,
-        password: hashedPassword,
-      },
+      data,
     });
   }
 }

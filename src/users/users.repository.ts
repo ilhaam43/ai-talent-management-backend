@@ -1,23 +1,55 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../database/prisma.service'
-import { Users } from './users.entity'
+import { User } from './users.entity'
 import { Repository } from '../common/repository.interface'
 
 @Injectable()
-export class UsersRepository implements Repository<Users> {
+export class UsersRepository implements Repository<User> {
   private table = 'users'
   constructor(private readonly prisma: PrismaService) {}
   async findById(id: string) {
-    const row = await this.prisma.users.findUnique({ where: { id } })
+    const row = await this.prisma.user.findUnique({ where: { id } })
     if (!row) return null
-    return new Users(id, String(row.title), String(row.description))
+    return new User(
+      row.id,
+      row.name,
+      row.email,
+      row.emailVerified,
+      row.password,
+      row.createdAt,
+      row.updatedAt,
+    )
   }
   async findAll() {
-    const rows = await this.prisma.users.findMany()
-    return rows.map((r: { id: any; title: any; description: any }) => new Users(String(r.id), String(r.title), String(r.description)))
+    const rows = await this.prisma.user.findMany()
+    return rows.map(
+      (r) =>
+        new User(
+          r.id,
+          r.name,
+          r.email,
+          r.emailVerified,
+          r.password,
+          r.createdAt,
+          r.updatedAt,
+        ),
+    )
   }
-  async create(data: { id: string; title: string; description: string }) {
-    const row = await this.prisma.users.create({ data })
-    return new Users(row.id, row.title, row.description)
+  async create(data: {
+    id: string
+    name: string
+    email: string
+    password: string
+  }) {
+    const row = await this.prisma.user.create({ data })
+    return new User(
+      row.id,
+      row.name,
+      row.email,
+      row.emailVerified,
+      row.password,
+      row.createdAt,
+      row.updatedAt,
+    )
   }
 }
