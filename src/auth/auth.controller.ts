@@ -6,13 +6,13 @@ import { AuthService } from './auth.service'
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
   @UseGuards(AuthGuard('local'))
   @ApiBody({ schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' } } } })
   login(@Req() req: any) {
-    return this.authService.login(req.body)
+    return this.authService.login(req.user)
   }
 
   @Get('profile')
