@@ -12,7 +12,7 @@ export class AuthController {
   @UseGuards(AuthGuard('local'))
   @ApiBody({ schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' } } } })
   login(@Req() req: any) {
-    return this.authService.login(req.user)
+    return this.authService.login(req.body)
   }
 
   @Get('profile')
