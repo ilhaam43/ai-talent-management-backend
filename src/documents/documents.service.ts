@@ -96,10 +96,6 @@ export class DocumentsService {
 
     // Authorization check
     if (document.candidateId !== candidateId) {
-      console.warn('Document access forbidden', {
-        documentCandidateId: document.candidateId,
-        requestCandidateId: candidateId,
-      });
       throw new ForbiddenException(
         'You do not have permission to access this document',
       );

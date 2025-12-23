@@ -1,10 +1,11 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import FormData from 'form-data';
 import * as fs from 'fs';
 import * as path from 'path';
 
 const BASE_URL = 'http://localhost:3000';
 
+// Test credentials
 const TEST_CANDIDATE = {
   email: 'test@example.com',
   password: 'password123',
@@ -13,22 +14,21 @@ const TEST_CANDIDATE = {
 let authToken: string;
 let documentTypeId: string;
 
-interface ParseResult {
+interface TestResult {
   fileName: string;
-  success: boolean;
-  personalInfo?: {
-    fullName?: string;
-    email?: string;
-    phone?: string;
-  };
-  education?: number;
-  workExperience?: number;
-  skills?: number;
-  certifications?: number;
+  uploaded: boolean;
+  parsed: boolean;
+  extractedTextLength: number;
+  hasPersonalInfo: boolean;
+  educationCount: number;
+  workExperienceCount: number;
+  skillsCount: number;
+  certificationsCount: number;
   error?: string;
 }
 
-async function login(): Promise<boolean> {
+async function login() {
+  console.log('🔐 Logging in...');
   try {
     const response = await axios.post(`${BASE_URL}/auth/login`, TEST_CANDIDATE);
     authToken = response.data.access_token;
@@ -40,34 +40,50 @@ async function login(): Promise<boolean> {
   }
 }
 
-async function getDocumentType(): Promise<boolean> {
+async function getDocumentType() {
+  console.log('📋 Getting document types...');
   try {
     const response = await axios.get(`${BASE_URL}/documents/types`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
     const cvType = response.data.find((t: any) => t.documentType === 'CV/Resume');
-    if (cvType) {
     documentTypeId = cvType.id;
-      return true;
-    }
-    // Fallback to first type
-    if (response.data.length > 0) {
-      documentTypeId = response.data[0].id;
+    console.log(`✅ Found CV/Resume type: ${documentTypeId}\n`);
     return true;
-    }
-    return false;
   } catch (error: any) {
     console.error('❌ Failed to get document types:', error.response?.data || error.message);
     return false;
   }
 }
 
-async function testCV(cvPath: string): Promise<ParseResult> {
+async function testCV(cvPath: string): Promise<TestResult> {
   const fileName = path.basename(cvPath);
-  const result: ParseResult = { fileName, success: false };
+  const result: TestResult = {
+    fileName,
+    uploaded: false,
+    parsed: false,
+    extractedTextLength: 0,
+    hasPersonalInfo: false,
+    educationCount: 0,
+    workExperienceCount: 0,
+    skillsCount: 0,
+    certificationsCount: 0,
+  };
 
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`📄 Testing: ${fileName}`);
+  console.log('='.repeat(60));
+
+  // Check if file exists
+  if (!fs.existsSync(cvPath)) {
+    result.error = 'File not found';
+    console.log(`❌ File not found: ${cvPath}`);
+    return result;
+  }
+
+  // Upload CV
   try {
-    // Upload
+    console.log('📤 Uploading CV...');
     const form = new FormData();
     form.append('file', fs.createReadStream(cvPath));
     form.append('documentTypeId', documentTypeId);
@@ -80,103 +96,191 @@ async function testCV(cvPath: string): Promise<ParseResult> {
     });
 
     const documentId = uploadResponse.data.id;
+    result.uploaded = true;
+    console.log(`✅ Uploaded successfully (ID: ${documentId})`);
 
-    // Parse
+    // Parse CV
+    console.log('🔍 Parsing CV...');
     const parseResponse = await axios.post(
       `${BASE_URL}/cv-parser/parse/${documentId}`,
       {},
-      { headers: { Authorization: `Bearer ${authToken}` } },
+      {
+        headers: { Authorization: `Bearer ${authToken}` },
+      },
     );
+
+    result.parsed = true;
+    result.extractedTextLength = parseResponse.data.extractedText?.length || 0;
     
     const parsedData = parseResponse.data.parsedData;
     
-    result.success = true;
-    result.personalInfo = {
-      fullName: parsedData.personalInfo?.fullName,
-      email: parsedData.personalInfo?.email,
-      phone: parsedData.personalInfo?.phone,
-    };
-    result.education = parsedData.education?.length || 0;
-    result.workExperience = parsedData.workExperience?.length || 0;
-    result.skills = parsedData.skills?.length || 0;
-    result.certifications = parsedData.certifications?.length || 0;
+    // Check personal info
+    const personalInfo = parsedData.personalInfo || {};
+    result.hasPersonalInfo = !!(
+      personalInfo.fullName ||
+      personalInfo.email ||
+      personalInfo.phone
+    );
 
+    // Count items
+    result.educationCount = Array.isArray(parsedData.education) ? parsedData.education.length : 0;
+    result.workExperienceCount = Array.isArray(parsedData.workExperience)
+      ? parsedData.workExperience.length
+      : 0;
+    result.skillsCount = Array.isArray(parsedData.skills) ? parsedData.skills.length : 0;
+    result.certificationsCount = Array.isArray(parsedData.certifications)
+      ? parsedData.certifications.length
+      : 0;
+
+    console.log('✅ Parsing completed');
+    console.log(`   Text extracted: ${result.extractedTextLength} characters`);
+    console.log(`   Personal info: ${result.hasPersonalInfo ? '✅' : '❌'}`);
+    console.log(`   Education: ${result.educationCount} entries`);
+    console.log(`   Work experience: ${result.workExperienceCount} entries`);
+    console.log(`   Skills: ${result.skillsCount} items`);
+    console.log(`   Certifications: ${result.certificationsCount} items`);
+
+    // Show extracted data preview
+    if (personalInfo.fullName) {
+      console.log(`\n   👤 Name: ${personalInfo.fullName}`);
+    }
+    if (personalInfo.email) {
+      console.log(`   📧 Email: ${personalInfo.email}`);
+    }
+    if (personalInfo.phone) {
+      console.log(`   📱 Phone: ${personalInfo.phone}`);
+    }
+    if (result.educationCount > 0) {
+      console.log(`\n   🎓 Education:`);
+      parsedData.education.slice(0, 2).forEach((edu: any, idx: number) => {
+        console.log(`      ${idx + 1}. ${edu.institution || 'N/A'} - ${edu.degree || 'N/A'}`);
+      });
+    }
+    if (result.workExperienceCount > 0) {
+      console.log(`\n   💼 Work Experience:`);
+      parsedData.workExperience.slice(0, 2).forEach((work: any, idx: number) => {
+        console.log(`      ${idx + 1}. ${work.position || 'N/A'} at ${work.company || 'N/A'}`);
+      });
+    }
+
+    // Cleanup - delete document
+    try {
+      await axios.delete(`${BASE_URL}/documents/${documentId}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+    } catch (error) {
+      // Ignore cleanup errors
+    }
   } catch (error: any) {
     result.error = error.response?.data?.message || error.message;
+    console.log(`❌ Error: ${result.error}`);
   }
 
   return result;
 }
 
-function printResult(result: ParseResult) {
-  console.log('\n' + '='.repeat(70));
-  console.log(`📄 ${result.fileName}`);
-  console.log('='.repeat(70));
-
-  if (result.success) {
-    console.log(`👤 Name:       ${result.personalInfo?.fullName || '❌ Not found'}`);
-    console.log(`📧 Email:      ${result.personalInfo?.email || '❌ Not found'}`);
-    console.log(`📱 Phone:      ${result.personalInfo?.phone || '❌ Not found'}`);
-    console.log(`🎓 Education:  ${result.education} entries`);
-    console.log(`💼 Work Exp:   ${result.workExperience} entries`);
-    console.log(`🔧 Skills:     ${result.skills} items`);
-    console.log(`📜 Certs:      ${result.certifications} items`);
-  } else {
-    console.log(`❌ Error: ${result.error}`);
-  }
-}
-
-async function main() {
-  console.log('🚀 Testing All CVs in test-files folder');
-  console.log('='.repeat(70));
+async function runTests() {
+  console.log('🚀 Testing All CVs in test-files Folder');
+  console.log('='.repeat(60));
   console.log('');
 
-  if (!(await login())) return;
-  if (!(await getDocumentType())) return;
+  // Login
+  if (!(await login())) {
+    return;
+  }
 
+  // Get document type
+  if (!(await getDocumentType())) {
+    return;
+  }
+
+  // Get all PDF files from test-files
   const testFilesDir = path.join(process.cwd(), 'test-files');
-  const files = fs.readdirSync(testFilesDir).filter((f) => f.toLowerCase().endsWith('.pdf'));
+  const files = fs.readdirSync(testFilesDir).filter((file) => file.endsWith('.pdf'));
 
-  console.log(`Found ${files.length} PDF files to test\n`);
+  if (files.length === 0) {
+    console.log('❌ No PDF files found in test-files folder');
+    return;
+  }
 
-  const results: ParseResult[] = [];
+  console.log(`📁 Found ${files.length} PDF file(s) to test\n`);
 
+  const results: TestResult[] = [];
+
+  // Test each CV
   for (const file of files) {
-    console.log(`\n📤 Processing: ${file}...`);
-    const result = await testCV(path.join(testFilesDir, file));
+    const cvPath = path.join(testFilesDir, file);
+    const result = await testCV(cvPath);
     results.push(result);
-    printResult(result);
+    
+    // Small delay between tests
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
   // Summary
-  console.log('\n' + '='.repeat(70));
-  console.log('📊 FINAL SUMMARY');
-  console.log('='.repeat(70));
+  console.log(`\n\n${'='.repeat(60)}`);
+  console.log('📊 TEST SUMMARY');
+  console.log('='.repeat(60));
 
-  const successCount = results.filter((r) => r.success).length;
-  const nameFound = results.filter((r) => r.personalInfo?.fullName).length;
-  const emailFound = results.filter((r) => r.personalInfo?.email).length;
-  const phoneFound = results.filter((r) => r.personalInfo?.phone).length;
-  const totalEdu = results.reduce((sum, r) => sum + (r.education || 0), 0);
-  const totalWork = results.reduce((sum, r) => sum + (r.workExperience || 0), 0);
-  const totalSkills = results.reduce((sum, r) => sum + (r.skills || 0), 0);
+  const successful = results.filter((r) => r.parsed && r.extractedTextLength > 0).length;
+  const failed = results.filter((r) => !r.parsed || r.extractedTextLength === 0).length;
 
-  console.log(`\n✅ Parsed successfully: ${successCount}/${files.length}`);
-  console.log('\n📈 Detection Rate:');
-  console.log(`   Name:       ${nameFound}/${successCount} (${Math.round((nameFound / successCount) * 100)}%)`);
-  console.log(`   Email:      ${emailFound}/${successCount} (${Math.round((emailFound / successCount) * 100)}%)`);
-  console.log(`   Phone:      ${phoneFound}/${successCount} (${Math.round((phoneFound / successCount) * 100)}%)`);
-  console.log(`\n📊 Total Extracted:`);
-  console.log(`   Education:      ${totalEdu} entries`);
-  console.log(`   Work Exp:       ${totalWork} entries`);
-  console.log(`   Skills:         ${totalSkills} items`);
+  console.log(`\nTotal CVs tested: ${results.length}`);
+  console.log(`✅ Successfully parsed: ${successful}`);
+  console.log(`❌ Failed: ${failed}\n`);
 
-  console.log('\n📋 Per-file Results:');
-  for (const r of results) {
-    const status = r.success ? '✅' : '❌';
-    const name = r.personalInfo?.fullName || 'N/A';
-    console.log(`   ${status} ${r.fileName}: ${name}`);
+  console.log('Detailed Results:');
+  console.log('-'.repeat(60));
+  
+  results.forEach((result, idx) => {
+    console.log(`\n${idx + 1}. ${result.fileName}`);
+    console.log(`   Upload: ${result.uploaded ? '✅' : '❌'}`);
+    console.log(`   Parse: ${result.parsed ? '✅' : '❌'}`);
+    console.log(`   Text length: ${result.extractedTextLength} chars`);
+    
+    if (result.parsed) {
+      console.log(`   Personal info: ${result.hasPersonalInfo ? '✅' : '❌'}`);
+      console.log(`   Education: ${result.educationCount}`);
+      console.log(`   Work exp: ${result.workExperienceCount}`);
+      console.log(`   Skills: ${result.skillsCount}`);
+      console.log(`   Certifications: ${result.certificationsCount}`);
+    }
+    
+    if (result.error) {
+      console.log(`   Error: ${result.error}`);
+    }
+  });
+
+  // Analysis
+  console.log(`\n\n${'='.repeat(60)}`);
+  console.log('📈 ANALYSIS');
+  console.log('='.repeat(60));
+
+  const avgTextLength = results.reduce((sum, r) => sum + r.extractedTextLength, 0) / results.length;
+  const avgEducation = results.reduce((sum, r) => sum + r.educationCount, 0) / results.length;
+  const avgWorkExp = results.reduce((sum, r) => sum + r.workExperienceCount, 0) / results.length;
+  const avgSkills = results.reduce((sum, r) => sum + r.skillsCount, 0) / results.length;
+
+  console.log(`\nAverage text length: ${Math.round(avgTextLength)} characters`);
+  console.log(`Average education entries: ${avgEducation.toFixed(1)}`);
+  console.log(`Average work experience: ${avgWorkExp.toFixed(1)}`);
+  console.log(`Average skills: ${avgSkills.toFixed(1)}`);
+
+  // Identify problematic CVs
+  const problematic = results.filter(
+    (r) => r.extractedTextLength < 200 || !r.hasPersonalInfo || r.educationCount === 0,
+  );
+
+  if (problematic.length > 0) {
+    console.log(`\n⚠️  CVs that may need attention (${problematic.length}):`);
+    problematic.forEach((r) => {
+      console.log(`   - ${r.fileName} (${r.extractedTextLength} chars, ${r.educationCount} education)`);
+    });
   }
-  }
 
-main().catch(console.error);
+  console.log('\n✅ Testing completed!');
+}
+
+// Run tests
+runTests().catch(console.error);
+

@@ -1,4 +1,4 @@
-﻿const http = require('http');
+const http = require('http');
 
 async function testAuth() {
   const email = 'test@example.com';
@@ -42,4 +42,3 @@ async function testAuth() {
 }
 
 testAuth();
-

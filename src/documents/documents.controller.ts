@@ -28,30 +28,13 @@ import { UploadDocumentDto } from './dto/upload-document.dto';
 import { multerConfig } from './config/multer.config';
 import { Response } from 'express';
 import * as fs from 'fs';
-import { PrismaService } from '../database/prisma.service';
 
 @ApiTags('documents')
 @Controller('documents')
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
 export class DocumentsController {
-  constructor(
-    private readonly documentsService: DocumentsService,
-    private readonly prisma: PrismaService,
-  ) {}
-
-  /**
-   * Get candidate ID from user ID
-   */
-  private async getCandidateIdFromUserId(userId: string): Promise<string> {
-    const candidate = await this.prisma.candidate.findFirst({
-      where: { userId },
-    });
-    if (!candidate) {
-      throw new BadRequestException('Candidate profile not found for this user');
-    }
-    return candidate.id;
-  }
+  constructor(private readonly documentsService: DocumentsService) {}
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', multerConfig))
@@ -99,17 +82,11 @@ export class DocumentsController {
     @Body() uploadDto: UploadDocumentDto,
     @Req() req: any,
   ) {
-    console.log('uploadDocument user payload:', req.user);
     if (!file) {
       throw new BadRequestException('File is required');
     }
 
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new BadRequestException('User ID missing in token');
-    }
-
-    const candidateId = await this.getCandidateIdFromUserId(userId);
+    const candidateId = req.user.id;
 
     const document = await this.documentsService.uploadDocument(
       candidateId,
@@ -150,8 +127,7 @@ export class DocumentsController {
     },
   })
   async getDocuments(@Req() req: any) {
-    const userId = req.user.id;
-    const candidateId = await this.getCandidateIdFromUserId(userId);
+    const candidateId = req.user.id;
     const documents = await this.documentsService.getDocumentsByCandidate(
       candidateId,
     );
@@ -188,8 +164,7 @@ export class DocumentsController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Req() req: any,
   ) {
-    const userId = req.user.id;
-    const candidateId = await this.getCandidateIdFromUserId(userId);
+    const candidateId = req.user.id;
     const document = await this.documentsService.getDocumentById(
       documentId,
       candidateId,
@@ -220,8 +195,7 @@ export class DocumentsController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    const userId = req.user.id;
-    const candidateId = await this.getCandidateIdFromUserId(userId);
+    const candidateId = req.user.id;
     const document = await this.documentsService.getDocumentById(
       documentId,
       candidateId,
@@ -259,8 +233,7 @@ export class DocumentsController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Req() req: any,
   ) {
-    const userId = req.user.id;
-    const candidateId = await this.getCandidateIdFromUserId(userId);
+    const candidateId = req.user.id;
     return this.documentsService.deleteDocument(documentId, candidateId);
   }
 }

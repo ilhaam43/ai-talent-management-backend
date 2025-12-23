@@ -1,10 +1,6 @@
-﻿import axios from 'axios'
+import { PrismaClient } from '@prisma/client';
 
-const BASE_URL = 'http://localhost:3000'
-const TEST_USER = {
-  email: 'test@example.com',
-  password: 'password123'
-}
+const prisma = new PrismaClient();
 
 const documentTypes = [
   'CV/Resume',
@@ -16,60 +12,46 @@ const documentTypes = [
   'Supporting Document',
   'Reference Letter',
   'Work Sample',
-]
+];
 
-async function login() {
-  try {
-    const response = await axios.post(`${BASE_URL}/auth/login`, TEST_USER)
-    return response.data.access_token
-  } catch (error: any) {
-    console.error('Login failed:', error.response?.data || error.message)
-    return null
-  }
-}
-
-async function seedDocumentTypes(token: string) {
-  console.log('Seeding document types via API...')
+async function main() {
+  console.log('Seeding document types...');
 
   for (const type of documentTypes) {
-    try {
-      // Check if exists
-      const existing = await axios.get(`${BASE_URL}/documents/types`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+    const existing = await prisma.documentType.findFirst({
+      where: { documentType: type },
+    });
 
-      const found = existing.data.find((dt: any) => dt.documentType === type)
-      if (found) {
-        console.log(`✔ Document type "${type}" already exists (ID: ${found.id})`)
-        continue
-      }
-
-      // Create new one - but we don't have create endpoint, so just check
-      console.log(`ℹ Document type "${type}" not found - need to create manually`)
-
-    } catch (error: any) {
-      console.error(`❌ Error checking "${type}":`, error.response?.data || error.message)
+    if (existing) {
+      console.log(`✓ Document type "${type}" already exists`);
+    } else {
+      await prisma.documentType.create({
+        data: { documentType: type },
+      });
+      console.log(`✓ Created document type "${type}"`);
     }
   }
 
-  console.log('\nNote: Document types need to be created via database migration or manual seeding.')
-  console.log('Please run: npx prisma db seed')
+  console.log('\n✅ Document types seeded successfully!');
+
+  // Display all document types
+  const allTypes = await prisma.documentType.findMany({
+    orderBy: { documentType: 'asc' },
+  });
+
+  console.log('\nAvailable document types:');
+  allTypes.forEach((type) => {
+    console.log(`  - ${type.documentType} (ID: ${type.id})`);
+  });
 }
 
-async function main() {
-  console.log('🌱 Seeding document types via API...')
+main()
+  .catch((error) => {
+    console.error('Error seeding document types:', error);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
 
-  const token = await login()
-  if (!token) {
-    console.error('Cannot proceed without authentication')
-    process.exit(1)
-  }
-
-  await seedDocumentTypes(token)
-}
-
-main().catch((error) => {
-  console.error('Error:', error.message)
-  process.exit(1)
-})
 
