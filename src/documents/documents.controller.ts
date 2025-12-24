@@ -101,10 +101,7 @@ export class DocumentsController {
     return {
       id: document.id,
       candidateId: document.candidateId,
-      fileName: document.originalFilename,
       filePath: document.filePath,
-      fileSize: document.fileSize,
-      mimeType: document.mimeType,
       documentTypeId: document.documentTypeId,
       uploadedAt: document.createdAt,
     };
@@ -138,9 +135,7 @@ export class DocumentsController {
 
     return documents.map((doc: any) => ({
       id: doc.id,
-      fileName: doc.originalFilename,
-      fileSize: doc.fileSize,
-      mimeType: doc.mimeType,
+      filePath: doc.filePath,
       documentType: doc.documentType?.documentType || 'Unknown',
       uploadedAt: doc.createdAt,
     }));
@@ -176,10 +171,7 @@ export class DocumentsController {
 
     return {
       id: document.id,
-      fileName: document.originalFilename,
       filePath: document.filePath,
-      fileSize: document.fileSize,
-      mimeType: document.mimeType,
       documentTypeId: document.documentTypeId,
       hasExtractedText: !!document.extractedText,
       uploadedAt: document.createdAt,
@@ -213,11 +205,11 @@ export class DocumentsController {
       throw new BadRequestException('File not found on server');
     }
 
-    // Set headers for download
+    // Set headers for download - derive filename from path
+    const fileName = document.filePath.split(/[\/\\]/).pop() || 'download';
     res.set({
-      'Content-Type': document.mimeType,
-      'Content-Disposition': `attachment; filename="${document.originalFilename}"`,
-      'Content-Length': document.fileSize,
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
     });
 
     // Stream file

@@ -33,15 +33,12 @@ export class DocumentsService {
         throw new NotFoundException('Document type not found');
       }
 
-      // Create document record
+      // Create document record (new schema only has filePath, no metadata fields)
       const document = await this.prisma.candidateDocument.create({
         data: {
           candidateId,
           documentTypeId,
-          originalFilename: file.originalname,
           filePath: file.path,
-          mimeType: file.mimetype,
-          fileSize: file.size,
         },
       });
 

@@ -286,7 +286,7 @@ async function verifyDatabase() {
       where: { id: user.candidates[0].id },
       include: {
         user: true, // Include User relation
-        candidateAddress: true,
+        // candidateAddress: true, // Relation not defined in schema, use ID lookup
         educations: {
           include: { candidateLastEducation: true },
         },
@@ -317,8 +317,21 @@ async function verifyDatabase() {
 
     // Address
     console.log('\n🏠 ADDRESS:');
-    if (candidate.candidateAddress) {
-      console.log(`   Address ID: ${candidate.candidateAddress.id}`);
+    if (candidate.candidateAddressId) {
+      console.log(`   Address ID: ${candidate.candidateAddressId}`);
+      
+      // Fetch address details manually since relation is missing
+      const address = await prisma.candidateAddress.findUnique({
+        where: { id: candidate.candidateAddressId }
+      });
+      
+      if (address) {
+        console.log(`   Details: ${address.candidateAddress || 'N/A'}`);
+        console.log(`   Province: ${address.province || 'N/A'}`);
+        console.log(`   City: ${address.city || 'N/A'}`);
+      } else {
+        console.log('   Address record not found');
+      }
     } else {
       console.log('   No address stored');
     }
@@ -363,7 +376,7 @@ async function verifyDatabase() {
     if (candidate.certifications && candidate.certifications.length > 0) {
       candidate.certifications.slice(0, 5).forEach((cert: any, idx: number) => {
         console.log(`   ${idx + 1}. ${cert.certificationTitle || 'N/A'}`);
-        console.log(`      Issuer: ${cert.certificationIssuer || 'N/A'}`);
+        console.log(`      Issuer: ${cert.institutionName || 'N/A'}`);
       });
       if (candidate.certifications.length > 5) {
         console.log(`   ... and ${candidate.certifications.length - 5} more`);
@@ -376,9 +389,8 @@ async function verifyDatabase() {
     console.log('\n📄 DOCUMENTS:');
     if (candidate.documents && candidate.documents.length > 0) {
       candidate.documents.forEach((doc: any, idx: number) => {
-        console.log(`   ${idx + 1}. ${doc.originalFilename}`);
-        console.log(`      Type: ${doc.mimeType}`);
-        console.log(`      Size: ${doc.fileSize} bytes`);
+        console.log(`   ${idx + 1}. ${doc.filePath}`);
+        console.log(`      Type: ${doc.documentTypeId}`);
       });
     } else {
       console.log('   No documents stored');

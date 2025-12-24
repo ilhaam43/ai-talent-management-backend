@@ -185,9 +185,8 @@ export class CandidateProfileService {
 
     return updated;
   }
-
   /**
-   * Store address
+   * Store address - uses new simplified CandidateAddress schema (plain strings)
    */
   async storeAddress(
     candidateId: string,
@@ -197,7 +196,7 @@ export class CandidateProfileService {
   ): Promise<any> {
     const prisma = tx || this.prisma;
 
-    // Verify candidate exists
+    // Verify candidate exists and get userId
     const candidate = await prisma.candidate.findUnique({
       where: { id: candidateId },
     });
@@ -206,16 +205,17 @@ export class CandidateProfileService {
       throw new NotFoundException(`Candidate with ID ${candidateId} not found`);
     }
 
-    // Create address record
-    // Note: address.address is from StoreAddressDto, not the base Address interface
+    // Create address record using new schema (plain strings)
     const addressText = (address as any).address || '';
-    const addressId = await this.addressLookup.createAddressRecord(
-      candidateId,
-      address.province,
-      address.city,
-      address.subdistrict,
-      address.postalCode,
-      addressText,
+    const addressId = await this.addressLookup.storeAddress(
+      candidate.userId,
+      {
+        province: address.province,
+        city: address.city,
+        subdistrict: address.subdistrict,
+        postalCode: address.postalCode,
+        address: addressText,
+      },
       isCurrent,
       tx,
     );
@@ -352,9 +352,9 @@ export class CandidateProfileService {
           country,
           reasonForResignation: work.reasonForResignation || undefined,
           benefit: work.benefit || undefined,
-          referenceName: work.referenceName || undefined,
-          phoneNumber: work.referencePhone || undefined,
-          relationship: relationship || undefined,
+          referenceName: work.referenceName || 'N/A',
+          referencePhoneNumber: work.referencePhone || 'N/A',
+          referenceRelationship: relationship || 'N/A',
         },
       });
 
@@ -524,7 +524,7 @@ export class CandidateProfileService {
         const created = await prisma.candidateSocialMedia.create({
           data: {
             candidateId,
-            candidateSocialMediaId: socialMediaTypeId,
+            socialMediaId: socialMediaTypeId,
             candidateSocialMediaUrl: url,
           },
         });

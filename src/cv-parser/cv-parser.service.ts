@@ -33,10 +33,20 @@ export class CVParserService {
       throw new NotFoundException('Document file not found on server');
     }
 
+    // Derive mimeType from file extension since schema no longer has mimeType field
+    const ext = document.filePath.split('.').pop()?.toLowerCase() || '';
+    const mimeTypeMap: Record<string, string> = {
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'txt': 'text/plain',
+    };
+    const derivedMimeType = mimeTypeMap[ext] || 'application/octet-stream';
+
     // Extract text from document
     const extractedText = await this.textExtractor.extractText(
       document.filePath,
-      document.mimeType || 'application/octet-stream',
+      derivedMimeType,
     );
 
     // Save extracted text to database for future reference

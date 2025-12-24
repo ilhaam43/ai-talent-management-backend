@@ -1,13 +1,5 @@
-import {
-  JobType,
-  FieldOfWork,
-  Industry,
-  Country,
-  Relationship,
-  FamilyStatus,
-  CandidateRating,
-} from '@prisma/client';
-
+// Enum types removed from schema except FamilyStatus (still used for CandidateFamily)
+import { FamilyStatus } from '@prisma/client';
 /**
  * Parse various date formats to Date object
  * Supports: DD/MM/YYYY, YYYY-MM-DD, "August 2017", "2017", etc.
@@ -64,148 +56,149 @@ export function parseDate(dateString?: string | number | null): Date | null {
 }
 
 /**
- * Map string to JobType enum
+ * Map string to JobType string
  */
-export function mapJobType(jobTypeString?: string | null): JobType {
-  if (!jobTypeString) return JobType.FULL_TIME;
+export function mapJobType(jobTypeString?: string | null): string {
+  if (!jobTypeString) return 'FULL_TIME';
 
   const normalized = jobTypeString.toUpperCase().replace(/[^A-Z]/g, '_');
   
   if (normalized.includes('FULL_TIME') || normalized.includes('FULLTIME')) {
-    return JobType.FULL_TIME;
+    return 'FULL_TIME';
   }
   if (normalized.includes('PART_TIME') || normalized.includes('PARTTIME')) {
-    return JobType.PART_TIME;
+    return 'PART_TIME';
   }
   if (normalized.includes('CONTRACT')) {
-    return JobType.CONTRACT;
+    return 'CONTRACT';
   }
   if (normalized.includes('INTERN') || normalized.includes('INTERNSHIP')) {
-    return JobType.INTERNSHIP;
+    return 'INTERNSHIP';
   }
   if (normalized.includes('FREELANCE')) {
-    return JobType.FREELANCE;
+    return 'FREELANCE';
   }
 
-  return JobType.FULL_TIME; // Default
+  return 'FULL_TIME'; // Default
 }
 
 /**
- * Map string to FieldOfWork enum
+ * Map string to FieldOfWork string
  */
-export function mapFieldOfWork(fieldString?: string | null): FieldOfWork {
-  if (!fieldString) return FieldOfWork.OTHER;
+export function mapFieldOfWork(fieldString?: string | null): string {
+  if (!fieldString) return 'OTHER';
 
   const normalized = fieldString.toUpperCase();
   
   if (normalized.includes('IT') || normalized.includes('TECHNOLOGY') || normalized.includes('SOFTWARE')) {
-    return FieldOfWork.IT;
+    return 'IT';
   }
   if (normalized.includes('FINANCE') || normalized.includes('FINANCIAL')) {
-    return FieldOfWork.FINANCE;
+    return 'FINANCE';
   }
   if (normalized.includes('MARKETING')) {
-    return FieldOfWork.MARKETING;
+    return 'MARKETING';
   }
   if (normalized.includes('HR') || normalized.includes('HUMAN_RESOURCE')) {
-    return FieldOfWork.HR;
+    return 'HR';
   }
   if (normalized.includes('SALES')) {
-    return FieldOfWork.SALES;
+    return 'SALES';
   }
   if (normalized.includes('OPERATION')) {
-    return FieldOfWork.OPERATIONS;
+    return 'OPERATIONS';
   }
 
-  return FieldOfWork.OTHER;
+  return 'OTHER';
 }
 
 /**
- * Map string to Industry enum
+ * Map string to Industry string
  */
-export function mapIndustry(industryString?: string | null): Industry {
-  if (!industryString) return Industry.OTHER;
+export function mapIndustry(industryString?: string | null): string {
+  if (!industryString) return 'OTHER';
 
   const normalized = industryString.toUpperCase();
   
   if (normalized.includes('TECH') || normalized.includes('TECHNOLOGY') || normalized.includes('IT')) {
-    return Industry.TECHNOLOGY;
+    return 'TECHNOLOGY';
   }
   if (normalized.includes('FINANCE') || normalized.includes('BANKING')) {
-    return Industry.FINANCE;
+    return 'FINANCE';
   }
   if (normalized.includes('HEALTH') || normalized.includes('MEDICAL')) {
-    return Industry.HEALTHCARE;
+    return 'HEALTHCARE';
   }
   if (normalized.includes('EDUCATION') || normalized.includes('SCHOOL') || normalized.includes('UNIVERSITY')) {
-    return Industry.EDUCATION;
+    return 'EDUCATION';
   }
   if (normalized.includes('MANUFACTURING') || normalized.includes('PRODUCTION')) {
-    return Industry.MANUFACTURING;
+    return 'MANUFACTURING';
   }
   if (normalized.includes('RETAIL') || normalized.includes('SHOPPING')) {
-    return Industry.RETAIL;
+    return 'RETAIL';
   }
   if (normalized.includes('CONSULTING') || normalized.includes('CONSULTANT')) {
-    return Industry.CONSULTING;
+    return 'CONSULTING';
   }
 
-  return Industry.OTHER;
+  return 'OTHER';
 }
 
 /**
- * Map string to Country enum
+ * Map string to Country string
  */
-export function mapCountry(countryString?: string | null): Country {
-  if (!countryString) return Country.INDONESIA; // Default to Indonesia
+export function mapCountry(countryString?: string | null): string {
+  if (!countryString) return 'INDONESIA'; // Default to Indonesia
 
   const normalized = countryString.toUpperCase();
   
   if (normalized.includes('INDONESIA') || normalized.includes('IDN')) {
-    return Country.INDONESIA;
+    return 'INDONESIA';
   }
   if (normalized.includes('SINGAPORE') || normalized.includes('SGP')) {
-    return Country.SINGAPORE;
+    return 'SINGAPORE';
   }
   if (normalized.includes('MALAYSIA') || normalized.includes('MYS')) {
-    return Country.MALAYSIA;
+    return 'MALAYSIA';
   }
   if (normalized.includes('THAILAND') || normalized.includes('THA')) {
-    return Country.THAILAND;
+    return 'THAILAND';
   }
   if (normalized.includes('PHILIPPINES') || normalized.includes('PHL')) {
-    return Country.PHILIPPINES;
+    return 'PHILIPPINES';
   }
 
-  return Country.OTHER;
+  return 'OTHER';
 }
 
 /**
- * Map string to Relationship enum
+ * Map string to Relationship string
  */
-export function mapRelationship(relationshipString?: string | null): Relationship | null {
-  if (!relationshipString) return null;
+export function mapRelationship(relationshipString?: string | null): string {
+  if (!relationshipString) return 'OTHER';
 
   const normalized = relationshipString.toUpperCase();
   
   if (normalized.includes('COLLEAGUE') || normalized.includes('COWORKER')) {
-    return Relationship.COLLEAGUE;
+    return 'COLLEAGUE';
   }
   if (normalized.includes('MANAGER') || normalized.includes('SUPERVISOR')) {
-    return Relationship.MANAGER;
+    return 'MANAGER';
   }
   if (normalized.includes('SUBORDINATE') || normalized.includes('TEAM_MEMBER')) {
-    return Relationship.SUBORDINATE;
+    return 'SUBORDINATE';
   }
   if (normalized.includes('CLIENT')) {
-    return Relationship.CLIENT;
+    return 'CLIENT';
   }
 
-  return Relationship.OTHER;
+  return 'OTHER';
 }
 
+
 /**
- * Map string to FamilyStatus enum
+ * Map string to FamilyStatus enum (still used in schema)
  */
 export function mapFamilyStatus(statusString?: string | null): FamilyStatus | null {
   if (!statusString) return null;
@@ -232,30 +225,30 @@ export function mapFamilyStatus(statusString?: string | null): FamilyStatus | nu
 }
 
 /**
- * Map string to CandidateRating enum
+ * Map string to CandidateRating string
  */
-export function mapCandidateRating(ratingString?: string | null): CandidateRating {
-  if (!ratingString) return CandidateRating.THREE; // Default
+export function mapCandidateRating(ratingString?: string | null): string {
+  if (!ratingString) return '3'; // Default
 
   const normalized = ratingString.toUpperCase();
   
   if (normalized.includes('ONE') || normalized === '1' || normalized.includes('BEGINNER')) {
-    return CandidateRating.ONE;
+    return '1';
   }
   if (normalized.includes('TWO') || normalized === '2' || normalized.includes('BASIC')) {
-    return CandidateRating.TWO;
+    return '2';
   }
   if (normalized.includes('THREE') || normalized === '3' || normalized.includes('INTERMEDIATE')) {
-    return CandidateRating.THREE;
+    return '3';
   }
   if (normalized.includes('FOUR') || normalized === '4' || normalized.includes('ADVANCED')) {
-    return CandidateRating.FOUR;
+    return '4';
   }
   if (normalized.includes('FIVE') || normalized === '5' || normalized.includes('EXPERT')) {
-    return CandidateRating.FIVE;
+    return '5';
   }
 
-  return CandidateRating.THREE; // Default
+  return '3'; // Default
 }
 
 /**
