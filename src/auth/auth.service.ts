@@ -10,7 +10,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   async validateUser(email: string, pass: string): Promise<any> {
     try {
@@ -40,7 +40,7 @@ export class AuthService {
 
       // Get candidate profile if exists
       const candidate = user.candidates?.[0] || null
-      
+
       // Return user with candidate info
       const { password, ...userWithoutPassword } = user
       return {
@@ -60,16 +60,16 @@ export class AuthService {
         throw new Error('Invalid user object in login')
       }
 
-      const payload = { 
-        email: user.email || user.candidateEmail, 
-        sub: user.id, 
+      const payload = {
+        email: user.email || user.candidateEmail,
+        sub: user.id,
         candidateId: user.candidateId,
-        type: 'access' 
+        type: 'access'
       }
-      
-      // Generate access token (15 minutes)
+
+      // Generate access token (1 hour)
       const accessToken = this.jwt.sign(payload)
-      
+
       // Generate refresh token (7 days) - different secret for security
       const refreshTokenSecret = this.configService.get<string>('JWT_REFRESH_SECRET') || this.configService.get<string>('JWT_SECRET') || 'supersecretjwt'
       const refreshPayload = { sub: user.id, type: 'refresh' }
@@ -91,7 +91,7 @@ export class AuthService {
   async refreshAccessToken(refreshToken: string) {
     try {
       const refreshTokenSecret = this.configService.get<string>('JWT_REFRESH_SECRET') || this.configService.get<string>('JWT_SECRET') || 'supersecretjwt'
-      
+
       // Verify refresh token
       const payload = this.jwt.verify(refreshToken, {
         secret: refreshTokenSecret,
