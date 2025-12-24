@@ -8,16 +8,11 @@ import {
   IsEnum,
   IsNumber,
   IsBoolean,
+  IsDecimal,
 } from "class-validator";
-import {
-  JobType,
-  FieldOfWork,
-  Industry,
-  Country,
-  Relationship,
-  FamilyStatus,
-  CandidateRating,
-} from "@prisma/client";
+import { FamilyStatus } from "@prisma/client";
+
+// DTOs match Prisma schema exactly after lead's schema update
 
 export class CandidateAddressDto {
   @IsString()
@@ -41,29 +36,24 @@ export class CandidateAddressDto {
   postalCodeId?: string;
 }
 
+// Matches CandidateWorkExperience model in schema (all String types)
 export class CandidateWorkExperienceDto {
   @IsString()
-  @IsOptional()
   companyName!: string;
 
   @IsString()
-  @IsOptional()
   jobTitle!: string;
 
-  @IsEnum(JobType)
-  @IsOptional()
-  jobType!: JobType;
+  @IsString()
+  jobType!: string; // Schema uses plain String, not enum
 
-  @IsEnum(FieldOfWork)
-  @IsOptional()
-  fieldOfWork!: FieldOfWork;
+  @IsString()
+  fieldOfWork!: string; // Schema uses plain String, not enum
 
-  @IsEnum(Industry)
-  @IsOptional()
-  industry!: Industry;
+  @IsString()
+  industry!: string; // Schema uses plain String, not enum
 
   @IsDateString()
-  @IsOptional()
   employmentStartedDate!: string;
 
   @IsDateString()
@@ -74,9 +64,8 @@ export class CandidateWorkExperienceDto {
   @IsOptional()
   workExperienceDescription?: string;
 
-  @IsEnum(Country)
-  @IsOptional()
-  country!: Country;
+  @IsString()
+  country!: string; // Schema uses plain String, not enum
 
   @IsString()
   @IsOptional()
@@ -87,38 +76,32 @@ export class CandidateWorkExperienceDto {
   benefit?: string;
 
   @IsString()
-  @IsOptional()
-  referenceName?: string;
+  referenceName!: string; // Required in schema
 
   @IsString()
-  @IsOptional()
-  phoneNumber?: string;
+  referencePhoneNumber!: string; // Required in schema
 
-  @IsEnum(Relationship)
-  @IsOptional()
-  relationship?: Relationship;
+  @IsString()
+  referenceRelationship!: string; // Required in schema
 }
 
+// Matches CandidateEducation model in schema
 export class CandidateEducationDto {
   @IsString()
-  @IsOptional()
-  candidateLastEducationId!: string;
+  candidateLastEducationId!: string; // Required in schema
 
   @IsString()
-  @IsOptional()
   candidateSchool!: string;
 
   @IsString()
   @IsOptional()
   candidateMajor?: string;
 
-  @IsString()
   @IsOptional()
-  candidateGpa?: string;
+  candidateGpa?: number | string; // Decimal in schema
 
-  @IsString()
   @IsOptional()
-  candidateMaxGpa?: string;
+  candidateMaxGpa?: number | string; // Decimal in schema
 
   @IsString()
   @IsOptional()
@@ -133,27 +116,24 @@ export class CandidateEducationDto {
   candidateEndedYearStudy?: string;
 }
 
+// Matches CandidateSkill model in schema
 export class CandidateSkillDto {
   @IsString()
-  @IsOptional()
-  candidateSkills!: string;
+  candidateSkill!: string; // Field name in schema is candidateSkill (singular)
 
-  @IsEnum(CandidateRating)
-  @IsOptional()
-  candidateRating!: CandidateRating;
+  @IsString()
+  candidateRating!: string; // Schema uses plain String, not enum
 }
 
+// Matches CandidateOrganizationExperience model in schema
 export class CandidateOrganizationExperienceDto {
   @IsString()
-  @IsOptional()
   organizationName!: string;
 
   @IsString()
-  @IsOptional()
   role!: string;
 
   @IsDateString()
-  @IsOptional()
   organizationExperienceStartedDate!: string;
 
   @IsDateString()
@@ -169,13 +149,12 @@ export class CandidateOrganizationExperienceDto {
   location?: string;
 }
 
+// Matches CandidateFamily model in schema (FamilyStatus is still an enum)
 export class CandidateFamilyDto {
   @IsEnum(FamilyStatus)
-  @IsOptional()
   familyStatus!: FamilyStatus;
 
   @IsString()
-  @IsOptional()
   familyName!: string;
 
   @IsString()
@@ -183,23 +162,21 @@ export class CandidateFamilyDto {
   familyJob?: string;
 }
 
+// Matches CandidateSocialMedia model in schema
 export class CandidateSocialMediaDto {
   @IsString()
-  @IsOptional()
-  candidateSocialMediaId!: string;
+  socialMediaId!: string; // Field name in schema
 
   @IsString()
-  @IsOptional()
   candidateSocialMediaUrl!: string;
 }
 
+// Matches CandidateCertification model in schema
 export class CandidateCertificationDto {
   @IsString()
-  @IsOptional()
   certificationTitle!: string;
 
   @IsString()
-  @IsOptional()
   institutionName!: string;
 
   @IsString()

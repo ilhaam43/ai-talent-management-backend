@@ -19,7 +19,7 @@ export class LLMParserService {
 
     // Initialize OpenAI client with custom base URL
     const apiKey = this.configService.get<string>('LLM_API_KEY');
-    const baseURL = this.configService.get<string>('LLM_BASE_URL') || 'https://console.labahasa.ai/v1';
+    const baseURL = this.configService.get<string>('LLM_BASE_URL') || 'https://dekawicara.cloudeka.ai/api';
 
     if (!apiKey) {
       console.warn('LLM_API_KEY not set. LLM parsing will be disabled.');
@@ -41,19 +41,29 @@ export class LLMParserService {
     }
 
     const openai = this.openai; // TypeScript guard
+    const baseURL = this.configService.get<string>('LLM_BASE_URL') || 'https://dekawicara.cloudeka.ai/api';
+    const model = this.configService.get<string>('LLM_MODEL') || 'qwen/qwen3-coder';
 
     const prompt = this.buildParsingPrompt(extractedText);
 
     try {
-      console.log('Sending CV text to LLM for parsing...');
+      console.log(`Sending CV text to LLM for parsing...`);
+      console.log(`  Base URL: ${baseURL}`);
+      console.log(`  Model: ${model}`);
+      console.log(`  CV Text length: ${extractedText.length} chars`);
+      
+      // Track timing
+      const startTime = Date.now();
       
       // Optimize for speed: lower temperature, max_tokens limit, timeout
       // Increased timeout to 60s for slower LLM services
       const timeout = this.configService.get<number>('LLM_TIMEOUT') || 60000; // 60 seconds default
+      // Increased max_tokens to 3000 for larger open models
+      const maxTokens = this.configService.get<number>('LLM_MAX_TOKENS') || 3000;
       
       const response = await Promise.race([
         openai.chat.completions.create({
-          model: this.configService.get<string>('LLM_MODEL') || 'llama-4-maverick',
+          model: model,
           messages: [
             {
               role: 'system',
@@ -65,131 +75,85 @@ export class LLMParserService {
             },
           ],
           temperature: 0.1, // Low temperature for consistent parsing
-          max_tokens: 3000, // Reduced for faster processing
-          response_format: { type: 'json_object' },
+          max_tokens: maxTokens,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('LLM request timeout')), timeout),
         ),
       ]) as any;
 
+      const responseTime = Date.now() - startTime;
+      console.log(`  LLM response time: ${responseTime}ms`);
+
       const content = response.choices[0]?.message?.content;
       if (!content) {
         throw new Error('LLM returned empty response');
       }
 
+      // Strip markdown code block markers if present (```json ... ```)
+      let jsonContent = content.trim();
+      if (jsonContent.startsWith('```')) {
+        // Remove opening ```json or ``` and closing ```
+        jsonContent = jsonContent.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      }
+
       // Parse JSON response
-      const parsedData = JSON.parse(content);
+      const parsedData = JSON.parse(jsonContent);
 
       console.log('LLM parsing completed successfully');
 
       return this.normalizeParsedData(parsedData);
     } catch (error: any) {
-      console.error('LLM parsing error:', error.message);
+      console.error('LLM parsing error details:');
+      console.error(`  Error type: ${error.constructor.name}`);
+      console.error(`  Error message: ${error.message}`);
+      if (error.status) console.error(`  HTTP Status: ${error.status}`);
+      if (error.code) console.error(`  Error code: ${error.code}`);
+      if (error.cause) console.error(`  Cause: ${JSON.stringify(error.cause)}`);
       throw new BadRequestException(`LLM parsing failed: ${error.message}`);
     }
   }
 
   /**
    * Build prompt for LLM to parse CV
-   * Optimized for speed: concise prompt, smart text truncation
+   * OPTIMIZED: Ultra-concise prompt for fastest response
    */
   private buildParsingPrompt(cvText: string): string {
-    // Reduced text length for faster LLM processing (10000 chars)
-    // Most CVs are under 10k chars, so this should work for most cases
-    const maxLength = 10000;
+    // Reduced text length for faster LLM processing
+    const maxLength = 8000;
     let processedText = cvText;
     
     if (cvText.length > maxLength) {
-      // Take first 70% (most important: name, contact, education, experience)
-      // and last 30% (skills, certifications)
-      const firstPart = cvText.substring(0, Math.floor(maxLength * 0.7));
-      const lastPart = cvText.substring(cvText.length - Math.floor(maxLength * 0.3));
-      processedText = `${firstPart}\n\n[... middle section truncated for speed ...]\n\n${lastPart}`;
+      // Take first 75% (most important: name, contact, education, experience)
+      // and last 25% (skills, certifications)
+      const firstPart = cvText.substring(0, Math.floor(maxLength * 0.75));
+      const lastPart = cvText.substring(cvText.length - Math.floor(maxLength * 0.25));
+      processedText = `${firstPart}\n...\n${lastPart}`;
     }
 
-    return `Extract CV data into JSON. Return ONLY valid JSON, no explanations.
+    // Ultra-concise prompt for speed but clear about array structure
+    return `Parse this CV into JSON format. Return ONLY valid JSON.
 
 {
-  "personalInfo": {
-    "fullName": "string or null",
-    "idCardNumber": "string or null",
-    "phone": "string or null",
-    "gender": "string or null (Male/Female/Other)",
-    "maritalStatus": "string or null (Single/Married/Divorced/Widowed)",
-    "placeOfBirth": "string or null",
-    "nickname": "string or null",
-    "email": "string or null",
-    "nationality": "string or null",
-    "religion": "string or null",
-    "dateOfBirth": "string or null (YYYY-MM-DD or DD/MM/YYYY)"
-  },
-  "socialMedia": {
-    "linkedin": "string or null (full URL or username)",
-    "instagram": "string or null (username only)",
-    "facebook": "string or null (username or URL)",
-    "tiktok": "string or null (username only)"
-  },
-  "address": {
-    "province": "string or null",
-    "city": "string or null",
-    "subdistrict": "string or null",
-    "postalCode": "string or null"
-  },
-  "education": [
-    {
-      "educationLevel": "string or null (e.g., Bachelor, Master, High School)",
-      "major": "string or null",
-      "country": "string or null",
-      "city": "string or null",
-      "university": "string or null",
-      "gpa": "string or null",
-      "gpaMax": "string or null",
-      "yearOfStudy": "string or null",
-      "startYear": "string or null",
-      "endYear": "string or null"
-    }
-  ],
-  "workExperience": [
-    {
-      "company": "string",
-      "position": "string",
-      "jobType": "string or null",
-      "fieldOfWork": "string or null",
-      "industry": "string or null",
-      "startDate": "string or null",
-      "endDate": "string or null",
-      "description": "string or null",
-      "country": "string or null"
-    }
-  ],
-  "organizationExperience": [
-    {
-      "organization": "string",
-      "role": "string",
-      "startDate": "string or null",
-      "endDate": "string or null",
-      "description": "string or null",
-      "location": "string or null"
-    }
-  ],
-  "skills": ["string"],
-  "certifications": [
-    {
-      "name": "string",
-      "issuer": "string or null",
-      "location": "string or null",
-      "startDate": "string or null",
-      "endDate": "string or null",
-      "description": "string or null"
-    }
-  ]
+  "personalInfo": {"fullName":"","email":"","phone":"","dateOfBirth":"","placeOfBirth":"","gender":"","maritalStatus":"","nationality":"","religion":""},
+  "address": {"city":"","province":"","postalCode":""},
+  "socialMedia": {"linkedin":"","instagram":"","github":""},
+  "education": [{"university":"","major":"","educationLevel":"","gpa":"","gpaMax":"","startYear":"","endYear":"","city":"","country":""}],
+  "workExperience": [{"company":"","position":"","jobType":"","startDate":"","endDate":"","description":""}],
+  "organizationExperience": [{"organization":"","role":"","startDate":"","endDate":""}],
+  "skills": ["skill1","skill2"],
+  "certifications": [{"name":"Certification Title 1","issuer":""},{"name":"Certification Title 2","issuer":""}]
 }
 
-CV Text:
-${processedText}
+CRITICAL RULES:
+1. certifications: Create ONE SEPARATE OBJECT for EACH certificate. DO NOT combine multiple certifications into one entry.
+2. If CV has 18 certifications, output array must have 18 separate objects.
+3. For multi-line certification names in CV, combine into one complete title per object.
+4. skills: Extract individual technical skills only as separate strings.
+5. Use null for missing fields.
 
-Return ONLY JSON object.`;
+CV:
+${processedText}`;
   }
 
   /**

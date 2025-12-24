@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config'
 import { AuthModule } from './auth/auth.module'
 import { DocumentsModule } from './documents/documents.module'
 import { CVParserModule } from './cv-parser/cv-parser.module'
+import { CandidateProfileModule } from './candidate-profile/candidate-profile.module'
 import { CandidatesModule } from './candidates/candidates.module'
 
 @Module({
@@ -15,6 +16,7 @@ import { CandidatesModule } from './candidates/candidates.module'
     AuthModule,
     DocumentsModule,
     CVParserModule,
+    CandidateProfileModule,
     CandidatesModule,
   ],
 })

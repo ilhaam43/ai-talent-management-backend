@@ -8,6 +8,7 @@ import {
   UploadedFile,
   BadRequestException,
   ParseUUIDPipe,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -21,13 +22,30 @@ import {
 } from '@nestjs/swagger';
 import { CVParserService } from './cv-parser.service';
 import { multerConfig } from '../documents/config/multer.config';
+import { PrismaService } from '../database/prisma.service';
 
 @ApiTags('cv-parser')
 @Controller('cv-parser')
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
 export class CVParserController {
-  constructor(private readonly cvParserService: CVParserService) {}
+  constructor(
+    private readonly cvParserService: CVParserService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  /**
+   * Get candidate ID from user ID
+   */
+  private async getCandidateIdFromUserId(userId: string): Promise<string> {
+    const candidate = await this.prisma.candidate.findFirst({
+      where: { userId },
+    });
+    if (!candidate) {
+      throw new UnauthorizedException('Candidate profile not found for this user');
+    }
+    return candidate.id;
+  }
 
   @Post('parse/:documentId')
   @ApiOperation({ summary: 'Parse CV by document ID' })
@@ -121,7 +139,12 @@ export class CVParserController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Req() req: any,
   ) {
-    const candidateId = req.user.id;
+    const userId = req.user?.id;
+    console.log('parseDocument user payload:', req.user);
+    if (!userId) {
+      throw new UnauthorizedException('User ID missing in token');
+    }
+    const candidateId = await this.getCandidateIdFromUserId(userId);
     return this.cvParserService.parseDocument(documentId, candidateId);
   }
 

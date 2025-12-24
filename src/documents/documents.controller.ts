@@ -86,7 +86,11 @@ export class DocumentsController {
       throw new BadRequestException('File is required');
     }
 
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
+
+    if (!candidateId) {
+      throw new BadRequestException('User does not have a candidate profile');
+    }
 
     const document = await this.documentsService.uploadDocument(
       candidateId,
@@ -97,10 +101,7 @@ export class DocumentsController {
     return {
       id: document.id,
       candidateId: document.candidateId,
-      fileName: document.originalFilename,
       filePath: document.filePath,
-      fileSize: document.fileSize,
-      mimeType: document.mimeType,
       documentTypeId: document.documentTypeId,
       uploadedAt: document.createdAt,
     };
@@ -127,16 +128,14 @@ export class DocumentsController {
     },
   })
   async getDocuments(@Req() req: any) {
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
     const documents = await this.documentsService.getDocumentsByCandidate(
       candidateId,
     );
 
     return documents.map((doc: any) => ({
       id: doc.id,
-      fileName: doc.originalFilename,
-      fileSize: doc.fileSize,
-      mimeType: doc.mimeType,
+      filePath: doc.filePath,
       documentType: doc.documentType?.documentType || 'Unknown',
       uploadedAt: doc.createdAt,
     }));
@@ -164,7 +163,7 @@ export class DocumentsController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Req() req: any,
   ) {
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
     const document = await this.documentsService.getDocumentById(
       documentId,
       candidateId,
@@ -172,10 +171,7 @@ export class DocumentsController {
 
     return {
       id: document.id,
-      fileName: document.originalFilename,
       filePath: document.filePath,
-      fileSize: document.fileSize,
-      mimeType: document.mimeType,
       documentTypeId: document.documentTypeId,
       hasExtractedText: !!document.extractedText,
       uploadedAt: document.createdAt,
@@ -195,7 +191,7 @@ export class DocumentsController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
     const document = await this.documentsService.getDocumentById(
       documentId,
       candidateId,
@@ -209,11 +205,11 @@ export class DocumentsController {
       throw new BadRequestException('File not found on server');
     }
 
-    // Set headers for download
+    // Set headers for download - derive filename from path
+    const fileName = document.filePath.split(/[\/\\]/).pop() || 'download';
     res.set({
-      'Content-Type': document.mimeType,
-      'Content-Disposition': `attachment; filename="${document.originalFilename}"`,
-      'Content-Length': document.fileSize,
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
     });
 
     // Stream file
@@ -233,7 +229,7 @@ export class DocumentsController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Req() req: any,
   ) {
-    const candidateId = req.user.id;
+    const candidateId = req.user.candidateId;
     return this.documentsService.deleteDocument(documentId, candidateId);
   }
 }
