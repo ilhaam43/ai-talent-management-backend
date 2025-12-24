@@ -1,7 +1,7 @@
 const http = require('http');
 
 async function testAuth() {
-  const email = 'test@example.com';
+  const email = 'test-auth@example.com';
   const password = 'password123';
   const postData = JSON.stringify({ email, password });
 
