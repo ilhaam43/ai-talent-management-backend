@@ -351,7 +351,7 @@ async function verifyDatabase() {
     // Skills
     console.log('\n🔧 SKILLS:');
     if (candidate.skills && candidate.skills.length > 0) {
-      const skillNames = candidate.skills.map((s: any) => s.candidateSkills).join(', ');
+      const skillNames = candidate.skills.map((s: any) => s.candidateSkill).join(', ');
       console.log(`   ${skillNames}`);
       console.log(`   Total: ${candidate.skills.length} skills`);
     } else {

@@ -259,31 +259,36 @@ export class CandidateProfileService {
 
     for (const edu of education) {
       const normalizedLevel = normalizeEducationLevel(edu.educationLevel || edu.degree);
-      const educationLevelId = normalizedLevel
+      // Always get an education level ID - use fallback if none found
+      let educationLevelId = normalizedLevel
         ? await this.referenceData.findOrCreateEducationLevel(normalizedLevel)
         : null;
-
+      
+      // If no education level found, use a default (e.g., "Other" or first available)
+      if (!educationLevelId) {
+        educationLevelId = await this.referenceData.findOrCreateEducationLevel('Other');
+      }
+      
       // Parse dates
       const startDate = parseDate(edu.startYear);
       const endDate = parseDate(edu.endYear);
 
-      // Build data object - only include candidateLastEducationId if it has a value
-      // Convert GPA to string since Prisma expects String type
+      // Build data object - candidateLastEducationId is required in schema
+      // GPA fields are Decimal(3,2) - ensure proper format
+      const gpaValue = edu.gpa != null ? parseFloat(String(edu.gpa)) : null;
+      const gpaMaxValue = edu.gpaMax != null ? parseFloat(String(edu.gpaMax)) : null;
+      
       const educationData: any = {
         candidateId,
+        candidateLastEducationId: educationLevelId,
         candidateSchool: edu.university || edu.institution || '',
         candidateMajor: edu.major || null,
-        candidateGpa: edu.gpa != null ? String(edu.gpa) : null,
-        candidateMaxGpa: edu.gpaMax != null ? String(edu.gpaMax) : null,
+        candidateGpa: gpaValue,
+        candidateMaxGpa: gpaMaxValue,
         candidateCountry: edu.country || null,
         candidateStartedYearStudy: startDate || null,
         candidateEndedYearStudy: endDate || null,
       };
-
-      // Only add candidateLastEducationId if it exists
-      if (educationLevelId) {
-        educationData.candidateLastEducationId = educationLevelId;
-      }
 
       const created = await prisma.candidateEducation.create({
         data: educationData,
@@ -431,8 +436,8 @@ export class CandidateProfileService {
       const created = await prisma.candidateSkill.create({
         data: {
           candidateId,
-          candidateSkills: skill.trim(),
-          candidateRating: mapCandidateRating(), // Default rating
+          candidateSkill: skill.trim(),
+          candidateRating: '3', // Default rating as string (1-5 scale)
         },
       });
 
