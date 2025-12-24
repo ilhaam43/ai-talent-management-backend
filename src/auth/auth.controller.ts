@@ -21,9 +21,9 @@ export class AuthController {
       if (!req.user) {
         throw new UnauthorizedException('User not found in request')
       }
-      
+
       const tokens = await this.authService.login(req.user)
-      
+
       // Set refresh token in httpOnly cookie
       const isProduction = process.env.NODE_ENV === 'production'
       res.cookie('refresh_token', tokens.refresh_token, {
@@ -37,7 +37,7 @@ export class AuthController {
       // Return only access token in response (refresh token is in cookie)
       return {
         access_token: tokens.access_token,
-        expires_in: 15 * 60, // 15 minutes in seconds
+        expires_in: 3600, // 1 hour in seconds
       }
     } catch (error) {
       console.error('Login error:', error)
@@ -62,7 +62,7 @@ export class AuthController {
       const tokens = await this.authService.refreshAccessToken(refreshToken)
       return {
         access_token: tokens.access_token,
-        expires_in: 15 * 60, // 15 minutes in seconds
+        expires_in: 3600, // 1 hour in seconds
       }
     } catch (error) {
       // Clear invalid refresh token cookie
