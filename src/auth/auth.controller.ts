@@ -67,10 +67,11 @@ export class AuthController {
         path: '/',
       })
 
-      // Return only access token in response (refresh token is in cookie)
+      // Return access token and user info
       return {
         access_token: tokens.access_token,
         expires_in: 3600, // 1 hour in seconds
+        user: req.user,
       }
     } catch (error) {
       console.error('Login error:', error)

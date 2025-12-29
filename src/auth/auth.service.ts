@@ -79,6 +79,7 @@ export class AuthService {
           email: result.user.email,
           name: result.user.name,
           candidateId: result.candidate.id,
+          role: 'CANDIDATE',
         },
       }
     } catch (error) {
