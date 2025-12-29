@@ -12,6 +12,7 @@
     ],
     "sourceMap": true,
     "outDir": "dist",
+    "rootDir": "src",
     "baseUrl": "./",
     "incremental": true,
     "strict": true,
@@ -20,9 +21,7 @@
     "esModuleInterop": true
   },
   "include": [
-    "src/**/*",
-    "scripts/seed/**/*",
-    "scripts/seeders/**/*"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",

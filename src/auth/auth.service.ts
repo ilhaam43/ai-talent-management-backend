@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common'
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../database/prisma.service'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import * as bcrypt from 'bcrypt'
+import { SignupDto } from './dto/signup.dto'
 
 @Injectable()
 export class AuthService {
@@ -11,6 +12,83 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly configService: ConfigService,
   ) { }
+
+  async signup(signupDto: SignupDto) {
+    try {
+      const { email, name, password } = signupDto
+
+      // Check if user already exists
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email },
+      })
+
+      if (existingUser) {
+        throw new ConflictException('Email already registered')
+      }
+
+      // Hash password
+      const saltRounds = 10
+      const hashedPassword = await bcrypt.hash(password, saltRounds)
+
+      // Create user and candidate in a transaction
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Create user
+        const user = await tx.user.create({
+          data: {
+            email,
+            name,
+            password: hashedPassword,
+          },
+        })
+
+        // Create candidate profile
+        const candidate = await tx.candidate.create({
+          data: {
+            userId: user.id,
+            candidateFullname: name,
+            candidateEmail: email,
+          },
+        })
+
+        return { user, candidate }
+      })
+
+      // Generate tokens for auto-login
+      const payload = {
+        email: result.user.email,
+        sub: result.user.id,
+        candidateId: result.candidate.id,
+        role: 'CANDIDATE',
+        type: 'access'
+      }
+
+      const accessToken = this.jwt.sign(payload)
+
+      const refreshTokenSecret = this.configService.get<string>('JWT_REFRESH_SECRET') || this.configService.get<string>('JWT_SECRET') || 'supersecretjwt'
+      const refreshPayload = { sub: result.user.id, type: 'refresh' }
+      const refreshToken = this.jwt.sign(refreshPayload, {
+        secret: refreshTokenSecret,
+        expiresIn: '7d',
+      })
+
+      return {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          candidateId: result.candidate.id,
+        },
+      }
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        throw error
+      }
+      console.error('Signup error:', error)
+      throw new BadRequestException('Failed to create account')
+    }
+  }
 
   async validateUser(email: string, pass: string): Promise<any> {
     try {

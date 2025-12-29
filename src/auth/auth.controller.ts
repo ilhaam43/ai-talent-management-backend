@@ -3,11 +3,44 @@ import { AuthGuard } from '@nestjs/passport'
 import { ApiBody, ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger'
 import { Response } from 'express'
 import { AuthService } from './auth.service'
+import { SignupDto } from './dto/signup.dto'
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
+
+  @Post('signup')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new candidate account' })
+  @ApiResponse({ status: 201, description: 'Account created successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiResponse({ status: 409, description: 'Email already registered' })
+  async signup(@Body() signupDto: SignupDto, @Res({ passthrough: true }) res: Response) {
+    try {
+      const result = await this.authService.signup(signupDto)
+
+      // Set refresh token in httpOnly cookie
+      const isProduction = process.env.NODE_ENV === 'production'
+      res.cookie('refresh_token', result.refresh_token, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/',
+      })
+
+      // Return access token and user info (refresh token is in cookie)
+      return {
+        access_token: result.access_token,
+        expires_in: 3600, // 1 hour in seconds
+        user: result.user,
+      }
+    } catch (error) {
+      console.error('Signup error:', error)
+      throw error
+    }
+  }
 
   @Post('login')
   @UseGuards(AuthGuard('local'))
