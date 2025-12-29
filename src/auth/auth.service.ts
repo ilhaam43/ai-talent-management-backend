@@ -19,6 +19,11 @@ export class AuthService {
         where: { email },
         include: {
           candidates: true, // Include candidate profile if exists
+          employees: {
+            include: {
+              userRole: true
+            }
+          }
         },
       })
 
@@ -40,6 +45,9 @@ export class AuthService {
 
       // Get candidate profile if exists
       const candidate = user.candidates?.[0] || null
+      // Get employee profile/role if exists
+      const employee = user.employees?.[0] || null
+      const role = employee?.userRole?.roleName || (candidate ? 'CANDIDATE' : 'USER')
 
       // Return user with candidate info
       const { password, ...userWithoutPassword } = user
@@ -47,6 +55,7 @@ export class AuthService {
         ...userWithoutPassword,
         candidateId: candidate?.id || null,
         candidateEmail: candidate?.candidateEmail || user.email,
+        role: role
       }
     } catch (error) {
       console.error('validateUser error:', error)
@@ -64,6 +73,7 @@ export class AuthService {
         email: user.email || user.candidateEmail,
         sub: user.id,
         candidateId: user.candidateId,
+        role: user.role,
         type: 'access'
       }
 
@@ -105,7 +115,12 @@ export class AuthService {
       // Get user info
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
-        include: { candidates: true },
+        include: {
+          candidates: true,
+          employees: {
+            include: { userRole: true }
+          }
+        },
       })
       if (!user) {
         throw new UnauthorizedException('User not found')
@@ -117,6 +132,7 @@ export class AuthService {
       const newPayload = {
         email: user.email,
         sub: user.id,
+        role: user.employees?.[0]?.userRole?.roleName || (user.candidates?.length > 0 ? 'CANDIDATE' : 'USER'),
         type: 'access',
       }
       const accessToken = this.jwt.sign(newPayload)

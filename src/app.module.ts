@@ -7,6 +7,8 @@ import { DocumentsModule } from './documents/documents.module'
 import { CVParserModule } from './cv-parser/cv-parser.module'
 import { CandidateProfileModule } from './candidate-profile/candidate-profile.module'
 import { CandidatesModule } from './candidates/candidates.module'
+import { TestRbacController } from './common/test-rbac.controller'
+import { RolesGuard } from './common/guards/roles.guard'
 
 @Module({
   imports: [
@@ -19,5 +21,7 @@ import { CandidatesModule } from './candidates/candidates.module'
     CandidateProfileModule,
     CandidatesModule,
   ],
+  controllers: [TestRbacController],
+  providers: [RolesGuard],
 })
-export class AppModule {}
+export class AppModule { }

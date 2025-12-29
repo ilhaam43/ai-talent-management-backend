@@ -1,11 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../database/prisma.service";
-import { Prisma } from "@prisma/client";
+import { Prisma, JobType, CandidateRating } from "@prisma/client";
 import { UpdateCandidateDto } from "./dto/update-candidate.dto";
 
 @Injectable()
 export class CandidatesRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async findByEmail(email: string) {
     return this.prisma.candidate.findFirst({
@@ -84,10 +84,12 @@ export class CandidatesRepository {
         deleteMany: {},
         create: workExperiences.map((item) => ({
           ...item,
+          jobType: item.jobType as JobType,
           employmentStartedDate: new Date(item.employmentStartedDate),
           employmentEndedDate: item.employmentEndedDate
             ? new Date(item.employmentEndedDate)
             : null,
+          candidateId: candidate.id
         })),
       };
     }
@@ -104,6 +106,7 @@ export class CandidatesRepository {
           candidateEndedYearStudy: item.candidateEndedYearStudy
             ? new Date(item.candidateEndedYearStudy)
             : null,
+          candidateId: candidate.id
         })),
       };
     }
@@ -112,7 +115,11 @@ export class CandidatesRepository {
     if (skills) {
       updateData.skills = {
         deleteMany: {},
-        create: skills.map((item) => ({ ...item })),
+        create: skills.map((item) => ({
+          ...item,
+          candidateId: candidate.id,
+          candidateRating: item.candidateRating as CandidateRating
+        })),
       };
     }
 
@@ -128,6 +135,7 @@ export class CandidatesRepository {
           organizationExperienceEndedDate: item.organizationExperienceEndedDate
             ? new Date(item.organizationExperienceEndedDate)
             : null,
+          candidateId: candidate.id
         })),
       };
     }
@@ -136,7 +144,7 @@ export class CandidatesRepository {
     if (families) {
       updateData.families = {
         deleteMany: {},
-        create: families.map((item) => ({ ...item })),
+        create: families.map((item) => ({ ...item, candidateId: candidate.id })),
       };
     }
 
@@ -144,7 +152,7 @@ export class CandidatesRepository {
     if (socialMedia) {
       updateData.socialMedia = {
         deleteMany: {},
-        create: socialMedia.map((item) => ({ ...item })),
+        create: socialMedia.map((item) => ({ ...item, candidateId: candidate.id })),
       };
     }
 
@@ -160,6 +168,7 @@ export class CandidatesRepository {
           certificationEndedDate: item.certificationEndedDate
             ? new Date(item.certificationEndedDate)
             : null,
+          candidateId: candidate.id
         })),
       };
     }
