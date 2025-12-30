@@ -13,6 +13,7 @@ import { CandidatesService } from "./candidates.service";
 import { ApiBearerAuth, ApiBody, ApiTags } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import { UpdateCandidateDto } from "./dto/update-candidate.dto";
+import { UpdateCandidateSettingsDto } from "./dto/update-candidate-settings.dto";
 import { AuthGuard } from "@nestjs/passport";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -47,5 +48,19 @@ export class CandidatesController {
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   update(@Param("id") id: string, @Body() dto: UpdateCandidateDto) {
     return this.service.update(id, dto);
+  }
+
+  @Get(":id/settings")
+  @Roles("HUMAN RESOURCES", "ADMIN", "CANDIDATE")
+  getSettings(@Param("id") id: string) {
+    return this.service.getSettings(id);
+  }
+
+  @Patch(":id/settings")
+  @Roles("HUMAN RESOURCES", "ADMIN", "CANDIDATE")
+  @ApiBody({ type: UpdateCandidateSettingsDto })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  updateSettings(@Param("id") id: string, @Body() dto: UpdateCandidateSettingsDto) {
+    return this.service.updateSettings(id, dto);
   }
 }

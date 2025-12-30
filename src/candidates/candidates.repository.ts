@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../database/prisma.service";
 import { Prisma, JobType, CandidateRating } from "@prisma/client";
 import { UpdateCandidateDto } from "./dto/update-candidate.dto";
+import { UpdateCandidateSettingsDto } from "./dto/update-candidate-settings.dto";
 
 @Injectable()
 export class CandidatesRepository {
@@ -176,6 +177,69 @@ export class CandidatesRepository {
     return this.prisma.candidate.update({
       where: { id: candidate.id },
       data: updateData,
+    });
+  }
+
+  async getSettings(id: string) {
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!candidate) return null;
+
+    return {
+      email: candidate.user.email,
+      fullname: candidate.user.name,
+    };
+  }
+
+  async updateSettings(id: string, data: UpdateCandidateSettingsDto, hashedPassword?: string) {
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+
+    if (!candidate) {
+      throw new Error("Candidate not found");
+    }
+
+    return this.prisma.$transaction(async (prisma) => {
+      // 1. Update User
+      const userUpdateData: Prisma.UserUpdateInput = {};
+      if (data.email) userUpdateData.email = data.email;
+      if (data.fullname) userUpdateData.name = data.fullname;
+      if (hashedPassword) userUpdateData.password = hashedPassword;
+
+      if (Object.keys(userUpdateData).length > 0) {
+        await prisma.user.update({
+          where: { id: candidate.userId },
+          data: userUpdateData,
+        });
+      }
+
+      // 2. Update Candidate (only sync fields that exist in Candidate)
+      const candidateUpdateData: Prisma.CandidateUpdateInput = {};
+      if (data.email) candidateUpdateData.candidateEmail = data.email;
+      if (data.fullname) candidateUpdateData.candidateFullname = data.fullname;
+
+      if (Object.keys(candidateUpdateData).length > 0) {
+        await prisma.candidate.update({
+          where: { id: candidate.id },
+          data: candidateUpdateData,
+        });
+      }
+
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: candidate.userId },
+      });
+
+      return {
+        email: updatedUser?.email,
+        fullname: updatedUser?.name,
+      };
     });
   }
 }
