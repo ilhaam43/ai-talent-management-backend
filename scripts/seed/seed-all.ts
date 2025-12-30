@@ -4,7 +4,6 @@ import path from 'path';
 const seeders = [
     'seed-user-roles.ts',
     'seed-employee-positions.ts',
-    'seed-employees.ts',
     'seed-employment-types.ts',
     'seed-religions.ts',
     'seed-marital-statuses.ts',
@@ -18,6 +17,7 @@ const seeders = [
     'seed-application-last-statuses.ts',
     'seed-candidate-last-educations.ts',
     'seed-document-types.ts',
+    'seed-candidate.ts',
 ];
 
 async function main() {
