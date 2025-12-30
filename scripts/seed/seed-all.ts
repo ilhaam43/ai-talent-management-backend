@@ -5,6 +5,7 @@ const seeders = [
     'seed-user-roles.ts',
     'seed-employee-positions.ts',
     'seed-employment-types.ts',
+    'seed-job-vacancy-durations.ts',
     'seed-religions.ts',
     'seed-marital-statuses.ts',
     'seed-nationalities.ts',
