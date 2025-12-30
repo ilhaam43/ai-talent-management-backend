@@ -6,6 +6,7 @@ const seeders = [
     'seed-employee-positions.ts',
     'seed-employment-types.ts',
     'seed-job-vacancy-durations.ts',
+    'seed-job-vacancy-reasons.ts',
     'seed-religions.ts',
     'seed-marital-statuses.ts',
     'seed-nationalities.ts',
@@ -19,6 +20,7 @@ const seeders = [
     'seed-candidate-last-educations.ts',
     'seed-document-types.ts',
     'seed-candidate.ts',
+    'seed-job-vacancies.ts',
 ];
 
 async function main() {
