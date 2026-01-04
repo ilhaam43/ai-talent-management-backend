@@ -10,16 +10,21 @@ import { CandidatesModule } from './candidates/candidates.module'
 import { TestRbacController } from './common/test-rbac.controller'
 import { RolesGuard } from './common/guards/roles.guard'
 
+import { JobVacanciesModule } from './job-vacancies/job-vacancies.module';
+import { CandidateApplicationsModule } from './candidate-applications/candidate-applications.module';
+
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot(),
     DatabaseModule,
     UsersModule,
     AuthModule,
-    DocumentsModule,
-    CVParserModule,
     CandidateProfileModule,
+    CVParserModule,
+    DocumentsModule,
     CandidatesModule,
+    JobVacanciesModule,
+    CandidateApplicationsModule,
   ],
   controllers: [TestRbacController],
   providers: [RolesGuard],

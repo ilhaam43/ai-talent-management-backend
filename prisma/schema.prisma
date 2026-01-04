@@ -559,6 +559,8 @@ model CandidateApplication {
   fitScore                Decimal? @map("fit_score") @db.Decimal(5, 2)
   aiInsight               String?  @map("ai_insight") @db.Text
   aiMatchStatus           AiMatchStatus? @map("ai_match_status")
+  aiInterview             String?  @map("ai_interview") @db.Text
+  aiCoreValue             String?  @map("ai_core_value") @db.Text
   resultSummary           String?  @map("result_summary") @db.Text
   submissionDate          DateTime @map("submission_date") @db.Date
   createdAt               DateTime @default(now()) @map("created_at")
