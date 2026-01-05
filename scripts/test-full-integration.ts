@@ -131,18 +131,17 @@ async function uploadAndParseCV() {
     documentTypeId = created.id;
   }
 
-  // Upload CV
-  const cvPath = path.join(__dirname, '../../uploads/documents/reza-cv.pdf');
+  // Upload CV - use the correct path like test-reza-flow.ts
+  const cvPath = path.join(process.cwd(), 'test-files', 'Muhammad-Reza-Azhar-Priyadi-Resume.pdf');
   
   if (!fs.existsSync(cvPath)) {
-    console.log(`   ⚠️  CV file not found at ${cvPath}, skipping upload...`);
-    console.log('   Note: This test requires a CV file to fully test the flow.');
+    console.log(`   ⚠️  CV file not found at ${cvPath}`);
+    console.log('   Note: Skipping CV upload. The test will continue without parsing.');
     return;
   }
   
   const form = new FormData();
   form.append('file', fs.createReadStream(cvPath));
-  form.append('candidateId', candidateId);
   form.append('documentTypeId', documentTypeId);
 
   const uploadRes = await axios.post(`${BASE_URL}/documents/upload`, form, {
@@ -157,10 +156,12 @@ async function uploadAndParseCV() {
 
   // Parse CV
   await axios.post(
-    `${BASE_URL}/cv-parser/parse`,
-    { documentId, candidateId },
+    `${BASE_URL}/cv-parser/parse/${documentId}`,
+    { candidateId },
     { headers: { Authorization: `Bearer ${authToken}` } }
   );
+
+  console.log('   ✅ CV Parsed.');
 
   // Store parsed data
   await axios.post(
@@ -169,7 +170,7 @@ async function uploadAndParseCV() {
     { headers: { Authorization: `Bearer ${authToken}` } }
   );
 
-  console.log('   ✅ CV Parsed and Stored.');
+  console.log('   ✅ CV Data Stored.');
 }
 
 async function prepareJobAndApplication() {
