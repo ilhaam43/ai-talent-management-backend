@@ -126,7 +126,8 @@ export class CandidateApplicationsService {
       let fitScore = 0;
       let aiInsight = '';
       let aiInterview = '';
-      let aiCoreValue = ''; // Add this
+      let aiCoreValue = '';
+      let aiMatchStatus: string | null = null;
 
       if (Array.isArray(analysisResults)) {
         const match = analysisResults.find(
@@ -134,9 +135,10 @@ export class CandidateApplicationsService {
         );
         if (match) {
           fitScore = match.fit_score;
-          aiInsight = match.ai_insight || match.summary; // Use ai_insight if available
+          aiInsight = match.ai_insight || match.summary;
           aiInterview = match.ai_interview || (match.interview_questions ? match.interview_questions.join('\n') : '');
           aiCoreValue = match.ai_core_value || '';
+          aiMatchStatus = match.aiMatchStatus || match.ai_match_status || match.match_status || match.status;
         } else if (analysisResults.length > 0) {
            this.logger.warn(`No specific match for job ${application.jobVacancyId}. Using first result.`);
            const first = analysisResults[0];
@@ -144,12 +146,34 @@ export class CandidateApplicationsService {
            aiInsight = first.ai_insight || first.summary;
            aiInterview = first.ai_interview || (first.interview_questions ? first.interview_questions.join('\n') : '');
            aiCoreValue = first.ai_core_value || '';
+           aiMatchStatus = first.aiMatchStatus || first.ai_match_status || first.match_status || first.status;
         }
       } else if (typeof analysisResults === 'object') {
         fitScore = analysisResults.fit_score;
         aiInsight = analysisResults.ai_insight || analysisResults.summary;
         aiInterview = analysisResults.ai_interview || (analysisResults.interview_questions?.join('\n'));
         aiCoreValue = analysisResults.ai_core_value || '';
+        aiMatchStatus = analysisResults.aiMatchStatus || analysisResults.ai_match_status || analysisResults.match_status || analysisResults.status;
+      }
+      
+      this.logger.log(`Raw AI Match Status from N8N: ${aiMatchStatus}`);
+
+      // Map common status strings to Enum
+      if (typeof aiMatchStatus === 'string') {
+          const statusUpper = aiMatchStatus.toUpperCase();
+          if (statusUpper === 'PASS' || statusUpper === 'STRONG MATCH' || statusUpper === 'STRONG_MATCH') aiMatchStatus = 'STRONG_MATCH';
+          else if (statusUpper === 'PARTIALLY PASS' || statusUpper === 'PARTIALLY_PASS' || statusUpper === 'MATCH') aiMatchStatus = 'MATCH';
+          else if (statusUpper === 'FAIL' || statusUpper === 'NOT PASS' || statusUpper === 'NOT_PASS' || statusUpper === 'NOT MATCH' || statusUpper === 'NOT_MATCH') aiMatchStatus = 'NOT_MATCH';
+          else aiMatchStatus = 'NOT_MATCH'; // Unrecognized string default
+      } else {
+           // Default fallback if unknown type
+           aiMatchStatus = 'NOT_MATCH';
+      }
+      
+      // Ensure it matches Enum or is null
+      if (aiMatchStatus !== 'STRONG_MATCH' && aiMatchStatus !== 'MATCH' && aiMatchStatus !== 'NOT_MATCH') {
+          this.logger.warn(`Invalid AI Match Status: ${aiMatchStatus}, defaulting to NOT_MATCH`);
+          aiMatchStatus = 'NOT_MATCH';
       }
 
       await this.prisma.candidateApplication.update({
@@ -158,8 +182,9 @@ export class CandidateApplicationsService {
           fitScore: fitScore,
           aiInsight: aiInsight,
           aiInterview: aiInterview,
-          aiCoreValue: aiCoreValue, // Save core values
-        },
+          aiCoreValue: aiCoreValue,
+          aiMatchStatus: aiMatchStatus,
+        } as any, // Cast to any to bypass type issue with generated types
       });
 
       const endTime = Date.now();

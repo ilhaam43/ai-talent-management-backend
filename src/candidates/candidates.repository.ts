@@ -26,6 +26,25 @@ export class CandidatesRepository {
     return this.prisma.candidate.findUnique({ where: { id } });
   }
 
+  async findDetailById(id: string) {
+    return this.prisma.candidate.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        skills: true,
+        applications: {
+          include: {
+            jobVacancy: {
+              include: {
+                jobSkills: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
   async findAll() {
     return this.prisma.candidate.findMany();
   }

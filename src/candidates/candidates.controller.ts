@@ -10,7 +10,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CandidatesService } from "./candidates.service";
-import { ApiBearerAuth, ApiBody, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiBody, ApiTags, ApiOperation, ApiParam, ApiResponse } from "@nestjs/swagger";
+import { CandidateAiInsightResponseDto } from "./dto/candidate-ai-insight-response.dto";
 import { Prisma } from "@prisma/client";
 import { UpdateCandidateDto } from "./dto/update-candidate.dto";
 import { UpdateCandidateSettingsDto } from "./dto/update-candidate-settings.dto";
@@ -24,6 +25,15 @@ import { Roles } from "../common/decorators/roles.decorator";
 @Controller("candidates")
 export class CandidatesController {
   constructor(private readonly service: CandidatesService) { }
+  @Get(":id/ai-insights")
+  @Roles("HUMAN RESOURCES", "ADMIN", "HIRING MANAGER", "CANDIDATE")
+  @ApiOperation({ summary: 'Get AI insights for a candidate' })
+  @ApiParam({ name: 'id', description: 'Candidate ID' })
+  @ApiResponse({ status: 200, description: 'AI insights retrieved successfully', type: CandidateAiInsightResponseDto, isArray: true })
+  getAiInsights(@Param("id") id: string) {
+    return this.service.getAiInsights(id);
+  }
+
   @Get(":id")
   @Roles("HUMAN RESOURCES", "ADMIN", "HIRING MANAGER", "CANDIDATE")
   getById(@Param("id") id: string) {

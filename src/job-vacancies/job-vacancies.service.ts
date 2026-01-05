@@ -57,6 +57,7 @@ export class JobVacanciesService {
         directorate: true,
         employmentType: true,
         employeePosition: true,
+        jobSkills: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -79,6 +80,7 @@ export class JobVacanciesService {
       qualifications: job.jobQualification || 'No qualifications provided.',
       min_salary: job.minSalary,
       max_salary: job.maxSalary,
+      job_skills: job.jobSkills?.map((js: any) => js.jobSkill) || [],
     }));
   }
 }
