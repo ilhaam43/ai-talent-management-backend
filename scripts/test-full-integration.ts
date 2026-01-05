@@ -155,18 +155,19 @@ async function uploadAndParseCV() {
   console.log(`   ✅ Uploaded Document ID: ${documentId}`);
 
   // Parse CV
-  await axios.post(
+  const parseRes = await axios.post(
     `${BASE_URL}/cv-parser/parse/${documentId}`,
     { candidateId },
     { headers: { Authorization: `Bearer ${authToken}` } }
   );
 
+  const parsedData = parseRes.data;
   console.log('   ✅ CV Parsed.');
 
   // Store parsed data
   await axios.post(
     `${BASE_URL}/candidate-profile/store-parsed-data`,
-    { candidateId },
+    { parsedData },
     { headers: { Authorization: `Bearer ${authToken}` } }
   );
 
