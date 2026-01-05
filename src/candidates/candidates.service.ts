@@ -20,7 +20,8 @@ export class CandidatesService {
   }
 
   async getById(id: string) {
-    return this.candidatesRepository.findById(id);
+    // Return full details for the candidate
+    return this.candidatesRepository.findDetailById(id);
   }
 
   async findAll() {
