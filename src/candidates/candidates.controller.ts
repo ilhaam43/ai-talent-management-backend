@@ -36,6 +36,9 @@ export class CandidatesController {
 
   @Get(":id")
   @Roles("HUMAN RESOURCES", "ADMIN", "HIRING MANAGER", "CANDIDATE")
+  @ApiOperation({ summary: 'Get candidate details by ID' })
+  @ApiParam({ name: 'id', description: 'Candidate ID' })
+  @ApiResponse({ status: 200, description: 'Candidate details retrieved successfully' })
   getById(@Param("id") id: string) {
     return this.service.getById(id);
   }
