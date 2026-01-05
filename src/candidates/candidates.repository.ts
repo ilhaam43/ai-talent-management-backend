@@ -30,6 +30,7 @@ export class CandidatesRepository {
     return this.prisma.candidate.findUnique({
       where: { id },
       include: {
+        user: true,
         candidateLastEducation: true,
         religion: true,
         maritalStatus: true,
@@ -43,18 +44,28 @@ export class CandidatesRepository {
         },
         workExperiences: true,
         organizationExperiences: true,
-        educations: true,
+        educations: {
+          include: {
+            candidateLastEducation: true,
+          },
+        },
         families: true,
         familiesLintasarta: true,
-        socialMedia: true,
+        socialMedia: {
+          include: {
+            socialMedia: true,
+          },
+        },
         skills: true,
         certifications: true,
         salaries: true,
         applications: {
           include: {
+            jobVacancy: true,
             candidateMatchSkills: true,
           },
         },
+        matchSkills: true,
       },
     });
   }
