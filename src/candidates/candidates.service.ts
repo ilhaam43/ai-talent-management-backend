@@ -37,7 +37,7 @@ export class CandidatesService {
       const candidateSkills = candidate.skills?.map((cs: any) => cs.candidateSkill) || [];
       
       // Simple implementation: check if job skill is in candidate skills
-      const strengths = jobSkills.filter((jobSkill) => candidateSkills.includes(jobSkill));
+      const strengths = jobSkills.filter((jobSkill: string) => candidateSkills.includes(jobSkill));
 
       // Personalize the AI Insight text
       let personalizedInsight = app.aiInsight || '';
