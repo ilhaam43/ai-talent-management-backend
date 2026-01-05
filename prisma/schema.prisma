@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x", "linux-musl", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -96,7 +97,7 @@ model Group {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relations
-  directorate  Directorate @relation(fields: [directorateId], references: [id], onDelete: Cascade)
+  directorate  Directorate  @relation(fields: [directorateId], references: [id], onDelete: Cascade)
   employees    Employee[]
   jobVacancies JobVacancy[]
   divisions    Division[]
@@ -130,7 +131,7 @@ model Department {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  division       Division       @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  division       Division        @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   employees      Employee[]
   jobVacancies   JobVacancy[]
   subDepartments SubDepartment[]
@@ -487,8 +488,36 @@ model JobVacancy {
   department            Department?            @relation(fields: [departmentId], references: [id])
   subDepartment         SubDepartment?         @relation(fields: [subDepartmentId], references: [id])
   candidateApplications CandidateApplication[]
+  jobVacancySkills      JobVacancySkill[]
 
   @@map("job_vacancies")
+}
+
+model Skill {
+  id        String   @id @default(uuid())
+  skillName   String   @unique @map("skill_name")
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  jobVacancySkills JobVacancySkill[]
+
+  @@map("skills")
+}
+
+model JobVacancySkill {
+  id           String   @id @default(uuid())
+  jobVacancyId String   @map("job_vacancy_id")
+  skillId      String   @map("skill_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  jobVacancy JobVacancy @relation(fields: [jobVacancyId], references: [id], onDelete: Cascade)
+  skill      Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@map("job_vacancy_skills")
 }
 
 model ApplicationLastStatus {
@@ -550,21 +579,21 @@ enum AiMatchStatus {
 }
 
 model CandidateApplication {
-  id                      String   @id @default(uuid())
-  jobVacancyId            String   @map("job_vacancy_id")
-  candidateId             String   @map("candidate_id")
-  candidateSalaryId       String   @map("candidate_salary_id")
-  applicationLatestStatusId String   @map("application_latest_status_id")
-  applicationPipelineId   String   @map("application_pipeline_id")
-  fitScore                Decimal? @map("fit_score") @db.Decimal(5, 2)
-  aiInsight               String?  @map("ai_insight") @db.Text
-  aiMatchStatus           AiMatchStatus? @map("ai_match_status")
-  aiInterview             String?  @map("ai_interview") @db.Text
-  aiCoreValue             String?  @map("ai_core_value") @db.Text
-  resultSummary           String?  @map("result_summary") @db.Text
-  submissionDate          DateTime @map("submission_date") @db.Date
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  id                        String         @id @default(uuid())
+  jobVacancyId              String         @map("job_vacancy_id")
+  candidateId               String         @map("candidate_id")
+  candidateSalaryId         String         @map("candidate_salary_id")
+  applicationLatestStatusId String         @map("application_latest_status_id")
+  applicationPipelineId     String         @map("application_pipeline_id")
+  fitScore                  Decimal?       @map("fit_score") @db.Decimal(5, 2)
+  aiInsight                 String?        @map("ai_insight") @db.Text
+  aiMatchStatus             AiMatchStatus? @map("ai_match_status")
+  aiInterview               String?        @map("ai_interview") @db.Text
+  aiCoreValue               String?        @map("ai_core_value") @db.Text
+  resultSummary             String?        @map("result_summary") @db.Text
+  submissionDate            DateTime       @map("submission_date") @db.Date
+  createdAt                 DateTime       @default(now()) @map("created_at")
+  updatedAt                 DateTime       @updatedAt @map("updated_at")
 
   // Relations
   jobVacancy                    JobVacancy                     @relation(fields: [jobVacancyId], references: [id], onDelete: Cascade)
@@ -655,10 +684,10 @@ model Candidate {
 }
 
 enum JobType {
-  FULL_TIME @map("FULL-TIME")
-  PART_TIME @map("PART-TIME")
-  CONTRACT  @map("CONTRACT")
-  FREELANCE @map("FREELANCE")
+  FULL_TIME  @map("FULL-TIME")
+  PART_TIME  @map("PART-TIME")
+  CONTRACT   @map("CONTRACT")
+  FREELANCE  @map("FREELANCE")
   INTERNSHIP @map("INTERNSHIP")
 }
 
@@ -771,12 +800,12 @@ model CandidateSocialMedia {
 }
 
 model CandidateMatchSkill {
-  id                    String   @id @default(uuid())
-  candidateId           String   @map("candidate_id")
-  candidateApplicationId String  @map("candidate_applications_id")
-  candidateMatchSkill   String   @map("candidate_match_skill")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                     String   @id @default(uuid())
+  candidateId            String   @map("candidate_id")
+  candidateApplicationId String   @map("candidate_applications_id")
+  candidateMatchSkill    String   @map("candidate_match_skill")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
 
   // Relations
   candidate            Candidate            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
@@ -794,12 +823,12 @@ enum CandidateRating {
 }
 
 model CandidateSkill {
-  id              String   @id @default(uuid())
-  candidateId     String   @map("candidate_id")
-  candidateSkill  String   @map("candidate_skill")
+  id              String          @id @default(uuid())
+  candidateId     String          @map("candidate_id")
+  candidateSkill  String          @map("candidate_skill")
   candidateRating CandidateRating @map("candidate_rating")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
 
   // Relations
   candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
@@ -827,13 +856,13 @@ model CandidateCertification {
 }
 
 model CandidateDocument {
-  id            String   @id @default(uuid())
-  candidateId   String   @map("candidate_id")
-  documentTypeId String  @map("document_type_id")
-  filePath      String   @map("file_path")
-  extractedText String?  @map("extracted_text") @db.Text
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  candidateId    String   @map("candidate_id")
+  documentTypeId String   @map("document_type_id")
+  filePath       String   @map("file_path")
+  extractedText  String?  @map("extracted_text") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
   candidate    Candidate    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
