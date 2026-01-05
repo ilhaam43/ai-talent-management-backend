@@ -20,6 +20,7 @@ export class CandidatesService {
   }
 
   async getById(id: string) {
+    // Return full details for the candidate
     return this.candidatesRepository.findDetailById(id);
   }
 
@@ -66,7 +67,6 @@ export class CandidatesService {
       };
     });
   }
-
 
   async findAll() {
     return this.candidatesRepository.findAll();
