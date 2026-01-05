@@ -15,6 +15,68 @@ export class CandidateApplicationsService {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_WEBHOOK_URL') || '';
   }
 
+  async findAll() {
+    return this.prisma.candidateApplication.findMany({
+      include: {
+        candidate: {
+          include: {
+            user: { select: { name: true, email: true } }
+          }
+        },
+        jobVacancy: {
+          include: {
+            jobRole: true,
+            jobVacancyStatus: true
+          }
+        },
+        applicationPipeline: true,
+        applicationLastStatus: true,
+
+        // Include salary if needed for display
+        candidateSalary: true
+      },
+      orderBy: {
+        submissionDate: 'desc'
+      }
+    });
+  }
+
+  async findOne(id: string) {
+    const application = await this.prisma.candidateApplication.findUnique({
+      where: { id },
+      include: {
+        candidate: {
+          include: {
+            user: true,
+            educations: { include: { candidateLastEducation: true } },
+            workExperiences: true,
+            skills: true,
+            documents: { include: { documentType: true } },
+          },
+        },
+        jobVacancy: {
+          include: {
+            jobRole: true,
+            department: true,
+            division: true,
+            directorate: true,
+            group: true,
+            employmentType: true,
+          },
+        },
+        applicationPipeline: true,
+        applicationLastStatus: true,
+      },
+    });
+
+    if (!application) {
+      throw new Error(`Application not found: ${id}`);
+    }
+
+    return application;
+  }
+
+
   async triggerAiAnalysis(applicationId: string) {
     this.logger.log(`Triggering AI Analysis for application: ${applicationId}`);
 
@@ -62,7 +124,7 @@ export class CandidateApplicationsService {
     }
 
     const startTime = Date.now();
-    
+
     // 2. Determine Context Criteria for Job Matching
     const divisions: string[] = [];
     if (application.jobVacancy.department)
@@ -115,7 +177,7 @@ export class CandidateApplicationsService {
       if (!this.n8nWebhookUrl) {
         throw new Error('N8N_WEBHOOK_URL is not defined');
       }
-      
+
       const response = await axios.post(this.n8nWebhookUrl, payload);
       this.logger.log(`n8n Response: ${JSON.stringify(response.data)}`);
 
@@ -140,13 +202,13 @@ export class CandidateApplicationsService {
           aiCoreValue = match.ai_core_value || '';
           aiMatchStatus = match.aiMatchStatus || match.ai_match_status || match.match_status || match.status;
         } else if (analysisResults.length > 0) {
-           this.logger.warn(`No specific match for job ${application.jobVacancyId}. Using first result.`);
-           const first = analysisResults[0];
-           fitScore = first.fit_score;
-           aiInsight = first.ai_insight || first.summary;
-           aiInterview = first.ai_interview || (first.interview_questions ? first.interview_questions.join('\n') : '');
-           aiCoreValue = first.ai_core_value || '';
-           aiMatchStatus = first.aiMatchStatus || first.ai_match_status || first.match_status || first.status;
+          this.logger.warn(`No specific match for job ${application.jobVacancyId}. Using first result.`);
+          const first = analysisResults[0];
+          fitScore = first.fit_score;
+          aiInsight = first.ai_insight || first.summary;
+          aiInterview = first.ai_interview || (first.interview_questions ? first.interview_questions.join('\n') : '');
+          aiCoreValue = first.ai_core_value || '';
+          aiMatchStatus = first.aiMatchStatus || first.ai_match_status || first.match_status || first.status;
         }
       } else if (typeof analysisResults === 'object') {
         fitScore = analysisResults.fit_score;
@@ -155,25 +217,25 @@ export class CandidateApplicationsService {
         aiCoreValue = analysisResults.ai_core_value || '';
         aiMatchStatus = analysisResults.aiMatchStatus || analysisResults.ai_match_status || analysisResults.match_status || analysisResults.status;
       }
-      
+
       this.logger.log(`Raw AI Match Status from N8N: ${aiMatchStatus}`);
 
       // Map common status strings to Enum
       if (typeof aiMatchStatus === 'string') {
-          const statusUpper = aiMatchStatus.toUpperCase();
-          if (statusUpper === 'PASS' || statusUpper === 'STRONG MATCH' || statusUpper === 'STRONG_MATCH') aiMatchStatus = 'STRONG_MATCH';
-          else if (statusUpper === 'PARTIALLY PASS' || statusUpper === 'PARTIALLY_PASS' || statusUpper === 'MATCH') aiMatchStatus = 'MATCH';
-          else if (statusUpper === 'FAIL' || statusUpper === 'NOT PASS' || statusUpper === 'NOT_PASS' || statusUpper === 'NOT MATCH' || statusUpper === 'NOT_MATCH') aiMatchStatus = 'NOT_MATCH';
-          else aiMatchStatus = 'NOT_MATCH'; // Unrecognized string default
+        const statusUpper = aiMatchStatus.toUpperCase();
+        if (statusUpper === 'PASS' || statusUpper === 'STRONG MATCH' || statusUpper === 'STRONG_MATCH') aiMatchStatus = 'STRONG_MATCH';
+        else if (statusUpper === 'PARTIALLY PASS' || statusUpper === 'PARTIALLY_PASS' || statusUpper === 'MATCH') aiMatchStatus = 'MATCH';
+        else if (statusUpper === 'FAIL' || statusUpper === 'NOT PASS' || statusUpper === 'NOT_PASS' || statusUpper === 'NOT MATCH' || statusUpper === 'NOT_MATCH') aiMatchStatus = 'NOT_MATCH';
+        else aiMatchStatus = 'NOT_MATCH'; // Unrecognized string default
       } else {
-           // Default fallback if unknown type
-           aiMatchStatus = 'NOT_MATCH';
+        // Default fallback if unknown type
+        aiMatchStatus = 'NOT_MATCH';
       }
-      
+
       // Ensure it matches Enum or is null
       if (aiMatchStatus !== 'STRONG_MATCH' && aiMatchStatus !== 'MATCH' && aiMatchStatus !== 'NOT_MATCH') {
-          this.logger.warn(`Invalid AI Match Status: ${aiMatchStatus}, defaulting to NOT_MATCH`);
-          aiMatchStatus = 'NOT_MATCH';
+        this.logger.warn(`Invalid AI Match Status: ${aiMatchStatus}, defaulting to NOT_MATCH`);
+        aiMatchStatus = 'NOT_MATCH';
       }
 
       await this.prisma.candidateApplication.update({
