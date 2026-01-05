@@ -31,7 +31,34 @@ export class CandidatesRepository {
       where: { id },
       include: {
         user: true,
+        candidateLastEducation: true,
+        religion: true,
+        maritalStatus: true,
+        nationality: true,
+        languageProficiency: true,
+        gender: true,
+        documents: {
+          include: {
+            documentType: true,
+          },
+        },
+        workExperiences: true,
+        organizationExperiences: true,
+        educations: {
+          include: {
+            candidateLastEducation: true,
+          },
+        },
+        families: true,
+        familiesLintasarta: true,
+        socialMedia: {
+          include: {
+            socialMedia: true,
+          },
+        },
         skills: true,
+        certifications: true,
+        salaries: true,
         applications: {
           include: {
             jobVacancy: {
@@ -41,6 +68,7 @@ export class CandidatesRepository {
             },
           },
         },
+        matchSkills: true,
       },
     });
   }
