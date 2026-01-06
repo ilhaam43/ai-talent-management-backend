@@ -39,6 +39,51 @@ async function testCandidateApplications() {
         assert.strictEqual(aulia.jobVacancy.cityLocation, 'Jakarta');
         assert.ok(aulia.jobVacancy.jobQualification, 'Job Qualification should be populated');
 
+        // Debug: Log the candidate data structure
+        console.log('\nCandidate Data Structure:');
+        console.log('religionId:', aulia.candidate.religionId);
+        console.log('religion:', aulia.candidate.religion);
+        console.log('maritalStatusId:', aulia.candidate.maritalStatusId);
+        console.log('maritalStatus:', aulia.candidate.maritalStatus);
+        console.log('genderId:', aulia.candidate.genderId);
+        console.log('gender:', aulia.candidate.gender);
+        console.log('nationalityId:', aulia.candidate.nationalityId);
+        console.log('nationality:', aulia.candidate.nationality);
+        console.log('');
+
+        // Verify Relation Objects (not just IDs)
+        if (aulia.candidate.religionId) {
+            assert.ok(aulia.candidate.religion, 'Religion object should be populated when religionId exists');
+            if (aulia.candidate.religion) {
+                assert.ok(aulia.candidate.religion.religion, 'Religion name should be present');
+                console.log(`  ✓ Religion: ${aulia.candidate.religion.religion}`);
+            }
+        }
+
+        if (aulia.candidate.maritalStatusId) {
+            assert.ok(aulia.candidate.maritalStatus, 'Marital Status object should be populated when maritalStatusId exists');
+            if (aulia.candidate.maritalStatus) {
+                assert.ok(aulia.candidate.maritalStatus.maritalStatus, 'Marital Status name should be present');
+                console.log(`  ✓ Marital Status: ${aulia.candidate.maritalStatus.maritalStatus}`);
+            }
+        }
+
+        if (aulia.candidate.genderId) {
+            assert.ok(aulia.candidate.gender, 'Gender object should be populated when genderId exists');
+            if (aulia.candidate.gender) {
+                assert.ok(aulia.candidate.gender.gender, 'Gender name should be present');
+                console.log(`  ✓ Gender: ${aulia.candidate.gender.gender}`);
+            }
+        }
+
+        if (aulia.candidate.nationalityId) {
+            assert.ok(aulia.candidate.nationality, 'Nationality object should be populated when nationalityId exists');
+            if (aulia.candidate.nationality) {
+                assert.ok(aulia.candidate.nationality.nationality, 'Nationality name should be present');
+                console.log(`  ✓ Nationality: ${aulia.candidate.nationality.nationality}`);
+            }
+        }
+
         // Verify AI Analysis Fields
         assert.ok(aulia.aiInsight, 'AI Insight should be populated');
         assert.ok(aulia.aiInterview, 'AI Interview should be populated');
@@ -49,7 +94,7 @@ async function testCandidateApplications() {
             assert(['STRONG MATCH', 'MATCH', 'NOT MATCH', 'STRONG_MATCH', 'NOT_MATCH'].includes(aulia.aiMatchStatus));
         }
 
-        console.log('✅ Aulia Kayesha verified (Enriched Data + AI Analysis)');
+        console.log('✅ Aulia Kayesha verified (Enriched Data + AI Analysis + Relations)');
 
 
         // Candidate 2: Daniel

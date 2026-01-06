@@ -20,7 +20,11 @@ export class CandidateApplicationsService {
       include: {
         candidate: {
           include: {
-            user: { select: { name: true, email: true } }
+            user: { select: { name: true, email: true } },
+            religion: true,
+            maritalStatus: true,
+            gender: true,
+            nationality: true
           }
         },
         jobVacancy: {
@@ -52,6 +56,10 @@ export class CandidateApplicationsService {
             workExperiences: true,
             skills: true,
             documents: { include: { documentType: true } },
+            religion: true,
+            maritalStatus: true,
+            gender: true,
+            nationality: true
           },
         },
         jobVacancy: {
