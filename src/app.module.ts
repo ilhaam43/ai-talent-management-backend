@@ -12,6 +12,7 @@ import { RolesGuard } from './common/guards/roles.guard'
 
 import { JobVacanciesModule } from './job-vacancies/job-vacancies.module';
 import { CandidateApplicationsModule } from './candidate-applications/candidate-applications.module';
+import { SkillsModule } from './skills/skills.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CandidateApplicationsModule } from './candidate-applications/candidate-
     CandidatesModule,
     JobVacanciesModule,
     CandidateApplicationsModule,
+    SkillsModule,
   ],
   controllers: [TestRbacController],
   providers: [RolesGuard],

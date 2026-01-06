@@ -33,14 +33,50 @@ async function main() {
 
     // Get divisions by name
     const divisions = {
-        telcoServices: await prisma.division.findFirst({ where: { divisionName: 'Infrastructure Solution' } }), // Under Telco Services directorate
-        cybersecurity: await prisma.division.findFirst({ where: { divisionName: 'Cybersecurity Delivery and Operation' } }),
-        cloud: await prisma.division.findFirst({ where: { divisionName: 'Cloud Delivery and Operation' } }),
-        itServices: await prisma.division.findFirst({ where: { divisionName: 'Collaboration Solution' } }), // IT Services (Collaboration Solution)
-        strategy: await prisma.division.findFirst({ where: { divisionName: 'Strategy and Business Development' } }),
-        ceoOffice: await prisma.division.findFirst({ where: { divisionName: 'CEO Office' } }),
-        financial: await prisma.division.findFirst({ where: { divisionName: 'Finance' } }),
-        humanResources: await prisma.division.findFirst({ where: { divisionName: 'Human Capital Strategy and Experience' } }),
+        telcoServices: await prisma.division.findFirst({
+            where: { divisionName: 'Infrastructure Solution' },
+            include: { directorate: true, group: true }
+        }),
+        cybersecurity: await prisma.division.findFirst({
+            where: { divisionName: 'Cybersecurity Delivery and Operation' },
+            include: { directorate: true, group: true }
+        }),
+        cloud: await prisma.division.findFirst({
+            where: { divisionName: 'Cloud Delivery and Operation' },
+            include: { directorate: true, group: true }
+        }),
+        itServices: await prisma.division.findFirst({
+            where: { divisionName: 'Collaboration Solution' },
+            include: { directorate: true, group: true }
+        }),
+        strategy: await prisma.division.findFirst({
+            where: { divisionName: 'Strategy and Business Development' },
+            include: { directorate: true, group: true }
+        }),
+        ceoOffice: await prisma.division.findFirst({
+            where: { divisionName: 'CEO Office' },
+            include: { directorate: true, group: true }
+        }),
+        financial: await prisma.division.findFirst({
+            where: { divisionName: 'Finance' },
+            include: { directorate: true, group: true }
+        }),
+        humanResources: await prisma.division.findFirst({
+            where: { divisionName: 'Human Capital Strategy and Experience' },
+            include: { directorate: true, group: true }
+        }),
+    };
+
+    // Get departments
+    const departments = {
+        connectivity: await prisma.department.findFirst({ where: { departmentName: 'Connectivity Solution' } }),
+        cloudEngineering: await prisma.department.findFirst({ where: { departmentName: 'Cloud Engineering' } }),
+        cybersecurityDelivery: await prisma.department.findFirst({ where: { departmentName: 'Cybersecurity Delivery and Customer Operation' } }),
+        collaboration: await prisma.department.findFirst({ where: { departmentName: 'Collaboration Product Consultant' } }),
+        businessStrategy: await prisma.department.findFirst({ where: { departmentName: 'Business Strategy' } }),
+        corporateComm: await prisma.department.findFirst({ where: { departmentName: 'Corporate Communication' } }),
+        financialPlanning: await prisma.department.findFirst({ where: { departmentName: 'Financial Planning and Controlling' } }),
+        peopleServices: await prisma.department.findFirst({ where: { departmentName: 'People Services' } }),
     };
 
     // Get job roles
@@ -67,11 +103,15 @@ async function main() {
             jobVacancyReasonId: jobVacancyReason?.id,
             employmentTypeId: employmentTypes.pkwtt?.id,
             divisionId: divisions.telcoServices?.id,
+            directorateId: divisions.telcoServices?.directorateId,
+            groupId: divisions.telcoServices?.groupId,
+            departmentId: departments.connectivity?.id,
             jobRequirement: 'Bachelor degree in Telecommunications, Computer Engineering. 2+ years experience. Proficient in Routing/Switching (Cisco/Juniper/Huawei). Skills: OSPF, BGP, VLANs, STP. Tools: Wireshark, GNS3, Puppet/Ansible for network automation.',
             jobDescription: 'Implement network solutions for telco infrastructure. Configure and troubleshoot routers/switches. Monitor network traffic using SolarWinds/Nagios. automate configuration tasks using Ansible/Python scripts.',
             cityLocation: 'Jakarta',
             minSalary: 8000000,
             maxSalary: 12000000,
+            skills: ['OSPF', 'BGP', 'VLANs', 'STP', 'Wireshark', 'GNS3', 'Puppet', 'Ansible'],
         },
         {
             jobRoleId: jobRoles.networkEngineer?.id,
@@ -86,6 +126,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 15000000,
             maxSalary: 22000000,
+            skills: ['MPLS', 'SD-WAN', 'QoS', 'Network Security', 'Firewalls', 'VPN', 'Cisco DNA', 'Riverbed', 'Splunk'],
         },
 
         // Cybersecurity Division - Technical positions
@@ -102,6 +143,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 9000000,
             maxSalary: 13000000,
+            skills: ['Vulnerability Assessment', 'Incident Response', 'Nessus', 'Metasploit', 'Wireshark', 'Antivirus Management'],
         },
         {
             jobRoleId: jobRoles.itSupport?.id,
@@ -116,6 +158,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 16000000,
             maxSalary: 24000000,
+            skills: ['Threat Hunting', 'Forensics', 'Penetration Testing', 'Splunk', 'QRadar', 'EnCase', 'Burp Suite', 'Kali Linux', 'Zero Trust'],
         },
 
         // Cloud Division - Technical positions
@@ -132,6 +175,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 10000000,
             maxSalary: 14000000,
+            skills: ['AWS', 'GCP', 'Docker', 'Bash', 'Python', 'Terraform', 'Jenkins', 'GitLab CI', 'Prometheus', 'Grafana'],
         },
         {
             jobRoleId: jobRoles.backendEngineer?.id,
@@ -146,6 +190,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 17000000,
             maxSalary: 25000000,
+            skills: ['Kubernetes', 'Helm', 'Istio', 'Serverless', 'Lambda', 'Go', 'Rust', 'Microservices', 'ArgoCD', 'ELK Stack'],
         },
 
         // IT Services (Collaboration Solution) Division - Technical positions
@@ -162,6 +207,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 8500000,
             maxSalary: 12500000,
+            skills: ['React.js', 'TypeScript', 'CSS3', 'SASS', 'Webpack', 'Redux', 'Zustand', 'Jest', 'React Testing Library', 'Figma'],
         },
         {
             jobRoleId: jobRoles.frontendEngineer?.id,
@@ -176,6 +222,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 16000000,
             maxSalary: 23000000,
+            skills: ['Next.js', 'Web Performance', 'Micro-frontends', 'PWA', 'WebSockets', 'CI/CD', 'Lighthouse', 'Vercel', 'Netlify', 'Cypress'],
         },
 
         // Strategy and Business Development Division - Non-technical positions
@@ -192,6 +239,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 7000000,
             maxSalary: 10000000,
+            skills: ['Market Research', 'Financial Basics', 'SWOT Analysis', 'Excel', 'Pivot Tables', 'PowerPoint', 'Google Analytics'],
         },
         {
             jobRoleId: jobRoles.businessAnalyst?.id,
@@ -206,6 +254,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 14000000,
             maxSalary: 20000000,
+            skills: ['Corporate Strategy', 'M&A', 'Financial Modeling', 'Strategic Planning', 'Stakeholder Management', 'Tableau', 'PowerBI', 'SPSS', 'SAS'],
         },
 
         // CEO Office Division - Non-technical positions
@@ -222,6 +271,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 7500000,
             maxSalary: 11000000,
+            skills: ['Corporate Communications', 'Event Management', 'Microsoft Office', 'Zoom', 'Teams', 'Trello', 'Asana'],
         },
         {
             jobRoleId: jobRoles.businessAnalyst?.id,
@@ -236,6 +286,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 15000000,
             maxSalary: 21000000,
+            skills: ['Investor Relations', 'Crisis Management', 'Strategic Advisory', 'Bloomberg Terminal', 'Presentation Skills'],
         },
 
         // Financial Division - Non-technical positions
@@ -252,6 +303,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 7000000,
             maxSalary: 10500000,
+            skills: ['GL Reconciliation', 'Budgeting', 'Tax Regulation', 'Brevet A/B', 'SAP', 'Oracle', 'Excel Macros'],
         },
         {
             jobRoleId: jobRoles.financialAnalyst?.id,
@@ -266,6 +318,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 14000000,
             maxSalary: 21000000,
+            skills: ['FP&A', 'Treasury', 'Audit', 'SAP S/4HANA', 'Hyperion', 'Bloomberg', 'PowerBI'],
         },
 
         // Human Resources Division - Non-technical positions
@@ -282,6 +335,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 6500000,
             maxSalary: 9500000,
+            skills: ['Recruitment', 'Administration', 'Labor Law', 'LinkedIn Recruiter', 'JobStreet', 'HRIS', 'Talent', 'Workday'],
         },
         {
             jobRoleId: jobRoles.hrSpecialist?.id,
@@ -296,6 +350,7 @@ async function main() {
             cityLocation: 'Jakarta',
             minSalary: 13000000,
             maxSalary: 19000000,
+            skills: ['Talent Management', 'OD', 'Compensation & Benefits', 'Industrial Relations', 'Workday', 'SuccessFactors', 'Mercer', 'DISC', 'MBTI'],
         },
     ];
 
@@ -303,11 +358,37 @@ async function main() {
     let createdCount = 0;
     for (const vacancy of jobVacancies) {
         if (vacancy.jobRoleId && vacancy.employeePositionId && vacancy.divisionId) {
-            await prisma.jobVacancy.create({
-                data: vacancy as any,
-            });
-            createdCount++;
-            console.log(`✓ Created job vacancy: ${createdCount}/16`);
+            const { skills, ...vacancyData } = vacancy;
+            try {
+                // Fetch skill IDs
+                const skillIds = [];
+                if (skills && skills.length > 0) {
+                    const skillRecords = await prisma.skill.findMany({
+                        where: { skillName: { in: skills } }
+                    });
+                    skillRecords.forEach(s => skillIds.push(s.id));
+
+                    // Log if some skills were not found
+                    if (skillRecords.length !== skills.length) {
+                        const foundNames = skillRecords.map(s => s.skillName);
+                        const missing = skills.filter(s => !foundNames.includes(s));
+                        console.warn(`⚠️ Warning: Some skills not found for vacancy ${vacancy.jobRoleId}: ${missing.join(', ')}`);
+                    }
+                }
+
+                await prisma.jobVacancy.create({
+                    data: {
+                        ...vacancyData,
+                        jobVacancySkills: {
+                            create: skillIds.map((skillId) => ({ skillId })),
+                        },
+                    } as any,
+                });
+                createdCount++;
+                console.log(`✓ Created job vacancy: ${createdCount}/16`);
+            } catch (err) {
+                console.error(`❌ Failed to create vacancy for ${vacancy.jobRoleId} in ${vacancy.divisionId}:`, err);
+            }
         } else {
             console.log(`⚠️  Skipped vacancy due to missing reference data`);
         }

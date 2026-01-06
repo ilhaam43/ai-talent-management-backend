@@ -20,7 +20,52 @@ export class CandidatesService {
   }
 
   async getById(id: string) {
-    return this.candidatesRepository.findById(id);
+    // Return full details for the candidate
+    return this.candidatesRepository.findDetailById(id);
+  }
+
+  async getAiInsights(id: string) {
+    const candidate = await this.candidatesRepository.findDetailById(id);
+    
+    if (!candidate) {
+      throw new Error('Candidate not found');
+    }
+
+    // Map applications to simplified AI insight format
+    return candidate.applications.map((app: any) => {
+      // Get job skills and candidate skills for strength calculation
+      const jobSkills = app.jobVacancy?.jobSkills?.map((js: any) => js.jobSkill) || [];
+      const candidateSkills = candidate.skills?.map((cs: any) => cs.candidateSkill) || [];
+      
+      // Simple implementation: check if job skill is in candidate skills
+      const strengths = jobSkills.filter((jobSkill: string) => candidateSkills.includes(jobSkill));
+
+      // Personalize the AI Insight text
+      let personalizedInsight = app.aiInsight || '';
+      
+      const candidateName = candidate.candidateFullname || candidate.candidateNickname || 'Candidate';
+      
+      // 1. Case-insensitive replacement of full name with "you"
+      if (candidate.candidateFullname) {
+          const nameRegex = new RegExp(candidate.candidateFullname, 'gi');
+          personalizedInsight = personalizedInsight.replace(nameRegex, 'you');
+      }
+
+      // 2. Prepend greeting
+      const greeting = `Hi ${candidateName}, based on your uploaded cv, here's our analysis:\n\n`;
+      
+      // If the insight doesn't already start with the greeting, add it
+      if (!personalizedInsight.startsWith('Hi ')) {
+          personalizedInsight = greeting + personalizedInsight;
+      }
+
+      return {
+        jobVacancyId: app.jobVacancyId,
+        fitScore: app.fitScore,
+        aiInsight: personalizedInsight,
+        status: app.aiMatchStatus || 'NOT MATCH',
+      };
+    });
   }
 
   async findAll() {
