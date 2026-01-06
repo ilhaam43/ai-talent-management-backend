@@ -3,6 +3,7 @@ import { JobVacanciesService } from './job-vacancies.service';
 import { CreateJobVacancyDto } from './dto/create-job-vacancy.dto';
 import { UpdateJobVacancyDto } from './dto/update-job-vacancy.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
+import { MatchJobsCriteriaDto, MatchedJobDto } from './dto/match-jobs.dto';
 
 @ApiTags('job-vacancies')
 @Controller('job-vacancies')
@@ -51,10 +52,22 @@ export class JobVacanciesController {
   }
 
   @Post('match')
-  @ApiOperation({ summary: 'Match jobs relative to criteria' })
-  @ApiBody({ schema: { type: 'object', properties: { divisions: { type: 'array', items: { type: 'string' } }, employmentTypeId: { type: 'string' } } } })
-  @ApiResponse({ status: 200, description: 'Return matched jobs' })
-  async matchJobs(@Body() body: { divisions?: string[]; employmentTypeId?: string }) {
+  @ApiOperation({
+    summary: 'Find matching job vacancies for AI analysis',
+    description:
+      'Returns a list of open job vacancies that match the given criteria. ' +
+      'This endpoint is called by the n8n workflow to get jobs for candidate analysis.',
+  })
+  @ApiBody({
+    type: MatchJobsCriteriaDto,
+    description: 'Filtering criteria for job matching',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'List of matching jobs',
+    type: [MatchedJobDto],
+  })
+  async matchJobs(@Body() body: MatchJobsCriteriaDto) {
     return this.jobVacanciesService.matchJobs(body);
   }
 }
