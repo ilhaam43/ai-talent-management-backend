@@ -30,7 +30,11 @@ export class CandidateApplicationsService {
         jobVacancy: {
           include: {
             jobRole: true,
-            jobVacancyStatus: true
+            jobVacancyStatus: true,
+            directorate: true,
+            group: true,
+            division: true,
+            department: true
           }
         },
         applicationPipeline: true,

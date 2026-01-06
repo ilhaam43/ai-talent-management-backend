@@ -33,14 +33,50 @@ async function main() {
 
     // Get divisions by name
     const divisions = {
-        telcoServices: await prisma.division.findFirst({ where: { divisionName: 'Infrastructure Solution' } }), // Under Telco Services directorate
-        cybersecurity: await prisma.division.findFirst({ where: { divisionName: 'Cybersecurity Delivery and Operation' } }),
-        cloud: await prisma.division.findFirst({ where: { divisionName: 'Cloud Delivery and Operation' } }),
-        itServices: await prisma.division.findFirst({ where: { divisionName: 'Collaboration Solution' } }), // IT Services (Collaboration Solution)
-        strategy: await prisma.division.findFirst({ where: { divisionName: 'Strategy and Business Development' } }),
-        ceoOffice: await prisma.division.findFirst({ where: { divisionName: 'CEO Office' } }),
-        financial: await prisma.division.findFirst({ where: { divisionName: 'Finance' } }),
-        humanResources: await prisma.division.findFirst({ where: { divisionName: 'Human Capital Strategy and Experience' } }),
+        telcoServices: await prisma.division.findFirst({
+            where: { divisionName: 'Infrastructure Solution' },
+            include: { directorate: true, group: true }
+        }),
+        cybersecurity: await prisma.division.findFirst({
+            where: { divisionName: 'Cybersecurity Delivery and Operation' },
+            include: { directorate: true, group: true }
+        }),
+        cloud: await prisma.division.findFirst({
+            where: { divisionName: 'Cloud Delivery and Operation' },
+            include: { directorate: true, group: true }
+        }),
+        itServices: await prisma.division.findFirst({
+            where: { divisionName: 'Collaboration Solution' },
+            include: { directorate: true, group: true }
+        }),
+        strategy: await prisma.division.findFirst({
+            where: { divisionName: 'Strategy and Business Development' },
+            include: { directorate: true, group: true }
+        }),
+        ceoOffice: await prisma.division.findFirst({
+            where: { divisionName: 'CEO Office' },
+            include: { directorate: true, group: true }
+        }),
+        financial: await prisma.division.findFirst({
+            where: { divisionName: 'Finance' },
+            include: { directorate: true, group: true }
+        }),
+        humanResources: await prisma.division.findFirst({
+            where: { divisionName: 'Human Capital Strategy and Experience' },
+            include: { directorate: true, group: true }
+        }),
+    };
+
+    // Get departments
+    const departments = {
+        connectivity: await prisma.department.findFirst({ where: { departmentName: 'Connectivity Solution' } }),
+        cloudEngineering: await prisma.department.findFirst({ where: { departmentName: 'Cloud Engineering' } }),
+        cybersecurityDelivery: await prisma.department.findFirst({ where: { departmentName: 'Cybersecurity Delivery and Customer Operation' } }),
+        collaboration: await prisma.department.findFirst({ where: { departmentName: 'Collaboration Product Consultant' } }),
+        businessStrategy: await prisma.department.findFirst({ where: { departmentName: 'Business Strategy' } }),
+        corporateComm: await prisma.department.findFirst({ where: { departmentName: 'Corporate Communication' } }),
+        financialPlanning: await prisma.department.findFirst({ where: { departmentName: 'Financial Planning and Controlling' } }),
+        peopleServices: await prisma.department.findFirst({ where: { departmentName: 'People Services' } }),
     };
 
     // Get job roles
@@ -67,6 +103,9 @@ async function main() {
             jobVacancyReasonId: jobVacancyReason?.id,
             employmentTypeId: employmentTypes.pkwtt?.id,
             divisionId: divisions.telcoServices?.id,
+            directorateId: divisions.telcoServices?.directorateId,
+            groupId: divisions.telcoServices?.groupId,
+            departmentId: departments.connectivity?.id,
             jobRequirement: 'Bachelor degree in Telecommunications, Computer Engineering. 2+ years experience. Proficient in Routing/Switching (Cisco/Juniper/Huawei). Skills: OSPF, BGP, VLANs, STP. Tools: Wireshark, GNS3, Puppet/Ansible for network automation.',
             jobDescription: 'Implement network solutions for telco infrastructure. Configure and troubleshoot routers/switches. Monitor network traffic using SolarWinds/Nagios. automate configuration tasks using Ansible/Python scripts.',
             cityLocation: 'Jakarta',
