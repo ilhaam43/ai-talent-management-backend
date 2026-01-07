@@ -123,80 +123,100 @@ export class JobVacanciesService {
   }
 
 
-  async matchJobs(criteria: { divisions?: string[]; employmentTypeId?: string }) {
+  async matchJobs(criteria: { divisions?: string[]; selectedTracks?: string[]; employmentTypeId?: string }) {
     this.logger.log(`Matching jobs with criteria: ${JSON.stringify(criteria)}`);
 
-    const { divisions, employmentTypeId } = criteria;
+    // Accept either 'divisions' or 'selectedTracks' (alias for n8n compatibility)
+    let divisions = criteria.divisions || criteria.selectedTracks;
+    const { employmentTypeId } = criteria;
 
-    const whereClause: any = {
-      jobVacancyStatus: {
-        jobVacancyStatus: 'OPEN',
-      },
-    };
+    this.logger.log(`Received raw divisions/selectedTracks: ${JSON.stringify(divisions)} (Type: ${typeof divisions})`);
+
+    // Ensure divisions is an array (handle potential single string from n8n)
+    if (typeof divisions === 'string') {
+      divisions = [divisions];
+    }
+
+    // Build where clause - start with empty object
+    const whereClause: any = {};
+
+    // Only filter by status if we need to - for now, return all jobs
+    // Uncomment to filter: whereClause.jobVacancyStatus = { jobVacancyStatus: 'OPEN' };
 
     if (employmentTypeId) {
       whereClause.employmentTypeId = employmentTypeId;
     }
 
-    if (divisions && divisions.length > 0) {
-      whereClause.OR = [
-        {
-          division: {
-            divisionName: { in: divisions, mode: 'insensitive' },
-          },
-        },
-        {
-          department: {
-            departmentName: { in: divisions, mode: 'insensitive' },
-          },
-        },
-        {
-          group: {
-            groupName: { in: divisions, mode: 'insensitive' },
-          },
-        },
-        {
-          directorate: {
-            directorateName: { in: divisions, mode: 'insensitive' },
-          },
-        },
-      ];
+    // Build OR conditions for each division/track
+    // Supports both exact match and partial/contains match
+    if (divisions && Array.isArray(divisions) && divisions.length > 0) {
+      const orConditions: any[] = [];
+      
+      for (const div of divisions) {
+        if (!div || typeof div !== 'string' || div.trim() === '') continue;
+        
+        const searchTerm = div.trim();
+        // Add contains match for each division name
+        orConditions.push(
+          { division: { divisionName: { contains: searchTerm, mode: 'insensitive' } } },
+          { department: { departmentName: { contains: searchTerm, mode: 'insensitive' } } },
+          { group: { groupName: { contains: searchTerm, mode: 'insensitive' } } },
+          { directorate: { directorateName: { contains: searchTerm, mode: 'insensitive' } } }
+        );
+      }
+      
+      if (orConditions.length > 0) {
+        whereClause.OR = orConditions;
+      }
     }
 
-    const jobs = await this.prisma.jobVacancy.findMany({
-      where: whereClause,
-      include: {
-        jobRole: true,
-        department: true,
-        division: true,
-        group: true,
-        directorate: true,
-        employmentType: true,
-        employeePosition: true,
-        jobVacancySkills: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    // Start with basic query - no filtering to debug
+    this.logger.log(`Building query with whereClause: ${JSON.stringify(whereClause)}`);
 
-    this.logger.log(`Found ${jobs.length} matching jobs for criteria.`);
+    try {
+      const jobs = await this.prisma.jobVacancy.findMany({
+        where: whereClause,
+        include: {
+          jobRole: true,
+          employmentType: true,
+          department: true,
+          division: true,
+          group: true,
+          directorate: true,
+          jobVacancySkills: {
+            include: {
+              skill: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 20, // Limit results
+      });
 
-    return jobs.map((job: any) => ({
-      job_id: job.id,
-      job_title: job.jobRole.jobRoleName,
-      department:
-        job.department?.departmentName ||
-        job.division?.divisionName ||
-        job.group?.groupName ||
-        'General',
-      location: job.cityLocation,
-      employment_type: job.employmentType.employmentType,
-      description: job.jobRequirement || 'No description provided.',
-      qualifications: job.jobQualification || 'No qualifications provided.',
-      min_salary: job.minSalary,
-      max_salary: job.maxSalary,
-      job_skills: job.jobVacancySkills?.map((js: any) => js.skill?.skillName) || [],
-    }));
+      this.logger.log(`Found ${jobs.length} matching jobs for criteria.`);
+
+      return jobs.map((job: any) => ({
+        job_id: job.id,
+        job_title: job.jobRole?.jobRoleName || 'Unknown Role',
+        department: job.department?.departmentName || 
+                   job.division?.divisionName || 
+                   job.group?.groupName || 
+                   job.directorate?.directorateName || 
+                   'General',
+        location: job.cityLocation || 'Not specified',
+        employment_type: job.employmentType?.employmentType || 'Full-time',
+        description: job.jobRequirement || 'No description provided.',
+        qualifications: job.jobQualification || 'No qualifications provided.',
+        min_salary: job.minSalary,
+        max_salary: job.maxSalary,
+        job_skills: job.jobVacancySkills?.map((js: any) => js.skill?.skillName).filter(Boolean) || [],
+      }));
+    } catch (error: any) {
+      this.logger.error(`Error in matchJobs: ${error.message}`);
+      // Return empty array instead of throwing to allow workflow to continue
+      return [];
+    }
   }
 }

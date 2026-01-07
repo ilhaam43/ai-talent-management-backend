@@ -68,6 +68,7 @@ export class JobVacanciesController {
     type: [MatchedJobDto],
   })
   async matchJobs(@Body() body: MatchJobsCriteriaDto) {
+    console.log('[DEBUG] JobVacanciesController received matchJobs body:', JSON.stringify(body));
     return this.jobVacanciesService.matchJobs(body);
   }
 }

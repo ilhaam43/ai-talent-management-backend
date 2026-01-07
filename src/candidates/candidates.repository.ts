@@ -61,7 +61,11 @@ export class CandidatesRepository {
         salaries: true,
         applications: {
           include: {
-            jobVacancy: true,
+            jobVacancy: {
+              include: {
+                jobRole: true,
+              },
+            },
             candidateMatchSkills: true,
           },
         },

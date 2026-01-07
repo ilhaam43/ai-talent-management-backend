@@ -31,14 +31,17 @@ export class CandidatesService {
       throw new Error('Candidate not found');
     }
 
+    // Get candidate skills (for reference)
+    const candidateSkillsLower = candidate.skills?.map((cs: any) => 
+      cs.candidateSkill.toLowerCase().trim()
+    ) || [];
+
     // Map applications to simplified AI insight format
     return candidate.applications.map((app: any) => {
-      // Get job skills and candidate skills for strength calculation
-      const jobSkills = app.jobVacancy?.jobSkills?.map((js: any) => js.jobSkill) || [];
-      const candidateSkills = candidate.skills?.map((cs: any) => cs.candidateSkill) || [];
-      
-      // Simple implementation: check if job skill is in candidate skills
-      const strengths = jobSkills.filter((jobSkill: string) => candidateSkills.includes(jobSkill));
+      // Use candidateMatchSkills if available, otherwise use candidate skills
+      const matchedSkills = app.candidateMatchSkills?.map(
+        (ms: any) => ms.candidateMatchSkill || ''
+      ).filter((s: string) => s) || [];
 
       // Personalize the AI Insight text
       let personalizedInsight = app.aiInsight || '';
@@ -61,9 +64,11 @@ export class CandidatesService {
 
       return {
         jobVacancyId: app.jobVacancyId,
-        fitScore: app.fitScore,
+        jobTitle: app.jobVacancy?.jobRole?.jobRoleName || app.jobVacancy?.jobRequirement?.substring(0, 50) || 'Unknown Position',
+        location: app.jobVacancy?.cityLocation || 'Not specified',
         aiInsight: personalizedInsight,
-        status: app.aiMatchStatus || 'NOT MATCH',
+        matchSkill: matchedSkills.join(', '),
+        status: app.aiMatchStatus || 'NOT_MATCH',
       };
     });
   }

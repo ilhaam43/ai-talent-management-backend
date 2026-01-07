@@ -12,6 +12,7 @@ import {
   Res,
   BadRequestException,
   ParseUUIDPipe,
+  Next,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -25,8 +26,8 @@ import {
 } from '@nestjs/swagger';
 import { DocumentsService } from './documents.service';
 import { UploadDocumentDto } from './dto/upload-document.dto';
-import { multerConfig } from './config/multer.config';
-import { Response } from 'express';
+import { multerConfig, getFolderFromDocumentType } from './config/multer.config';
+import { Response, NextFunction } from 'express';
 import * as fs from 'fs';
 
 @ApiTags('documents')
@@ -39,7 +40,11 @@ export class DocumentsController {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', multerConfig))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload CV or document' })
+  @ApiOperation({ 
+    summary: 'Upload CV or document',
+    description: 'Upload documents to appropriate folders based on document type. ' +
+      'Supported types: CV (pdf/docx), Ijazah (pdf), KTP (pdf/image), Transcript (pdf), Other (pdf)'
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -48,12 +53,12 @@ export class DocumentsController {
         file: {
           type: 'string',
           format: 'binary',
-          description: 'CV file (PDF, DOC, DOCX)',
+          description: 'Document file (PDF, DOC, DOCX for CV; PDF/Image for KTP)',
         },
         documentTypeId: {
           type: 'string',
           format: 'uuid',
-          description: 'Document type UUID',
+          description: 'Document type UUID (CV, Ijazah, KTP, Transcript, Other)',
         },
       },
     },
@@ -66,11 +71,10 @@ export class DocumentsController {
       properties: {
         id: { type: 'string' },
         candidateId: { type: 'string' },
-        fileName: { type: 'string' },
         filePath: { type: 'string' },
-        fileSize: { type: 'number' },
-        mimeType: { type: 'string' },
         documentTypeId: { type: 'string' },
+        documentType: { type: 'string' },
+        folder: { type: 'string' },
         uploadedAt: { type: 'string', format: 'date-time' },
       },
     },
@@ -92,6 +96,10 @@ export class DocumentsController {
       throw new BadRequestException('User does not have a candidate profile');
     }
 
+    // Get document type info for response
+    const documentType = await this.documentsService.getDocumentTypeById(uploadDto.documentTypeId);
+    const folder = getFolderFromDocumentType(documentType?.documentType || 'other');
+
     const document = await this.documentsService.uploadDocument(
       candidateId,
       file,
@@ -103,6 +111,8 @@ export class DocumentsController {
       candidateId: document.candidateId,
       filePath: document.filePath,
       documentTypeId: document.documentTypeId,
+      documentType: documentType?.documentType || 'Unknown',
+      folder: folder,
       uploadedAt: document.createdAt,
     };
   }
@@ -118,9 +128,7 @@ export class DocumentsController {
         type: 'object',
         properties: {
           id: { type: 'string' },
-          fileName: { type: 'string' },
-          fileSize: { type: 'number' },
-          mimeType: { type: 'string' },
+          filePath: { type: 'string' },
           documentType: { type: 'string' },
           uploadedAt: { type: 'string', format: 'date-time' },
         },
@@ -233,5 +241,3 @@ export class DocumentsController {
     return this.documentsService.deleteDocument(documentId, candidateId);
   }
 }
-
-
