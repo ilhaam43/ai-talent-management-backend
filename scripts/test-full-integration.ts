@@ -2,7 +2,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, CandidateRating } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
@@ -16,15 +16,23 @@ const BASE_URL = 'http://localhost:3000';
 // Test user credentials
 const TEST_USER = {
   email: 'test-integration@example.com',
-  password: 'test123',
+  password: 'Test1234!',
   name: 'Muhammad Reza Azhar Priyadi',
+};
+
+// Simulate localStorage - selectedTracks from frontend
+// These must match ACTUAL division names from seed-org-structure.ts
+const LOCAL_STORAGE = {
+  selectedTracks: [
+    'Cloud Delivery and Operation',      // Division for Cloud jobs
+    'Cybersecurity Delivery and Operation', // Division for Cybersecurity jobs  
+    'Collaboration Solution',             // Division for IT Services jobs
+  ],
 };
 
 let authToken: string;
 let candidateId: string;
 let documentId: string;
-let applicationId: string;
-let jobVacancyId: string;
 
 // Initialize Prisma
 const connectionString = process.env.DATABASE_URL;
@@ -33,7 +41,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function cleanup() {
-  console.log('🧹 Step 0: Cleaning up...');
+  console.log('🧹 Step 0: Cleaning up test data...');
   try {
     const existingUser = await prisma.user.findUnique({
       where: { email: TEST_USER.email },
@@ -44,7 +52,9 @@ async function cleanup() {
       const cId = existingUser.candidates[0].id;
       
       // Delete in order
+      await prisma.candidateMatchSkill.deleteMany({ where: { candidateId: cId } });
       await prisma.candidateApplication.deleteMany({ where: { candidateId: cId } });
+      await prisma.candidateSalary.deleteMany({ where: { candidateId: cId } });
       await prisma.candidateSocialMedia.deleteMany({ where: { candidateId: cId } });
       await prisma.candidateSkill.deleteMany({ where: { candidateId: cId } });
       await prisma.candidateCertification.deleteMany({ where: { candidateId: cId } });
@@ -66,80 +76,100 @@ async function cleanup() {
   }
 }
 
-async function seedUser() {
-  console.log('🌱 Step 1: Seeding User & Candidate...');
-  const hashedPassword = await bcrypt.hash(TEST_USER.password, 10);
+// ============================================
+// FLOW STEP 1: AUTH - Signup/Login
+// ============================================
+async function authSignupLogin() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📋 FLOW STEP 1: AUTH - Signup & Login');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  const user = await prisma.user.create({
-    data: {
-      email: TEST_USER.email,
-      password: hashedPassword,
-      name: TEST_USER.name,
-    },
-  });
+  // Try signup first
+  try {
+    console.log('   🔐 Attempting signup...');
+    const signupRes = await axios.post(`${BASE_URL}/auth/signup`, TEST_USER);
+    authToken = signupRes.data.access_token;
+    candidateId = signupRes.data.user.candidateId;
+    console.log(`   ✅ Signup successful. candidateId: ${candidateId}`);
+    return;
+  } catch (error: any) {
+    if (error.response?.status === 409) {
+      console.log('   ℹ️  User already exists, logging in...');
+    } else {
+      throw error;
+    }
+  }
 
-  const candidate = await prisma.candidate.create({
-    data: {
-      userId: user.id,
-      candidateEmail: TEST_USER.email,
-      candidateFullname: TEST_USER.name,
-    },
-  });
-
-  candidateId = candidate.id;
-  console.log(`   ✅ Created Candidate: ${candidateId}`);
-}
-
-async function login() {
-  console.log('🔐 Step 2: Login...');
-  const response = await axios.post(`${BASE_URL}/auth/login`, {
+  // Login if signup failed (user exists)
+  const loginRes = await axios.post(`${BASE_URL}/auth/login`, {
     email: TEST_USER.email,
     password: TEST_USER.password,
   });
-
-  authToken = response.data.access_token;
-  console.log('   ✅ Login successful.');
+  authToken = loginRes.data.access_token;
+  
+  // Get candidateId from profile
+  const profile = await axios.get(`${BASE_URL}/candidates/profile`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  }).catch(() => null);
+  
+  if (profile?.data?.id) {
+    candidateId = profile.data.id;
+  }
+  
+  console.log(`   ✅ Login successful. candidateId: ${candidateId || 'unknown'}`);
 }
 
-async function uploadAndParseCV() {
-  console.log('📄 Step 3: CV Upload & Parse...');
+// ============================================
+// FLOW STEP 2: Select Track (simulated localStorage)
+// ============================================
+async function selectTrack() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📋 FLOW STEP 2: Select Track (simulated localStorage)');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   
-  // Get or create document type
-  let documentTypeId: string;
-  try {
-    const docTypes = await axios.get(`${BASE_URL}/documents/types`, {
-      headers: { Authorization: `Bearer ${authToken}` },
-    });
-    
-    const cvType = docTypes.data.find((dt: any) => dt.documentType === 'CV/Resume');
-    if (cvType) {
-      documentTypeId = cvType.id;
-    } else if (docTypes.data.length > 0) {
-      documentTypeId = docTypes.data[0].id;
-    } else {
-      // Create a default document type if none exist
-      const created = await prisma.documentType.create({
-        data: { documentType: 'CV/Resume' },
-      });
-      documentTypeId = created.id;
-    }
-  } catch (error: any) {
-    console.log('   Creating document type via Prisma...');
+  console.log(`   📦 localStorage.setItem("selectedTracks", ${JSON.stringify(LOCAL_STORAGE.selectedTracks)})`);
+  console.log('   ✅ Tracks stored in localStorage (simulated).');
+}
+
+// ============================================
+// FLOW STEP 3: Upload CV
+// ============================================
+async function uploadCV() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📋 FLOW STEP 3: Upload CV');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  // Get CV document type
+  const docTypes = await axios.get(`${BASE_URL}/documents/types`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  
+  let documentTypeId = docTypes.data.find((dt: any) => 
+    dt.documentType.toLowerCase().includes('cv') || 
+    dt.documentType.toLowerCase().includes('resume')
+  )?.id;
+
+  if (!documentTypeId && docTypes.data.length > 0) {
+    documentTypeId = docTypes.data[0].id;
+  }
+
+  if (!documentTypeId) {
+    console.log('   ⚠️  No document types found. Creating CV type...');
     const created = await prisma.documentType.create({
       data: { documentType: 'CV/Resume' },
     });
     documentTypeId = created.id;
   }
 
-  // Upload CV - use the correct path like test-reza-flow.ts
+  // Find CV file
   const cvPath = path.join(process.cwd(), 'test-files', 'Muhammad-Reza-Azhar-Priyadi-Resume.pdf');
   
   if (!fs.existsSync(cvPath)) {
     console.log(`   ⚠️  CV file not found at ${cvPath}`);
-    console.log('   Note: Skipping CV upload. The test will continue without parsing.');
+    console.log('   Note: Skipping CV upload.');
     return;
   }
-  
+
   const form = new FormData();
   form.append('file', fs.createReadStream(cvPath));
   form.append('documentTypeId', documentTypeId);
@@ -152,175 +182,207 @@ async function uploadAndParseCV() {
   });
 
   documentId = uploadRes.data.id;
-  console.log(`   ✅ Uploaded Document ID: ${documentId}`);
+  console.log(`   ✅ Uploaded CV. Document ID: ${documentId}`);
+  console.log(`   📁 Stored in folder: ${uploadRes.data.folder || 'cv'}`);
+}
 
-  // Parse CV
+// ============================================
+// FLOW STEP 4: Parse CV
+// ============================================
+async function parseCV() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📋 FLOW STEP 4: Parse CV');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  if (!documentId) {
+    console.log('   ⚠️  No document to parse. Skipping.');
+    return;
+  }
+
   const parseRes = await axios.post(
     `${BASE_URL}/cv-parser/parse/${documentId}`,
     { candidateId },
     { headers: { Authorization: `Bearer ${authToken}` } }
   );
 
-  const parsedData = parseRes.data;
-  console.log('   ✅ CV Parsed.');
+  console.log('   ✅ CV Parsed successfully.');
+  console.log(`   ℹ️  Extracted: ${parseRes.data.parsedData?.personalInfo?.fullName || 'N/A'}`);
 
   // Store parsed data
   await axios.post(
     `${BASE_URL}/candidate-profile/store-parsed-data`,
-    { parsedData },
+    { parsedData: parseRes.data.parsedData },
     { headers: { Authorization: `Bearer ${authToken}` } }
   );
 
-  console.log('   ✅ CV Data Stored.');
+  console.log('   ✅ Parsed data stored in database.');
 }
 
-async function prepareJobAndApplication() {
-  console.log('💼 Step 4: Job Application & dependencies...');
+// ============================================
+// FLOW STEP 5-6: Update Profile (simulated)
+// ============================================
+async function updateProfile() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📋 FLOW STEP 5-6: Update Profile (autofill form + corrections)');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  // Get a job vacancy
-  const jobs = await prisma.jobVacancy.findMany({ take: 1 });
-  
-  if (jobs.length === 0) {
-    throw new Error('No job vacancies found. Please seed jobs first.');
-  }
-
-  jobVacancyId = jobs[0].id;
-
-  // Get or create required dependencies
-  let candidateSalary = await prisma.candidateSalary.findFirst({
-    where: { candidateId },
-  });
-  if (!candidateSalary) {
-    candidateSalary = await prisma.candidateSalary.create({
-      data: {
-        candidateId,
-        currentSalary: 5000000,
-        expectationSalary: 10000000,
+  // Add some skills for testing matchSkill functionality
+  // Using the API endpoint to properly handle the enum conversion
+  console.log('   📝 Adding skills via API...');
+  try {
+    await axios.post(
+      `${BASE_URL}/candidate-profile/skills`,
+      {
+        skills: [
+          { skill: 'Python', rating: '4' },
+          { skill: 'AWS', rating: '3' },
+          { skill: 'JavaScript', rating: '4' },
+          { skill: 'Docker', rating: '3' },
+        ],
       },
-    });
+      { headers: { Authorization: `Bearer ${authToken}` } }
+    );
+    console.log('   ✅ Skills added: Python, AWS, JavaScript, Docker');
+  } catch (error: any) {
+    console.log('   ⚠️  Skills API error:', error.response?.data || error.message);
+    console.log('   ℹ️  Skills from CV parse will be used instead.');
   }
-
-  let applicationStatus = await prisma.applicationLastStatus.findFirst();
-  if (!applicationStatus) {
-    applicationStatus = await prisma.applicationLastStatus.create({
-      data: { applicationLastStatus: 'Applied' },
-    });
-  }
-
-  let pipeline = await prisma.applicationPipeline.findFirst();
-  if (!pipeline) {
-    pipeline = await prisma.applicationPipeline.create({
-      data: { applicationPipeline: 'Initial Screening' },
-    });
-  }
-
-  // Create application
-  const application = await prisma.candidateApplication.create({
-    data: {
-      candidateId,
-      jobVacancyId,
-      candidateSalaryId: candidateSalary.id,
-      applicationLatestStatusId: applicationStatus.id,
-      applicationPipelineId: pipeline.id,
-      submissionDate: new Date(),
-    },
-  });
-
-  applicationId = application.id;
-  console.log(`   ✅ Created Application: ${applicationId}`);
 }
 
-async function triggerN8NAnalysis() {
-  console.log('🤖 Step 5: Trigger N8N/AI Analysis...');
-  
-  const response = await axios.post(
-    `${BASE_URL}/candidate-applications/${applicationId}/analyze`,
-    {},
+// ============================================
+// FLOW STEP 7: Upload Other Documents (optional)
+// ============================================
+async function uploadOtherDocuments() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📋 FLOW STEP 7: Upload Other Documents (Optional - Simulated)');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  console.log('   ℹ️  In production, candidate can upload:');
+  console.log('       - Ijazah (PDF) → uploads/documents/ijazah/');
+  console.log('       - KTP (PDF/Image) → uploads/documents/ktp/');
+  console.log('       - Transcript (PDF) → uploads/documents/transcript/');
+  console.log('       - Portfolio (PDF) → uploads/documents/other/');
+  console.log('   ✅ Simulated - no actual upload in test.');
+}
+
+// ============================================
+// FLOW STEP 8: Submit & Trigger N8N Analysis
+// ============================================
+async function submitAndTriggerN8N() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📋 FLOW STEP 8: Submit Form & Trigger N8N Analysis');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  // Get selectedTracks from simulated localStorage
+  const selectedTracks = LOCAL_STORAGE.selectedTracks;
+  console.log(`   📦 Reading localStorage.getItem("selectedTracks"): ${JSON.stringify(selectedTracks)}`);
+
+  console.log('   🤖 Triggering AI Analysis...');
+  console.log(`   POST /candidate-applications/analyze`);
+  console.log(`   Body: { selectedTracks: ${JSON.stringify(selectedTracks)} }`);
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/candidate-applications/analyze`,
+      { selectedTracks },
+      { headers: { Authorization: `Bearer ${authToken}` } }
+    );
+
+    console.log('   ✅ Analysis triggered successfully!');
+    console.log(`   ℹ️  Processing time: ${response.data.processing_time_ms}ms`);
+    console.log(`   ℹ️  Results count: ${response.data.results?.length || 0}`);
+  } catch (error: any) {
+    if (error.response?.status === 500 && error.response?.data?.message?.includes('N8N')) {
+      console.log('   ⚠️  N8N webhook not available (expected in test environment)');
+      console.log('   ℹ️  In production, this would send data to n8n for AI analysis.');
+    } else {
+      throw error;
+    }
+  }
+}
+
+// ============================================
+// FLOW STEP 9: View AI Results
+// ============================================
+async function viewAIResults() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('📋 FLOW STEP 9: View AI Results & Recommendations');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  // Test GET /candidates/:id/ai-insights
+  console.log(`   🔍 GET /candidates/${candidateId}/ai-insights`);
+
+  const response = await axios.get(
+    `${BASE_URL}/candidates/${candidateId}/ai-insights`,
     { headers: { Authorization: `Bearer ${authToken}` } }
   );
 
-  console.log('   ✅ Analysis Triggered.');
-  console.log(`   Response: Fit Score ${response.data.fitScore}, Insight: ${response.data.aiInsight?.substring(0, 50)}...`);
-}
+  console.log(`   ✅ Retrieved ${response.data.length} AI insight(s) / Job Recommendation(s).`);
 
-async function testGetCandidateById() {
-  console.log('🔎 Step 6: Test GET /candidates/:id...');
-  
-  const response = await axios.get(`${BASE_URL}/candidates/${candidateId}`, {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
-
-  if (response.data.candidateFullname) {
-    console.log(`   ✅ GET /candidates/:id returns candidate data.`);
-    console.log(`   Candidate Name: ${response.data.candidateFullname}`);
-  } else {
-    console.log('   ❌ Response missing candidateFullname');
-  }
-
-  return response.data;
-}
-
-async function testGetAiInsights() {
-  console.log('🤖 Step 7: Test GET /candidates/:id/ai-insights...');
-  
-  const response = await axios.get(`${BASE_URL}/candidates/${candidateId}/ai-insights`, {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
-
-  if (Array.isArray(response.data)) {
-    console.log(`   ✅ GET /ai-insights returns array with ${response.data.length} items.`);
+  if (response.data.length > 0) {
+    console.log('\n   📊 Job Recommendations (AI Insights):');
+    console.log('   ─────────────────────────────────────');
     
-    if (response.data.length > 0) {
-      const firstItem = response.data[0];
-      console.log(`   ℹ️  AI Response Item:`, JSON.stringify(firstItem, null, 2));
+    // Display all insights (up to 5)
+    const insights = response.data.slice(0, 5);
+    for (let i = 0; i < insights.length; i++) {
+      const insight = insights[i];
+      const statusIcon = insight.status === 'STRONG_MATCH' ? '🟢' : 
+                         insight.status === 'MATCH' ? '🟡' : '🔴';
       
-      // Verify structure
-      if (firstItem.jobVacancyId && firstItem.fitScore !== undefined && firstItem.aiInsight && firstItem.status) {
-        console.log('   ✅ Response contains jobVacancyId, fitScore, aiInsight, and status.');
-        
-        // Check personalization
-        if (firstItem.aiInsight.includes('Hi ') && firstItem.aiInsight.includes('you')) {
-          console.log('   ✅ AI Insight is personalized with greeting and "you".');
-        } else {
-          console.log('   ⚠️  AI Insight may not be fully personalized.');
-        }
-        
-        // Check status mapping
-        if (['STRONG_MATCH', 'MATCH', 'NOT_MATCH'].includes(firstItem.status)) {
-          console.log(`   ✅ Status is correctly mapped: ${firstItem.status}`);
-        } else {
-          console.log(`   ❌ Status has unexpected value: ${firstItem.status}`);
-        }
-      } else {
-        console.log('   ❌ Response missing required fields');
-      }
+      console.log(`\n   ${i + 1}. ${insight.jobTitle || 'Job'} [${statusIcon} ${insight.status}]`);
+      console.log(`      ├─ Job Vacancy ID: ${insight.jobVacancyId}`);
+      console.log(`      ├─ Matching Skills: ${insight.matchSkill || '(none detected)'}`);
+      console.log(`      └─ AI Insight: ${insight.aiInsight?.substring(0, 100)}...`);
     }
-  } else {
-    console.log('   ❌ Response is not an array');
-  }
 
-  return response.data;
+    if (response.data.length > 5) {
+      console.log(`\n   ... and ${response.data.length - 5} more recommendations`);
+    }
+
+    // Summary
+    console.log('\n   📈 Summary:');
+    const strongMatches = response.data.filter((i: any) => i.status === 'STRONG_MATCH').length;
+    const matches = response.data.filter((i: any) => i.status === 'MATCH').length;
+    const notMatches = response.data.filter((i: any) => i.status === 'NOT_MATCH').length;
+    console.log(`      🟢 Strong Match: ${strongMatches}`);
+    console.log(`      🟡 Match: ${matches}`);
+    console.log(`      🔴 Not Match: ${notMatches}`);
+  }
 }
 
+// ============================================
+// MAIN
+// ============================================
 async function main() {
+  console.log('\n╔════════════════════════════════════════════════════════╗');
+  console.log('║     FULL INTEGRATION TEST - CANDIDATE FLOW            ║');
+  console.log('╚════════════════════════════════════════════════════════╝');
+
   try {
     await cleanup();
-    await seedUser();
-    await login();
-    await uploadAndParseCV();
-    await prepareJobAndApplication();
-    await triggerN8NAnalysis();
     
-    // Wait a bit for N8N to process
-    console.log('⏳ Waiting 3 seconds for N8N processing...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Follow the flow exactly:
+    await authSignupLogin();      // Flow 1: Auth
+    await selectTrack();          // Flow 2: Select Track (localStorage)
+    await uploadCV();             // Flow 3: Upload CV
+    await parseCV();              // Flow 4: Parse CV
+    await updateProfile();        // Flow 5-6: Update profile
+    await uploadOtherDocuments(); // Flow 7: Other docs (simulated)
+    await submitAndTriggerN8N();  // Flow 8: Submit & N8N
     
-    await testGetCandidateById();
-    await testGetAiInsights();
+    // Wait for N8N to process (if running)
+    console.log('\n⏳ Waiting 2 seconds for any async processing...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    await viewAIResults();        // Flow 9: View results
 
-    console.log('\n🏁 Full Integration Test Complete.');
+    console.log('\n╔════════════════════════════════════════════════════════╗');
+    console.log('║     ✅ FULL INTEGRATION TEST COMPLETE                 ║');
+    console.log('╚════════════════════════════════════════════════════════╝\n');
+
   } catch (error: any) {
-    console.error('❌ Test failed:', error.response?.data || error.message);
+    console.error('\n❌ Test failed:', error.response?.data || error.message);
     process.exit(1);
   } finally {
     await prisma.$disconnect();

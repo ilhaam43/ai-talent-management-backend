@@ -361,7 +361,7 @@ async function main() {
             const { skills, ...vacancyData } = vacancy;
             try {
                 // Fetch skill IDs
-                const skillIds = [];
+                const skillIds: string[] = [];
                 if (skills && skills.length > 0) {
                     const skillRecords = await prisma.skill.findMany({
                         where: { skillName: { in: skills } }

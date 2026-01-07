@@ -164,6 +164,15 @@ export class DocumentsService {
   }
 
   /**
+   * Get document type by ID
+   */
+  async getDocumentTypeById(id: string) {
+    return this.prisma.documentType.findUnique({
+      where: { id },
+    });
+  }
+
+  /**
    * Helper: Delete file from filesystem
    */
   private async deleteFile(filePath: string): Promise<void> {

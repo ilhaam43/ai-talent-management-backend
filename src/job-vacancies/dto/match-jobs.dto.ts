@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsArray, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class MatchJobsCriteriaDto {
   @ApiProperty({
@@ -7,13 +8,29 @@ export class MatchJobsCriteriaDto {
     required: false,
     type: [String],
   })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   divisions?: string[];
+
+  @ApiProperty({
+    description: 'Alias for divisions - list of selected tracks (for n8n compatibility)',
+    example: ['Cloud', 'Engineering', 'Finance'],
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  selectedTracks?: string[];
 
   @ApiProperty({
     description: 'Employment type ID (UUID)',
     example: '352c063d-f22d-4959-8c96-1a81f06d9ff7',
     required: false,
   })
+  @IsOptional()
+  @IsUUID()
   employmentTypeId?: string;
 }
 

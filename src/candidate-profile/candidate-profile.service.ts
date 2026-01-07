@@ -168,13 +168,19 @@ export class CandidateProfileService {
       ? await this.referenceData.findOrCreateNationality(personalInfo.nationality)
       : null;
 
+    // Don't update email if it differs from current - prevents unique constraint errors
+    // The registered email should remain the authoritative one
+    const shouldUpdateEmail = personalInfo.email && 
+      personalInfo.email.toLowerCase() === candidate.candidateEmail?.toLowerCase();
+
     // Update candidate
     const updated = await prisma.candidate.update({
       where: { id: candidateId },
       data: {
         candidateFullname: personalInfo.fullName || undefined,
         candidateNickname: personalInfo.nickname || undefined,
-        candidateEmail: personalInfo.email || undefined,
+        // Only update email if it matches the current one (prevents unique constraint errors)
+        candidateEmail: shouldUpdateEmail ? personalInfo.email : undefined,
         dateOfBirth: parseDate(personalInfo.dateOfBirth) || undefined,
         placeOfBirth: personalInfo.placeOfBirth || undefined,
         idCardNumber: personalInfo.idCardNumber || undefined,
@@ -433,11 +439,12 @@ export class CandidateProfileService {
     for (const skill of skills) {
       if (!skill || !skill.trim()) continue;
 
+      // Use enum value 'THREE' as default - this corresponds to @map("3") in schema
       const created = await prisma.candidateSkill.create({
         data: {
           candidateId,
           candidateSkill: skill.trim(),
-          candidateRating: '3', // Default rating as string (1-5 scale)
+          candidateRating: 'THREE', // Default rating (1-5 scale, THREE = 3)
         },
       });
 
