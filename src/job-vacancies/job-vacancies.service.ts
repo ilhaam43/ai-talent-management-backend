@@ -141,7 +141,8 @@ export class JobVacanciesService {
     const whereClause: any = {};
 
     // Only filter by status if we need to - for now, return all jobs
-    // Uncomment to filter: whereClause.jobVacancyStatus = { jobVacancyStatus: 'OPEN' };
+    // Filter for OPEN jobs
+    whereClause.jobVacancyStatus = { jobVacancyStatus: 'OPEN' };
 
     if (employmentTypeId) {
       whereClause.employmentTypeId = employmentTypeId;
