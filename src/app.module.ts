@@ -3,30 +3,8 @@ import { Module } from '@nestjs/common'
 import { DatabaseModule } from './database/database.module'
 import { ConfigModule } from '@nestjs/config'
 import { AuthModule } from './auth/auth.module'
-import { DocumentsModule } from './documents/documents.module'
-import { CVParserModule } from './cv-parser/cv-parser.module'
-import { CandidateProfileModule } from './candidate-profile/candidate-profile.module'
-import { CandidatesModule } from './candidates/candidates.module'
-import { TestRbacController } from './common/test-rbac.controller'
-import { RolesGuard } from './common/guards/roles.guard'
-
-import { JobVacanciesModule } from './job-vacancies/job-vacancies.module';
-import { CandidateApplicationsModule } from './candidate-applications/candidate-applications.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot(),
-    DatabaseModule,
-    UsersModule,
-    AuthModule,
-    CandidateProfileModule,
-    CVParserModule,
-    DocumentsModule,
-    CandidatesModule,
-    JobVacanciesModule,
-    CandidateApplicationsModule,
-  ],
-  controllers: [TestRbacController],
-  providers: [RolesGuard],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), DatabaseModule, UsersModule, AuthModule]
 })
-export class AppModule { }
+export class AppModule {}

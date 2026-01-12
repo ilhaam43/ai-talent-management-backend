@@ -1,8 +1,7 @@
+version: "3.9"
 services:
-  # PostgreSQL Database
   db:
-    image: postgres:15-alpine
-    container_name: ai-talent-db
+    image: postgres:15
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -17,13 +16,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    networks:
-      - ai-talent-network
 
-  # NestJS Application
   app:
-    image: node:20-slim
-    container_name: ai-talent-backend-app
+    image: node:20-alpine
     working_dir: /usr/src/app
     restart: unless-stopped
     depends_on:
@@ -33,35 +28,11 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/ai_talent_db?schema=public
       JWT_SECRET: supersecretjwt
       PORT: 3000
-      NODE_ENV: development
-      # LLM Configuration (optional - set if using LLM parsing)
-      # LLM_API_KEY: your-api-key-here
-      # LLM_BASE_URL: https://console.labahasa.ai/v1
-      # LLM_MODEL: llama-4-maverick
-      # LLM_TIMEOUT: 60000
-      # LLM_ENABLED: true
     volumes:
       - .:/usr/src/app
-      - /usr/src/app/node_modules
-      - uploads:/usr/src/app/uploads
     ports:
       - "3000:3000"
-    command: sh -c "apt-get update && apt-get install -y --no-install-recommends python3 make g++ libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev libpixman-1-dev openssl && rm -rf /var/lib/apt/lists/* && npm install --legacy-peer-deps --ignore-scripts && npm run prisma:generate && npm run build && npm start"
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/auth/profile || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - ai-talent-network
+    command: sh -c "npm install && npm run prisma:generate && npx prisma migrate deploy && npm run start:dev"
 
 volumes:
   pgdata:
-    driver: local
-  uploads:
-    driver: local
-
-networks:
-  ai-talent-network:
-    driver: bridge

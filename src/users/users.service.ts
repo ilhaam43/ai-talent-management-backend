@@ -1,36 +1,18 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { UsersRepository } from "./users.repository";
+import { Injectable, NotFoundException } from '@nestjs/common'
+import { UsersRepository } from './users.repository'
 
 @Injectable()
 export class UsersService {
   constructor(private readonly repo: UsersRepository) {}
   async getById(id: string) {
-    const item = await this.repo.findById(id);
-    if (!item) throw new NotFoundException("User not found");
-    return item;
+    const item = await this.repo.findById(id)
+    if (!item) throw new NotFoundException('Users not found')
+    return item
   }
   async list() {
-    return this.repo.findAll();
+    return this.repo.findAll()
   }
-  async create(data: {
-    id: string;
-    name: string;
-    email: string;
-    password: string;
-  }) {
-    return this.repo.create(data);
-  }
-  async findByEmail(email: string) {
-    return this.repo.findByEmail(email);
-  }
-  async update(data: {
-    id: string;
-    name?: string;
-    email?: string;
-    password?: string;
-  }) {
-    const item = await this.repo.findById(data.id);
-    if (!item) throw new NotFoundException("User not found");
-    return this.repo.update(data.id, data);
+  async create(data: { id: string; title: string; description: string }) {
+    return this.repo.create(data)
   }
 }
