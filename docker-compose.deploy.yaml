@@ -42,7 +42,7 @@ services:
       - DATABASE_URL=postgresql://n8n_user:n8ndevops@host.docker.internal:5432/n8n_db?schema=public
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: sh -c "apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma migrate deploy && npx tsx scripts/seed/seed-all.ts"
+    command: sh -c "apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npx prisma migrate deploy && npx tsx scripts/seed/seed-all.ts"
     restart: "no"
 
 volumes:
