@@ -22,7 +22,7 @@ services:
       - uploads:/usr/src/app/uploads
     ports:
       - "3001:3001"
-    command: sh -c "apt-get update && apt-get install -y --no-install-recommends python3 make g++ libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev libpixman-1-dev openssl && rm -rf /var/lib/apt/lists/* && npm install --legacy-peer-deps --ignore-scripts && npm run prisma:generate && npm run build && npm start"
+    command: sh -c "apt-get update && apt-get install -y --no-install-recommends python3 make g++ libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev libpixman-1-dev openssl && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npm run build && npm start"
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3001/auth/profile', (r) => {process.exit(r.statusCode === 401 ? 0 : 1)})\""]
       interval: 30s
@@ -42,7 +42,7 @@ services:
       - DATABASE_URL=postgresql://n8n_user:n8ndevops@host.docker.internal:5432/n8n_db?schema=public
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: sh -c "apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/* && npm install --legacy-peer-deps --ignore-scripts && npx prisma migrate deploy && npx tsx scripts/seed/seed-all.ts"
+    command: sh -c "apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma migrate deploy && npx tsx scripts/seed/seed-all.ts"
     restart: "no"
 
 volumes:
