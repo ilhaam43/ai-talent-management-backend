@@ -1,0 +1,51 @@
+services:
+  # NestJS Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-talent-backend-app
+    restart: unless-stopped
+    environment:
+      # Database connection using provided credentials
+      # Using host.docker.internal to reach postgresql on the host machine
+      # Change 'host.docker.internal' to the actual DB host if it's external
+      - DATABASE_URL=postgresql://n8n_user:n8ndevops@host.docker.internal:5432/n8n_db?schema=public
+      - JWT_SECRET=supersecretjwt
+      - PORT=3001
+      - NODE_ENV=production
+      # LLM Configuration (optional)
+      - LLM_ENABLED=true
+      - LLM_API_KEY=your-api-key-here
+      - LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+      - LLM_MODEL=meta/llama-3.1-8b-instruct
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - uploads:/usr/src/app/uploads
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3001/auth/profile', (r) => {process.exit(r.statusCode === 401 ? 0 : 1)})\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Migration Job
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder # Use the builder stage which has devDependencies (Prisma CLI)
+    container_name: ai-talent-migration
+    command: sh -c "npx prisma migrate deploy && npx tsx scripts/seed/seed-all.ts"
+    environment:
+      - DATABASE_URL=postgresql://n8n_user:n8ndevops@host.docker.internal:5432/n8n_db?schema=public
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no" # Only run once
+
+volumes:
+  uploads:
+    driver: local
