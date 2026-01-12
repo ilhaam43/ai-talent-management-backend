@@ -13,6 +13,9 @@ const applicationLastStatuses = [
     'Not Qualified',
     'On Progress',
     'Reschedule',
+    'PASSED',
+    'PARTIALLY PASSED',
+    'NOT PASSED',
 ];
 
 async function main() {
