@@ -9,11 +9,10 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const applicationLastStatuses = [
-    'PASSED',
-    'NOT PASSED',
-    'PARTIALLY PASSED',
-    'CANDIDATE REJECTED',
-    'RESCHEDULE',
+    'Qualified',
+    'Not Qualified',
+    'On Progress',
+    'Reschedule',
 ];
 
 async function main() {

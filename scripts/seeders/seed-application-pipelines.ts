@@ -9,14 +9,12 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const applicationPipelines = [
-    'AI SCREENING',
-    'ONLINE ASESSMENT',
-    'INTERVIEW USER 1',
-    'INTERVIEW USER 2',
-    'INTERVIEW DIRECTOR',
-    'MEDICAL CHECKUP',
-    'OFFERING',
-    'HIRED',
+    'Applied',
+    'Screening',
+    'Online Assessment',
+    'HR Interview',
+    'User Interview',
+    'Hired',
 ];
 
 async function main() {

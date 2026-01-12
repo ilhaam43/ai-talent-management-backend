@@ -138,7 +138,6 @@ export class CandidatesRepository {
           employmentEndedDate: item.employmentEndedDate
             ? new Date(item.employmentEndedDate)
             : null,
-          candidateId: candidate.id
         })),
       };
     }
@@ -155,7 +154,6 @@ export class CandidatesRepository {
           candidateEndedYearStudy: item.candidateEndedYearStudy
             ? new Date(item.candidateEndedYearStudy)
             : null,
-          candidateId: candidate.id
         })),
       };
     }
@@ -165,8 +163,7 @@ export class CandidatesRepository {
       updateData.skills = {
         deleteMany: {},
         create: skills.map((item) => ({
-          ...item,
-          candidateId: candidate.id,
+          candidateSkill: item.candidateSkill,
           candidateRating: item.candidateRating as CandidateRating
         })),
       };
@@ -177,14 +174,16 @@ export class CandidatesRepository {
       updateData.organizationExperiences = {
         deleteMany: {},
         create: organizationExperiences.map((item) => ({
-          ...item,
+          organizationName: item.organizationName,
+          role: item.role,
           organizationExperienceStartedDate: new Date(
             item.organizationExperienceStartedDate
           ),
           organizationExperienceEndedDate: item.organizationExperienceEndedDate
             ? new Date(item.organizationExperienceEndedDate)
             : null,
-          candidateId: candidate.id
+          organizationExperienceDescription: item.organizationExperienceDescription,
+          location: item.location
         })),
       };
     }
@@ -193,7 +192,7 @@ export class CandidatesRepository {
     if (families) {
       updateData.families = {
         deleteMany: {},
-        create: families.map((item) => ({ ...item, candidateId: candidate.id })),
+        create: families.map((item) => ({ ...item })),
       };
     }
 
@@ -201,7 +200,7 @@ export class CandidatesRepository {
     if (socialMedia) {
       updateData.socialMedia = {
         deleteMany: {},
-        create: socialMedia.map((item) => ({ ...item, candidateId: candidate.id })),
+        create: socialMedia.map((item) => ({ ...item })),
       };
     }
 
@@ -217,15 +216,19 @@ export class CandidatesRepository {
           certificationEndedDate: item.certificationEndedDate
             ? new Date(item.certificationEndedDate)
             : null,
-          candidateId: candidate.id
         })),
       };
     }
 
-    return this.prisma.candidate.update({
-      where: { id: candidate.id },
-      data: updateData,
-    });
+    try {
+      return await this.prisma.candidate.update({
+        where: { id: candidate.id },
+        data: updateData,
+      });
+    } catch (error) {
+      console.error('Error updating candidate:', error);
+      throw error;
+    }
   }
 
   async getSettings(id: string) {
