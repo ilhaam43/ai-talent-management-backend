@@ -15,6 +15,7 @@ import { CandidateApplicationsModule } from './candidate-applications/candidate-
 import { SkillsModule } from './skills/skills.module';
 import { ActionCenterModule } from './action-center/action-center.module';
 import { TalentPoolModule } from './talent-pool/talent-pool.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { TalentPoolModule } from './talent-pool/talent-pool.module';
     SkillsModule,
     ActionCenterModule,
     TalentPoolModule,
+    NotificationsModule,
   ],
   controllers: [TestRbacController],
   providers: [RolesGuard],

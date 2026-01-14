@@ -82,10 +82,17 @@ export class TalentPoolController {
     @Body() dto: UploadTalentPoolDto,
     @Request() req: any,
   ) {
-    const uploadedById = req.user?.employeeId;
+    const userId = req.user?.userId || req.user?.id;
     
-    if (!uploadedById) {
-      throw new BadRequestException('Employee ID not found in token. Only HR employees can upload.');
+    if (!userId) {
+      throw new BadRequestException('User ID not found in token.');
+    }
+
+    // Lookup employee from userId
+    const employee = await this.service.getEmployeeByUserId(userId);
+    
+    if (!employee) {
+      throw new BadRequestException('Employee profile not found. Only HR employees can upload.');
     }
 
     // Convert uploaded files to file info
@@ -94,7 +101,7 @@ export class TalentPoolController {
       fileName: file.originalname,
     }));
 
-    return this.service.createBatchUpload(uploadedById, dto, fileInfos);
+    return this.service.createBatchUpload(employee.id, dto, fileInfos);
   }
 
   // ============================================
@@ -216,6 +223,18 @@ export class TalentPoolController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all open job vacancies (for filtering)' })
   async getOpenJobs() {
+    return this.service.getOpenJobs();
+  }
+
+  /**
+   * PUBLIC endpoint for n8n to fetch open jobs (no auth required)
+   */
+  @Get('jobs/open/public')
+  @ApiOperation({ 
+    summary: 'Get all open job vacancies (PUBLIC - for n8n)',
+    description: 'This endpoint is used by n8n workflow to get all open jobs for talent pool screening. No authentication required.',
+  })
+  async getOpenJobsPublic() {
     return this.service.getOpenJobs();
   }
 }
