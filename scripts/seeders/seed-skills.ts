@@ -29,7 +29,7 @@ const skills = [
     'Market Research', 'Financial Basics', 'SWOT Analysis', 'Excel', 'Pivot Tables', 'PowerPoint', 'Google Analytics',
     'Corporate Strategy', 'M&A', 'Financial Modeling', 'Strategic Planning', 'Stakeholder Management', 'Tableau', 'PowerBI', 'SPSS', 'SAS',
     'Corporate Communications', 'Event Management', 'Microsoft Office', 'Zoom', 'Teams', 'Trello', 'Asana',
-    'Investor Relations', 'Crisis Management', 'Strategic Advisory', 'Bloomberg Terminal', 'Presentation Skills',
+    'Investor Relations', 'Crisis Management', 'Strategic Advisory', 'Bloomberg Terminal', 'Bloomberg', 'Presentation Skills',
 
     // Finance
     'GL Reconciliation', 'Budgeting', 'Tax Regulation', 'Brevet A/B', 'SAP', 'Oracle', 'Excel Macros',

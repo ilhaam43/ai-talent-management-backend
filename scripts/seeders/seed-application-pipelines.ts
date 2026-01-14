@@ -15,6 +15,9 @@ const applicationPipelines = [
     'HR Interview',
     'User Interview',
     'Hired',
+    'INTERVIEW USER 1',
+    'INTERVIEW USER 2',
+    'AI SCREENING',
 ];
 
 async function main() {
