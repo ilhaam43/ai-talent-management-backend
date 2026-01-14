@@ -132,6 +132,22 @@ export class TalentPoolRepository {
     });
   }
 
+  /**
+   * Find the FIRST pending queue item in a specific batch (for sequential processing)
+   */
+  async findNextPendingInBatch(batchId: string): Promise<any | null> {
+    return this.prisma.talentPoolQueue.findFirst({
+      where: {
+        batchId,
+        status: 'PENDING',
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        batch: true,
+      },
+    });
+  }
+
   async updateQueueItemStatus(
     id: string,
     status: any,

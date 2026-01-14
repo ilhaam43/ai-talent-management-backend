@@ -26,6 +26,7 @@ model User {
   candidates                Candidate[]
   candidateAddresses        CandidateAddress[]
   candidateCurrentAddresses CandidateCurrentAddress[]
+  notifications             Notification[]
 
   @@map("users")
 }
@@ -1016,4 +1017,31 @@ model TalentPoolScreening {
 
   @@unique([talentPoolCandidateId, jobVacancyId])
   @@map("talent_pool_screenings")
+}
+
+// ============================================
+// Notifications
+// ============================================
+
+enum NotificationType {
+  APPLICANT_QUALIFIED     // Candidate applied and qualified
+  JOB_VACANCY_CREATED     // New job vacancy created
+  JOB_VACANCY_UPDATED     // Job vacancy updated
+  TALENT_POOL_COMPLETE    // Talent Pool batch analysis complete
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  data      Json?            // Additional context (batchId, applicationId, jobId, etc.)
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
 }

@@ -2,21 +2,22 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { ConfigService } from '@nestjs/config';
 import { TalentPoolRepository } from './talent-pool.repository';
 import { PrismaService } from '../database/prisma.service';
-import { UploadTalentPoolDto, TalentPoolSourceTypeValue } from './dto/upload.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UploadTalentPoolDto } from './dto/upload.dto';
 import { N8nCallbackDto, AiMatchStatusValue } from './dto/callback.dto';
-import { UpdateHRStatusDto, BulkActionDto, TalentPoolHRStatusValue } from './dto/update-status.dto';
+import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
 import axios from 'axios';
 
 @Injectable()
 export class TalentPoolService {
   private readonly logger = new Logger(TalentPoolService.name);
   private readonly n8nWebhookUrl: string;
-  private readonly batchSize = 10; // Process 10 CVs per batch
 
   constructor(
     private repository: TalentPoolRepository,
     private prisma: PrismaService,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_TALENT_POOL_WEBHOOK_URL') || '';
   }
@@ -38,11 +39,11 @@ export class TalentPoolService {
       throw new BadRequestException('Maximum 50 files per upload');
     }
 
-    // Create batch record (cast DTO enum to Prisma enum)
+    // Create batch record
     const batch = await this.repository.createBatch({
       batchName: dto.batchName,
       uploadedById,
-      sourceType: dto.sourceType as any, // DTO enum to Prisma enum
+      sourceType: dto.sourceType as any,
       sourceUrl: dto.sourceUrl,
       totalFiles: files.length,
     });
@@ -53,8 +54,8 @@ export class TalentPoolService {
     // Update batch status to QUEUED
     await this.repository.updateBatchStatus(batch.id, 'QUEUED' as any);
 
-    // Start processing in background (don't await)
-    this.processNextBatch().catch((err) => {
+    // Start processing in background (don't await) - SEQUENTIAL: 1 CV at a time
+    this.processNextItemInBatch(batch.id).catch((err) => {
       this.logger.error(`Error starting batch processing: ${err.message}`);
     });
 
@@ -65,60 +66,75 @@ export class TalentPoolService {
   }
 
   // ============================================
-  // Queue Processing
+  // SEQUENTIAL Queue Processing (1 CV at a time)
   // ============================================
 
-  async processNextBatch(): Promise<void> {
-    // Get pending queue items (10 at a time)
-    const queueItems = await this.repository.findPendingQueueItems(this.batchSize);
+  /**
+   * Process next pending item in a specific batch (SEQUENTIAL)
+   * Sends 1 CV at a time to n8n
+   */
+  async processNextItemInBatch(batchId: string): Promise<void> {
+    // Get FIRST pending item in this batch
+    const item = await this.repository.findNextPendingInBatch(batchId);
 
-    if (queueItems.length === 0) {
-      this.logger.log('No pending queue items to process');
+    if (!item) {
+      // No more pending items - check if batch is complete
+      await this.checkBatchCompletionAndNotify(batchId);
       return;
     }
 
-    const queueItemIds = queueItems.map((q) => q.id);
-    const batchIds = [...new Set(queueItems.map((q) => q.batchId))];
+    // Update batch status to PROCESSING if not already
+    await this.repository.updateBatchStatus(batchId, 'PROCESSING' as any);
 
-    // Mark all items as PROCESSING
-    await this.repository.markQueueItemsProcessing(queueItemIds);
+    // Mark this single item as PROCESSING
+    await this.repository.updateQueueItemStatus(item.id, 'PROCESSING' as any);
 
-    // Update batch statuses to PROCESSING
-    for (const batchId of batchIds) {
-      await this.repository.updateBatchStatus(batchId, 'PROCESSING' as any);
-    }
+    // Get current progress for logging
+    const batch = await this.repository.findBatchById(batchId);
+    const currentPosition = (batch?.processedFiles || 0) + (batch?.failedFiles || 0) + 1;
+    const totalFiles = batch?.totalFiles || 1;
 
-    // Send to n8n for processing
+    this.logger.log(`[Batch ${batchId.substring(0, 8)}] Processing CV ${currentPosition}/${totalFiles}: ${item.fileName}`);
+
+    // Send ONLY this 1 CV to n8n
     if (this.n8nWebhookUrl) {
       try {
         const payload = {
-          queueItems: queueItems.map((q) => ({
-            queueItemId: q.id,
-            batchId: q.batchId,
-            fileUrl: q.fileUrl,
-            fileName: q.fileName,
-          })),
+          queueItems: [{
+            queueItemId: item.id,
+            batchId: item.batchId,
+            fileUrl: item.fileUrl,
+            fileName: item.fileName,
+          }],
         };
 
-        this.logger.log(`Sending ${queueItems.length} items to n8n for processing`);
-        
         await axios.post(this.n8nWebhookUrl, payload, {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 300000, // 5 min timeout for batch
+          timeout: 120000, // 2 min timeout per CV
         });
+
+        this.logger.log(`[Batch ${batchId.substring(0, 8)}] Sent to n8n: ${item.fileName}`);
       } catch (error: any) {
         this.logger.error(`Failed to send to n8n: ${error.message}`);
-        // Mark items as FAILED
-        for (const id of queueItemIds) {
-          await this.repository.updateQueueItemStatus(
-            id,
-            'FAILED' as any,
-            `n8n error: ${error.message}`,
-          );
-        }
+        
+        // Mark this item as FAILED
+        await this.repository.updateQueueItemStatus(item.id, 'FAILED' as any, `n8n error: ${error.message}`);
+        await this.repository.incrementBatchProgress(batchId, false);
+        
+        // Continue with next item
+        this.processNextItemInBatch(batchId).catch((err) => {
+          this.logger.error(`Error processing next item: ${err.message}`);
+        });
       }
     } else {
       this.logger.warn('N8N_TALENT_POOL_WEBHOOK_URL not configured');
+      await this.repository.updateQueueItemStatus(item.id, 'FAILED' as any, 'n8n webhook not configured');
+      await this.repository.incrementBatchProgress(batchId, false);
+      
+      // Continue with next item
+      this.processNextItemInBatch(batchId).catch((err) => {
+        this.logger.error(`Error processing next item: ${err.message}`);
+      });
     }
   }
 
@@ -131,17 +147,20 @@ export class TalentPoolService {
 
     if (!success || !candidateData) {
       // Mark queue item as failed
-      await this.repository.updateQueueItemStatus(
-        queueItemId,
-        'FAILED' as any,
-        errorMessage || 'Unknown error',
-      );
+      await this.repository.updateQueueItemStatus(queueItemId, 'FAILED' as any, errorMessage || 'Unknown error');
       await this.repository.incrementBatchProgress(batchId, false);
-      this.checkBatchCompletion(batchId);
+      
+      // Process next CV in batch (SEQUENTIAL)
+      this.processNextItemInBatch(batchId).catch((err) => {
+        this.logger.error(`Error processing next item: ${err.message}`);
+      });
+      
       return { success: false };
     }
 
     // Check for duplicate by email
+    let candidateId: string | undefined;
+    
     if (candidateData.email) {
       const existingCandidate = await this.repository.findCandidateByEmail(candidateData.email);
       
@@ -158,7 +177,7 @@ export class TalentPoolService {
               talentPoolCandidateId: existingCandidate.id,
               jobVacancyId: s.jobVacancyId,
               fitScore: s.fitScore,
-              aiMatchStatus: s.aiMatchStatus as any, // DTO enum to Prisma enum
+              aiMatchStatus: s.aiMatchStatus as any,
               aiInsight: s.aiInsight,
               aiInterview: s.aiInterview,
               aiCoreValue: s.aiCoreValue,
@@ -170,7 +189,15 @@ export class TalentPoolService {
         // Mark as duplicate but processed
         await this.repository.updateQueueItemStatus(queueItemId, 'DUPLICATE' as any);
         await this.repository.incrementBatchProgress(batchId, true);
-        this.checkBatchCompletion(batchId);
+        
+        // Check if email exists in Candidate table for real applications
+        await this.checkAndCreateCandidateApplications(candidateData.email, newScreenings);
+        
+        // Process next CV (SEQUENTIAL)
+        this.processNextItemInBatch(batchId).catch((err) => {
+          this.logger.error(`Error processing next item: ${err.message}`);
+        });
+        
         return { success: true, candidateId: existingCandidate.id };
       }
     }
@@ -192,6 +219,8 @@ export class TalentPoolService {
       cvFileName: candidateData.cvFileName,
     });
 
+    candidateId = candidate.id;
+
     // Create screenings (only for scores >= 65 or MATCH/STRONG_MATCH)
     const validScreenings = candidateData.screenings.filter(
       (s) => s.fitScore >= 65 || s.aiMatchStatus !== AiMatchStatusValue.NOT_MATCH,
@@ -203,7 +232,7 @@ export class TalentPoolService {
           talentPoolCandidateId: candidate.id,
           jobVacancyId: s.jobVacancyId,
           fitScore: s.fitScore,
-          aiMatchStatus: s.aiMatchStatus as any, // DTO enum to Prisma enum
+          aiMatchStatus: s.aiMatchStatus as any,
           aiInsight: s.aiInsight,
           aiInterview: s.aiInterview,
           aiCoreValue: s.aiCoreValue,
@@ -211,32 +240,165 @@ export class TalentPoolService {
       );
     }
 
+    // Check if email exists in Candidate table for real applications
+    if (candidateData.email) {
+      await this.checkAndCreateCandidateApplications(candidateData.email, validScreenings);
+    }
+
     // Update queue item status
     await this.repository.updateQueueItemStatus(queueItemId, 'COMPLETED' as any);
     await this.repository.incrementBatchProgress(batchId, true);
-    this.checkBatchCompletion(batchId);
 
-    return { success: true, candidateId: candidate.id };
+    // Process next CV (SEQUENTIAL)
+    this.processNextItemInBatch(batchId).catch((err) => {
+      this.logger.error(`Error processing next item: ${err.message}`);
+    });
+
+    return { success: true, candidateId };
   }
 
-  private async checkBatchCompletion(batchId: string): Promise<void> {
+  /**
+   * Check if email exists in Candidate table and create CandidateApplication
+   */
+  private async checkAndCreateCandidateApplications(
+    email: string,
+    screenings: { jobVacancyId: string; fitScore: number; aiMatchStatus: string; aiInsight?: string; aiInterview?: string; aiCoreValue?: string }[],
+  ) {
+    // Find candidate by email
+    const candidate = await this.prisma.candidate.findFirst({
+      where: {
+        user: { email: email },
+      },
+      select: { id: true },
+    });
+
+    if (!candidate) {
+      this.logger.log(`No registered candidate found for email: ${email}`);
+      return;
+    }
+
+    this.logger.log(`Found registered candidate ${candidate.id} for email: ${email}`);
+
+    // Get candidate's salary (or create default)
+    let candidateSalary = await this.prisma.candidateSalary.findFirst({
+      where: { candidateId: candidate.id },
+    });
+
+    if (!candidateSalary) {
+      candidateSalary = await this.prisma.candidateSalary.create({
+        data: { candidateId: candidate.id },
+      });
+    }
+
+    // Get pipeline stages and statuses
+    const screeningStage = await this.prisma.applicationPipeline.findFirst({
+      where: { applicationPipeline: 'Screening' },
+    });
+    const qualifiedStatus = await this.prisma.applicationLastStatus.findFirst({
+      where: { applicationLastStatus: 'Qualified' },
+    });
+    const qualifiedPipelineStatus = await this.prisma.applicationPipelineStatus.findFirst({
+      where: { applicationPipelineStatus: 'Qualified' },
+    });
+    const appliedStage = await this.prisma.applicationPipeline.findFirst({
+      where: { applicationPipeline: 'Applied' },
+    });
+
+    if (!screeningStage || !qualifiedStatus || !qualifiedPipelineStatus || !appliedStage) {
+      this.logger.warn('Required pipeline stages/statuses not found - skipping application creation');
+      return;
+    }
+
+    // Create CandidateApplication for each qualified screening
+    for (const screening of screenings) {
+      if (screening.fitScore < 65 && screening.aiMatchStatus === 'NOT_MATCH') {
+        continue; // Skip unqualified
+      }
+
+      // Check if application already exists
+      const existingApp = await this.prisma.candidateApplication.findFirst({
+        where: {
+          candidateId: candidate.id,
+          jobVacancyId: screening.jobVacancyId,
+        },
+      });
+
+      if (existingApp) {
+        this.logger.log(`Application already exists for job ${screening.jobVacancyId}`);
+        continue;
+      }
+
+      // Create application
+      const application = await this.prisma.candidateApplication.create({
+        data: {
+          candidateId: candidate.id,
+          jobVacancyId: screening.jobVacancyId,
+          candidateSalaryId: candidateSalary.id,
+          applicationLatestStatusId: qualifiedStatus.id,
+          applicationPipelineId: screeningStage.id,
+          fitScore: screening.fitScore,
+          aiInsight: screening.aiInsight,
+          aiInterview: screening.aiInterview,
+          aiCoreValue: screening.aiCoreValue,
+          aiMatchStatus: screening.aiMatchStatus as any,
+          submissionDate: new Date(),
+        },
+      });
+
+      // Create pipeline entries
+      await this.prisma.candidateApplicationPipeline.createMany({
+        data: [
+          {
+            candidateApplicationId: application.id,
+            applicationPipelineId: appliedStage.id,
+            applicationPipelineStatusId: qualifiedPipelineStatus.id,
+            notes: 'Automatically created from Talent Pool screening',
+          },
+          {
+            candidateApplicationId: application.id,
+            applicationPipelineId: screeningStage.id,
+            applicationPipelineStatusId: qualifiedPipelineStatus.id,
+            notes: 'Automatically qualified based on Talent Pool AI screening',
+          },
+        ],
+      });
+
+      this.logger.log(`Created CandidateApplication for job ${screening.jobVacancyId}`);
+    }
+  }
+
+  /**
+   * Check if batch is complete and notify HR
+   */
+  private async checkBatchCompletionAndNotify(batchId: string): Promise<void> {
     const batch = await this.repository.findBatchById(batchId);
     if (!batch) return;
 
     const totalProcessed = batch.processedFiles + batch.failedFiles;
     
     if (totalProcessed >= batch.totalFiles) {
-      const status = batch.failedFiles > 0
-        ? 'PARTIALLY_FAILED'
-        : 'COMPLETED';
+      const status = batch.failedFiles > 0 ? 'PARTIALLY_FAILED' : 'COMPLETED';
       
       await this.repository.updateBatchStatus(batchId, status as any);
       this.logger.log(`Batch ${batchId} completed with status: ${status}`);
 
-      // Check if there are more pending items to process
-      this.processNextBatch().catch((err) => {
-        this.logger.error(`Error processing next batch: ${err.message}`);
+      // Get uploader's userId for notification
+      const employee = await this.prisma.employee.findUnique({
+        where: { id: batch.uploadedById },
+        select: { userId: true },
       });
+
+      if (employee) {
+        // Send notification to HR who uploaded
+        await this.notificationsService.notifyTalentPoolComplete(
+          batchId,
+          batch.batchName,
+          batch.totalFiles,
+          batch.processedFiles,
+          batch.failedFiles,
+          employee.userId,
+        );
+      }
     }
   }
 
@@ -288,7 +450,7 @@ export class TalentPoolService {
 
     return this.repository.updateCandidateHRStatus(
       id,
-      dto.hrStatus as any, // DTO enum to Prisma enum
+      dto.hrStatus as any,
       dto.hrNotes,
       dto.processedToStep,
     );
@@ -297,13 +459,13 @@ export class TalentPoolService {
   async bulkAction(dto: BulkActionDto): Promise<{ count: number }> {
     return this.repository.bulkUpdateCandidateStatus(
       dto.candidateIds,
-      dto.hrStatus as any, // DTO enum to Prisma enum
+      dto.hrStatus as any,
       dto.processedToStep,
     );
   }
 
   // ============================================
-  // Get Open Jobs (for n8n)
+  // Get Open Jobs (for n8n - PUBLIC)
   // ============================================
 
   async getOpenJobs(): Promise<any[]> {
@@ -319,6 +481,16 @@ export class TalentPoolService {
           include: { skill: true },
         },
       },
+    });
+  }
+
+  /**
+   * Get employee by userId (for HR lookup)
+   */
+  async getEmployeeByUserId(userId: string): Promise<{ id: string } | null> {
+    return this.prisma.employee.findFirst({
+      where: { userId },
+      select: { id: true },
     });
   }
 }
