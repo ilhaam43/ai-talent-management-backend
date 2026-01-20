@@ -9,6 +9,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const applicationLastStatuses = [
+    'Applied',
     'Qualified',
     'Not Qualified',
     'On Progress',

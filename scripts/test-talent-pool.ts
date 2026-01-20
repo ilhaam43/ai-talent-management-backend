@@ -24,6 +24,7 @@ const TEST_CV_FILES = [
   path.join(__dirname, '..', 'test-files', "CV Athoillah updated'23.pdf"),
   path.join(__dirname, '..', 'test-files', 'Muhammad-Reza-Azhar-Priyadi-Resume.pdf'),
   path.join(__dirname, '..', 'test-files', 'CV_Aditiya Purwansyah.pdf'),
+  path.join(__dirname, '..', 'test-files', 'Ilhaam Akmal Abdjul-resume (5) conv.pdf'),
 ];
 
 let authToken: string;

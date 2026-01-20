@@ -25,6 +25,7 @@ import { TalentPoolService } from './talent-pool.service';
 import { UploadTalentPoolDto } from './dto/upload.dto';
 import { N8nCallbackDto } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
+import { ConvertCandidateDto } from './dto/convert-candidate.dto';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -214,6 +215,52 @@ export class TalentPoolController {
   }
 
   // ============================================
+  // Convert to Active Pipeline (NEW)
+  // ============================================
+
+  @Post('convert/:id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('HUMAN RESOURCES', 'ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Convert talent pool candidate to active recruitment pipeline',
+    description: 'Sets isTalentPool=false, updates pipeline stage, and sends password setup email.',
+  })
+  async convertToActivePipeline(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ConvertCandidateDto,
+  ) {
+    return this.service.convertToActivePipeline(id, dto.targetPipelineStage);
+  }
+
+  // ============================================
+  // Unified Candidate Query Endpoints (NEW)
+  // ============================================
+
+  @Get('unified')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('HUMAN RESOURCES', 'ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'List talent pool candidates from unified Candidate table',
+    description: 'Returns candidates where isTalentPool=true with full profile data',
+  })
+  @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiQuery({ name: 'take', required: false, type: Number })
+  @ApiQuery({ name: 'batchId', required: false, type: String })
+  async getUnifiedCandidates(
+    @Query('skip') skip?: number,
+    @Query('take') take?: number,
+    @Query('batchId') batchId?: string,
+  ) {
+    return this.service.getUnifiedTalentPoolCandidates({
+      skip: skip || 0,
+      take: take || 20,
+      batchId,
+    });
+  }
+
+  // ============================================
   // Utility Endpoints
   // ============================================
 
@@ -238,3 +285,4 @@ export class TalentPoolController {
     return this.service.getOpenJobs();
   }
 }
+
