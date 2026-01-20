@@ -1,12 +1,16 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CandidateRating } from '@prisma/client';
 import { TalentPoolRepository } from './talent-pool.repository';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EmailService } from '../email/email.service';
 import { UploadTalentPoolDto } from './dto/upload.dto';
 import { N8nCallbackDto, AiMatchStatusValue } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
 import axios from 'axios';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class TalentPoolService {
@@ -18,6 +22,7 @@ export class TalentPoolService {
     private prisma: PrismaService,
     private configService: ConfigService,
     private notificationsService: NotificationsService,
+    private emailService: EmailService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_TALENT_POOL_WEBHOOK_URL') || '';
   }
@@ -158,40 +163,27 @@ export class TalentPoolService {
       return { success: false };
     }
 
-    // Check for duplicate by email
     let candidateId: string | undefined;
     
+    // Check for duplicate in UNIFIED Candidate table by email
     if (candidateData.email) {
-      const existingCandidate = await this.repository.findCandidateByEmail(candidateData.email);
+      const existingCandidate = await this.prisma.candidate.findFirst({
+        where: { candidateEmail: candidateData.email },
+        select: { id: true, userId: true },
+      });
       
       if (existingCandidate) {
-        // Add new screenings for jobs not yet screened
-        const existingJobIds = await this.repository.getScreenedJobIds(existingCandidate.id);
-        const newScreenings = candidateData.screenings.filter(
-          (s) => !existingJobIds.includes(s.jobVacancyId),
+        this.logger.log(`Duplicate candidate found: ${candidateData.email}, updating screenings`);
+        
+        // Create CandidateApplications for new job screenings
+        await this.createCandidateApplicationsFromScreenings(
+          existingCandidate.id,
+          candidateData.screenings,
         );
-
-        if (newScreenings.length > 0) {
-          await this.repository.createManyScreenings(
-            newScreenings.map((s) => ({
-              talentPoolCandidateId: existingCandidate.id,
-              jobVacancyId: s.jobVacancyId,
-              fitScore: s.fitScore,
-              aiMatchStatus: s.aiMatchStatus as any,
-              aiInsight: s.aiInsight,
-              aiInterview: s.aiInterview,
-              aiCoreValue: s.aiCoreValue,
-            })),
-          );
-          this.logger.log(`Added ${newScreenings.length} new screenings for existing candidate ${existingCandidate.id}`);
-        }
-
+        
         // Mark as duplicate but processed
         await this.repository.updateQueueItemStatus(queueItemId, 'DUPLICATE' as any);
         await this.repository.incrementBatchProgress(batchId, true);
-        
-        // Check if email exists in Candidate table for real applications
-        await this.checkAndCreateCandidateApplications(candidateData.email, newScreenings);
         
         // Process next CV (SEQUENTIAL)
         this.processNextItemInBatch(batchId).catch((err) => {
@@ -202,47 +194,42 @@ export class TalentPoolService {
       }
     }
 
-    // Create new candidate
-    const candidate = await this.repository.createCandidate({
-      batchId,
-      fullName: candidateData.fullName,
-      email: candidateData.email,
-      phone: candidateData.phone,
-      city: candidateData.city,
-      linkedin: candidateData.linkedin,
-      educationData: candidateData.education,
-      workExperienceData: candidateData.workExperience,
-      skillsData: candidateData.skills,
-      certificationsData: candidateData.certifications,
-      organizationData: candidateData.organizationExperience,
-      cvFileUrl: candidateData.cvFileUrl,
-      cvFileName: candidateData.cvFileName,
-    });
+    // Create UNIFIED candidate (User + Candidate + Profile records)
+    try {
+      const result = await this.createUnifiedTalentPoolCandidate(batchId, {
+        fullName: candidateData.fullName,
+        email: candidateData.email,
+        phone: candidateData.phone,
+        city: candidateData.city,
+        linkedin: candidateData.linkedin,
+        education: candidateData.education,
+        workExperience: candidateData.workExperience,
+        skills: candidateData.skills,
+        certifications: candidateData.certifications,
+        organizationExperience: candidateData.organizationExperience,
+        cvFileUrl: candidateData.cvFileUrl,
+        cvFileName: candidateData.cvFileName,
+      });
 
-    candidateId = candidate.id;
+      candidateId = result.candidateId;
+      this.logger.log(`Created unified candidate: ${candidateId}`);
 
-    // Create screenings (only for scores >= 65 or MATCH/STRONG_MATCH)
-    const validScreenings = candidateData.screenings.filter(
-      (s) => s.fitScore >= 65 || s.aiMatchStatus !== AiMatchStatusValue.NOT_MATCH,
-    );
+      // Create CandidateApplications from AI screenings (for qualified matches)
+      await this.createCandidateApplicationsFromScreenings(candidateId, candidateData.screenings);
 
-    if (validScreenings.length > 0) {
-      await this.repository.createManyScreenings(
-        validScreenings.map((s) => ({
-          talentPoolCandidateId: candidate.id,
-          jobVacancyId: s.jobVacancyId,
-          fitScore: s.fitScore,
-          aiMatchStatus: s.aiMatchStatus as any,
-          aiInsight: s.aiInsight,
-          aiInterview: s.aiInterview,
-          aiCoreValue: s.aiCoreValue,
-        })),
-      );
-    }
-
-    // Check if email exists in Candidate table for real applications
-    if (candidateData.email) {
-      await this.checkAndCreateCandidateApplications(candidateData.email, validScreenings);
+    } catch (error: any) {
+      this.logger.error(`Failed to create unified candidate: ${error.message}`);
+      
+      // Mark queue item as failed
+      await this.repository.updateQueueItemStatus(queueItemId, 'FAILED' as any, error.message);
+      await this.repository.incrementBatchProgress(batchId, false);
+      
+      // Process next CV (SEQUENTIAL)
+      this.processNextItemInBatch(batchId).catch((err) => {
+        this.logger.error(`Error processing next item: ${err.message}`);
+      });
+      
+      return { success: false };
     }
 
     // Update queue item status
@@ -255,6 +242,97 @@ export class TalentPoolService {
     });
 
     return { success: true, candidateId };
+  }
+
+  /**
+   * Create CandidateApplication records from n8n screening results
+   * Only creates for qualified matches (score >= 65 or MATCH/STRONG_MATCH)
+   */
+  private async createCandidateApplicationsFromScreenings(
+    candidateId: string,
+    screenings: { jobVacancyId: string; fitScore: number; aiMatchStatus: string; aiInsight?: string; aiInterview?: string; aiCoreValue?: string }[],
+  ): Promise<void> {
+    // Filter for qualified matches only
+    const qualifiedScreenings = screenings.filter(
+      (s) => s.fitScore >= 65 || s.aiMatchStatus !== AiMatchStatusValue.NOT_MATCH,
+    );
+
+    if (qualifiedScreenings.length === 0) {
+      this.logger.log(`No qualified screenings for candidate ${candidateId}`);
+      return;
+    }
+
+    // Get existing applications to avoid duplicates
+    const existingApps = await this.prisma.candidateApplication.findMany({
+      where: { candidateId },
+      select: { jobVacancyId: true },
+    });
+    const existingJobIds = new Set(existingApps.map((a) => a.jobVacancyId));
+
+    const newScreenings = qualifiedScreenings.filter((s) => !existingJobIds.has(s.jobVacancyId));
+
+    if (newScreenings.length === 0) {
+      this.logger.log(`All screenings already exist for candidate ${candidateId}`);
+      return;
+    }
+
+    // Get required lookup values
+    const [defaultSalary, appliedStatus, screeningPipeline, qualifiedPipelineStatus] = await Promise.all([
+      this.prisma.candidateSalary.findFirst({ where: { candidateId } }),
+      this.prisma.applicationLastStatus.findFirst({ where: { applicationLastStatus: 'Applied' } }),
+      this.prisma.applicationPipeline.findFirst({ where: { applicationPipeline: 'Screening' } }),
+      this.prisma.applicationPipelineStatus.findFirst({ where: { applicationPipelineStatus: 'Qualified' } }),
+    ]);
+
+    // Create CandidateSalary if not exists
+    let salaryId = defaultSalary?.id;
+    if (!salaryId) {
+      const newSalary = await this.prisma.candidateSalary.create({
+        data: {
+          candidateId,
+          currentSalary: 0,
+          expectationSalary: 0,
+        },
+      });
+      salaryId = newSalary.id;
+    }
+
+    if (!appliedStatus || !screeningPipeline || !qualifiedPipelineStatus) {
+      this.logger.warn('Missing application status/pipeline records for CandidateApplication creation');
+      return;
+    }
+
+    // Create applications
+    for (const screening of newScreenings) {
+      try {
+        await this.prisma.candidateApplication.create({
+          data: {
+            candidateId,
+            jobVacancyId: screening.jobVacancyId,
+            candidateSalaryId: salaryId,
+            applicationLatestStatusId: appliedStatus.id,
+            applicationPipelineId: screeningPipeline.id,
+            fitScore: screening.fitScore,
+            aiMatchStatus: screening.aiMatchStatus as any,
+            aiInsight: screening.aiInsight,
+            aiInterview: screening.aiInterview,
+            aiCoreValue: screening.aiCoreValue,
+            submissionDate: new Date(),
+            candidateApplicationPipelines: {
+              create: [{
+                applicationPipelineId: screeningPipeline.id,
+                applicationPipelineStatusId: qualifiedPipelineStatus.id,
+                notes: 'Auto-qualified from Talent Pool AI screening',
+              }],
+            },
+          },
+        });
+        
+        this.logger.log(`Created CandidateApplication for job ${screening.jobVacancyId}`);
+      } catch (e: any) {
+        this.logger.warn(`Failed to create application for job ${screening.jobVacancyId}: ${e.message}`);
+      }
+    }
   }
 
   /**
@@ -403,6 +481,323 @@ export class TalentPoolService {
   }
 
   // ============================================
+  // Unified Talent Pool Candidate Creation (NEW)
+  // ============================================
+
+  /**
+   * Create a unified Candidate record from talent pool n8n callback
+   * Creates: User (with passwordSetRequired=true) + Candidate (isTalentPool=true) + Profile records
+   */
+  async createUnifiedTalentPoolCandidate(
+    batchId: string,
+    candidateData: {
+      fullName: string;
+      email?: string;
+      phone?: string;
+      city?: string;
+      linkedin?: string;
+      education?: any[];
+      workExperience?: any[];
+      skills?: string[];
+      certifications?: any[];
+      organizationExperience?: any[];
+      cvFileUrl: string;
+      cvFileName: string;
+    },
+  ): Promise<{ userId: string; candidateId: string }> {
+    // Generate random password (user will set their own via email link)
+    const randomPassword = crypto.randomBytes(32).toString('hex');
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+    // Generate email if not provided (use a placeholder)
+    const candidateEmail = candidateData.email || `talent-pool-${crypto.randomBytes(8).toString('hex')}@placeholder.local`;
+
+    // Create User + Candidate in transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Create User with passwordSetRequired=true
+      const user = await tx.user.create({
+        data: {
+          email: candidateEmail,
+          name: candidateData.fullName,
+          password: hashedPassword,
+          passwordSetRequired: true,
+        },
+      });
+
+      // 2. Create Candidate with isTalentPool=true
+      const candidate = await tx.candidate.create({
+        data: {
+          userId: user.id,
+          isTalentPool: true,
+          talentPoolBatchId: batchId,
+          candidateFullname: candidateData.fullName,
+          candidateEmail: candidateData.email || null,
+          phoneNumber: candidateData.phone || null,
+          cityDomicile: candidateData.city || null,
+          linkedInUrl: candidateData.linkedin || null,
+          cvFileUrl: candidateData.cvFileUrl,
+          cvFileName: candidateData.cvFileName,
+        },
+      });
+
+      return { user, candidate };
+    });
+
+    // 3. Create profile records (education, work experience, skills, etc.)
+    await this.createCandidateProfileRecords(result.candidate.id, candidateData);
+
+    this.logger.log(`Created unified talent pool candidate: ${result.candidate.id} (User: ${result.user.id})`);
+
+    return { userId: result.user.id, candidateId: result.candidate.id };
+  }
+
+  /**
+   * Create candidate profile records from n8n parsed data
+   */
+  private async createCandidateProfileRecords(
+    candidateId: string,
+    data: {
+      education?: any[];
+      workExperience?: any[];
+      skills?: string[];
+      certifications?: any[];
+      organizationExperience?: any[];
+    },
+  ): Promise<void> {
+    // Get default education level
+    const defaultEducationLevel = await this.prisma.candidateLastEducation.findFirst();
+
+    // Create education records
+    if (data.education && data.education.length > 0) {
+      for (const edu of data.education) {
+        try {
+          await this.prisma.candidateEducation.create({
+            data: {
+              candidateId,
+              candidateLastEducationId: defaultEducationLevel?.id || '',
+              candidateSchool: edu.institution || edu.university || 'Unknown',
+              candidateMajor: edu.major || edu.degree || null,
+              candidateGpa: edu.gpa ? parseFloat(edu.gpa) : null,
+              candidateCountry: 'Indonesia',
+              candidateStartedYearStudy: edu.startYear ? new Date(`${edu.startYear}-01-01`) : null,
+              candidateEndedYearStudy: edu.endYear ? new Date(`${edu.endYear}-12-31`) : null,
+            },
+          });
+        } catch (e: any) {
+          this.logger.warn(`Failed to create education record: ${e.message}`);
+        }
+      }
+    }
+
+    // Create work experience records
+    if (data.workExperience && data.workExperience.length > 0) {
+      for (const work of data.workExperience) {
+        try {
+          await this.prisma.candidateWorkExperience.create({
+            data: {
+              candidateId,
+              companyName: work.company || 'Unknown',
+              jobTitle: work.position || work.title || 'Unknown',
+              fieldOfWork: work.fieldOfWork || 'General',
+              industry: work.industry || 'General',
+              employmentStartedDate: work.startDate ? new Date(work.startDate) : new Date(),
+              employmentEndedDate: work.endDate ? new Date(work.endDate) : null,
+              workExperienceDescription: work.description || null,
+              country: 'Indonesia',
+              referenceName: 'N/A',
+              referencePhoneNumber: 'N/A',
+              referenceRelationship: 'N/A',
+            },
+          });
+        } catch (e: any) {
+          this.logger.warn(`Failed to create work experience record: ${e.message}`);
+        }
+      }
+    }
+
+    // Create skill records
+    if (data.skills && data.skills.length > 0) {
+      for (const skill of data.skills) {
+        try {
+          await this.prisma.candidateSkill.create({
+            data: {
+              candidateId,
+              candidateSkill: skill,
+              candidateRating: CandidateRating.THREE, // Default rating
+            },
+          });
+        } catch (e: any) {
+          this.logger.warn(`Failed to create skill record: ${e.message}`);
+        }
+      }
+    }
+
+    // Create certification records
+    if (data.certifications && data.certifications.length > 0) {
+      for (const cert of data.certifications) {
+        try {
+          await this.prisma.candidateCertification.create({
+            data: {
+              candidateId,
+              certificationTitle: cert.name || cert.title || 'Unknown',
+              institutionName: cert.issuer || cert.institution || 'Unknown',
+              certificationStartDate: cert.date ? new Date(cert.date) : null,
+            },
+          });
+        } catch (e: any) {
+          this.logger.warn(`Failed to create certification record: ${e.message}`);
+        }
+      }
+    }
+
+    // Create organization experience records
+    if (data.organizationExperience && data.organizationExperience.length > 0) {
+      for (const org of data.organizationExperience) {
+        try {
+          await this.prisma.candidateOrganizationExperience.create({
+            data: {
+              candidateId,
+              organizationName: org.organization || org.name || 'Unknown',
+              role: org.role || org.position || 'Member',
+              organizationExperienceStartedDate: org.startDate ? new Date(org.startDate) : new Date(),
+              organizationExperienceEndedDate: org.endDate ? new Date(org.endDate) : null,
+            },
+          });
+        } catch (e: any) {
+          this.logger.warn(`Failed to create organization record: ${e.message}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert talent pool candidate to active recruitment pipeline
+   * Sets isTalentPool=false, updates pipeline stage, and sends password setup email
+   */
+  async convertToActivePipeline(
+    candidateId: string,
+    targetPipelineStage: 'HR Interview' | 'User Interview' | 'Online Assessment',
+  ): Promise<{
+    success: boolean;
+    resetToken: string;
+    resetLink: string;
+    message: string;
+  }> {
+    // Find candidate with isTalentPool=true
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: candidateId },
+      include: { 
+        user: true,
+        applications: true,
+      },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException(`Candidate ${candidateId} not found`);
+    }
+
+    if (!candidate.isTalentPool) {
+      throw new BadRequestException('Candidate is not from talent pool');
+    }
+
+    // Get target pipeline stage
+    const targetPipeline = await this.prisma.applicationPipeline.findFirst({
+      where: { applicationPipeline: targetPipelineStage },
+    });
+
+    if (!targetPipeline) {
+      throw new NotFoundException(`Pipeline stage "${targetPipelineStage}" not found`);
+    }
+
+    // Get "On Progress" status for the pipeline
+    const onProgressStatus = await this.prisma.applicationPipelineStatus.findFirst({
+      where: { applicationPipelineStatus: 'On Progress' },
+    });
+
+    if (!onProgressStatus) {
+      throw new NotFoundException('Pipeline status "On Progress" not found');
+    }
+
+    // Generate password reset token (24 hours validity)
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    // Update in transaction
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Set isTalentPool = false
+      await tx.candidate.update({
+        where: { id: candidateId },
+        data: { isTalentPool: false },
+      });
+
+      // 2. Update user with reset token
+      await tx.user.update({
+        where: { id: candidate.userId },
+        data: {
+          passwordResetToken: resetToken,
+          passwordResetExpiry: resetExpiry,
+        },
+      });
+
+      // 3. Update all applications to target pipeline stage
+      for (const application of candidate.applications) {
+        await tx.candidateApplication.update({
+          where: { id: application.id },
+          data: {
+            applicationPipelineId: targetPipeline.id,
+          },
+        });
+
+        // Add pipeline history record
+        await tx.candidateApplicationPipeline.create({
+          data: {
+            candidateApplicationId: application.id,
+            applicationPipelineId: targetPipeline.id,
+            applicationPipelineStatusId: onProgressStatus.id,
+            notes: `Converted from Talent Pool to ${targetPipelineStage}`,
+          },
+        });
+      }
+    });
+
+    // Build reset link
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+    const resetLink = `${frontendUrl}/set-password?token=${resetToken}`;
+
+    this.logger.log(`Converted talent pool candidate ${candidateId} to ${targetPipelineStage}`);
+
+    // Send talent pool welcome email with profile completion reminder
+    try {
+      // Get job title from first application if available
+      const jobTitle = candidate.applications[0] ? 
+        (await this.prisma.jobVacancy.findUnique({
+          where: { id: candidate.applications[0].jobVacancyId },
+          include: { jobRole: true },
+        }))?.jobRole?.jobRoleName : undefined;
+
+      await this.emailService.sendTalentPoolWelcomeEmail(
+        candidate.user.email,
+        candidate.candidateFullname || 'Candidate',
+        resetToken,
+        targetPipelineStage,
+        jobTitle,
+      );
+      
+      this.logger.log(`Talent pool welcome email sent to ${candidate.user.email}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send email: ${error.message}`);
+      // Don't throw - candidate is already converted, just log the error
+    }
+
+    return {
+      success: true,
+      resetToken,
+      resetLink,
+      message: `Candidate converted to ${targetPipelineStage}. Password setup email sent.`,
+    };
+  }
+
+  // ============================================
   // Query Methods
   // ============================================
 
@@ -436,6 +831,72 @@ export class TalentPoolService {
       throw new NotFoundException(`Candidate ${id} not found`);
     }
     return candidate;
+  }
+
+  /**
+   * Get unified talent pool candidates from Candidate table
+   * Returns candidates where isTalentPool=true with full profile data
+   */
+  async getUnifiedTalentPoolCandidates(params: {
+    skip?: number;
+    take?: number;
+    batchId?: string;
+  }): Promise<{ candidates: any[]; total: number }> {
+    const { skip = 0, take = 20, batchId } = params;
+
+    const whereClause: any = {
+      isTalentPool: true,
+    };
+
+    if (batchId) {
+      whereClause.talentPoolBatchId = batchId;
+    }
+
+    const [candidates, total] = await Promise.all([
+      this.prisma.candidate.findMany({
+        where: whereClause,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              passwordSetRequired: true,
+            },
+          },
+          talentPoolBatch: {
+            select: {
+              id: true,
+              batchName: true,
+              status: true,
+            },
+          },
+          educations: true,
+          workExperiences: true,
+          skills: true,
+          certifications: true,
+          organizationExperiences: true,
+          applications: {
+            include: {
+              jobVacancy: {
+                select: {
+                  id: true,
+                  jobRole: {
+                    select: { jobRoleName: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.candidate.count({ where: whereClause }),
+    ]);
+
+    return { candidates, total };
   }
 
   // ============================================

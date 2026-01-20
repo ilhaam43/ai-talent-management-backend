@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
+import { EmailService } from '../email/email.service';
 import axios from 'axios';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
@@ -14,6 +15,7 @@ export class CandidateApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_WEBHOOK_URL') || '';
   }
@@ -532,11 +534,22 @@ export class CandidateApplicationsService {
 
   /**
    * Update application status with optional scheduling
+   * Sends email notification to candidate based on pipeline status
    */
   async updateApplicationStatus(applicationId: string, dto: UpdateApplicationStatusDto) {
-    // 1. Validate application exists
+    // 1. Validate application exists with candidate and job info
     const application = await this.prisma.candidateApplication.findUnique({
       where: { id: applicationId },
+      include: {
+        candidate: {
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        },
+        jobVacancy: {
+          include: { jobRole: true },
+        },
+      },
     });
 
     if (!application) {
@@ -581,7 +594,42 @@ export class CandidateApplicationsService {
       },
     });
 
-    // 5. Return updated application with full history
+    // 5. Send email notification based on status
+    const candidateName = application.candidate.candidateFullname || application.candidate.user.name || 'Candidate';
+    const candidateEmail = application.candidate.candidateEmail || application.candidate.user.email;
+    const jobTitle = application.jobVacancy.jobRole?.jobRoleName || 'Position';
+    const stageName = pipeline.applicationPipeline;
+    const statusName = pipelineStatus.applicationPipelineStatus;
+
+    try {
+      if (statusName === 'Not Qualified') {
+        // Send rejection email
+        await this.emailService.sendRejectionEmail(
+          candidateEmail,
+          candidateName,
+          jobTitle,
+          dto.notes,
+        );
+        this.logger.log(`Rejection email sent to ${candidateEmail}`);
+      } else if (statusName === 'Qualified' || statusName === 'On Progress') {
+        // Send pipeline update email (congrats, moving to next stage)
+        await this.emailService.sendPipelineUpdateEmail(
+          candidateEmail,
+          candidateName,
+          jobTitle,
+          stageName,
+          dto.link,
+          dto.scheduledDate ? new Date(dto.scheduledDate) : undefined,
+          dto.notes,
+        );
+        this.logger.log(`Pipeline update email sent to ${candidateEmail} for ${stageName}`);
+      }
+    } catch (emailError: any) {
+      this.logger.error(`Failed to send email: ${emailError.message}`);
+      // Don't throw - application is already updated, just log the error
+    }
+
+    // 6. Return updated application with full history
     return this.getApplicationWithHistory(applicationId);
   }
 
@@ -795,6 +843,109 @@ export class CandidateApplicationsService {
       orderBy: {
         submissionDate: 'desc',
       },
+    });
+  }
+
+  /**
+   * Get all candidates filtered by qualification status
+   * Qualified = MATCH or STRONG_MATCH (from AI screening)
+   * Not Qualified = NOT_MATCH
+   */
+  async findAllByQualification(filters?: {
+    qualified?: boolean;
+    jobVacancyId?: string;
+    pipelineId?: string;
+    search?: string;
+  }) {
+    const where: any = {};
+
+    // Filter by qualification based on aiMatchStatus
+    if (filters?.qualified !== undefined) {
+      if (filters.qualified) {
+        // Qualified candidates: MATCH or STRONG_MATCH
+        where.aiMatchStatus = { in: ['MATCH', 'STRONG_MATCH'] };
+      } else {
+        // Not qualified candidates
+        where.aiMatchStatus = 'NOT_MATCH';
+      }
+    }
+
+    if (filters?.jobVacancyId) {
+      where.jobVacancyId = filters.jobVacancyId;
+    }
+
+    if (filters?.pipelineId) {
+      where.applicationPipelineId = filters.pipelineId;
+    }
+
+    if (filters?.search) {
+      where.OR = [
+        {
+          candidate: {
+            candidateFullname: {
+              contains: filters.search,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          candidate: {
+            user: {
+              name: {
+                contains: filters.search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+        {
+          candidate: {
+            candidateEmail: {
+              contains: filters.search,
+              mode: 'insensitive',
+            },
+          },
+        },
+      ];
+    }
+
+    // Exclude talent pool candidates (only regular candidates)
+    where.candidate = {
+      ...where.candidate,
+      isTalentPool: false,
+    };
+
+    return this.prisma.candidateApplication.findMany({
+      where,
+      include: {
+        candidate: {
+          include: {
+            user: { select: { name: true, email: true } },
+            religion: true,
+            maritalStatus: true,
+            gender: true,
+            nationality: true,
+          },
+        },
+        jobVacancy: {
+          include: {
+            jobRole: true,
+            jobVacancyStatus: true,
+            directorate: true,
+            group: true,
+            division: true,
+            department: true,
+          },
+        },
+        applicationPipeline: true,
+        applicationLastStatus: true,
+        candidateSalary: true,
+      },
+      orderBy: [
+        { aiMatchStatus: 'asc' }, // MATCH/STRONG_MATCH first
+        { fitScore: 'desc' },
+        { submissionDate: 'desc' },
+      ],
     });
   }
 

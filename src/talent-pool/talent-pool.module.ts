@@ -5,9 +5,10 @@ import { TalentPoolService } from './talent-pool.service';
 import { TalentPoolRepository } from './talent-pool.repository';
 import { DatabaseModule } from '../database/database.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [DatabaseModule, ConfigModule, NotificationsModule],
+  imports: [DatabaseModule, ConfigModule, NotificationsModule, EmailModule],
   controllers: [TalentPoolController],
   providers: [TalentPoolService, TalentPoolRepository],
   exports: [TalentPoolService],
