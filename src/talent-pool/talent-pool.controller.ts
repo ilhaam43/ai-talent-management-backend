@@ -180,6 +180,34 @@ export class TalentPoolController {
     });
   }
 
+  // ============================================
+  // Unified Candidate Query Endpoints
+  // NOTE: Must be declared BEFORE :id routes to avoid 'unified' being matched as UUID
+  // ============================================
+
+  @Get('unified')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('HUMAN RESOURCES', 'ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'List talent pool candidates from unified Candidate table',
+    description: 'Returns candidates where isTalentPool=true with full profile data',
+  })
+  @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiQuery({ name: 'take', required: false, type: Number })
+  @ApiQuery({ name: 'batchId', required: false, type: String })
+  async getUnifiedCandidates(
+    @Query('skip') skip?: number,
+    @Query('take') take?: number,
+    @Query('batchId') batchId?: string,
+  ) {
+    return this.service.getUnifiedTalentPoolCandidates({
+      skip: skip || 0,
+      take: take || 20,
+      batchId,
+    });
+  }
+
   @Get(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('HUMAN RESOURCES', 'ADMIN')
@@ -230,35 +258,10 @@ export class TalentPoolController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ConvertCandidateDto,
   ) {
-    return this.service.convertToActivePipeline(id, dto.targetPipelineStage);
+    return this.service.convertToActivePipeline(id, dto.targetPipelineStage, dto.targetApplicationIds);
   }
 
-  // ============================================
-  // Unified Candidate Query Endpoints (NEW)
-  // ============================================
 
-  @Get('unified')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('HUMAN RESOURCES', 'ADMIN')
-  @ApiBearerAuth()
-  @ApiOperation({ 
-    summary: 'List talent pool candidates from unified Candidate table',
-    description: 'Returns candidates where isTalentPool=true with full profile data',
-  })
-  @ApiQuery({ name: 'skip', required: false, type: Number })
-  @ApiQuery({ name: 'take', required: false, type: Number })
-  @ApiQuery({ name: 'batchId', required: false, type: String })
-  async getUnifiedCandidates(
-    @Query('skip') skip?: number,
-    @Query('take') take?: number,
-    @Query('batchId') batchId?: string,
-  ) {
-    return this.service.getUnifiedTalentPoolCandidates({
-      skip: skip || 0,
-      take: take || 20,
-      batchId,
-    });
-  }
 
   // ============================================
   // Utility Endpoints

@@ -599,6 +599,7 @@ model CandidateApplication {
   aiCoreValue               String?        @map("ai_core_value") @db.Text
   resultSummary             String?        @map("result_summary") @db.Text
   submissionDate            DateTime       @map("submission_date") @db.Date
+  isTalentPool              Boolean        @default(true) @map("is_talent_pool")
   createdAt                 DateTime       @default(now()) @map("created_at")
   updatedAt                 DateTime       @updatedAt @map("updated_at")
 
@@ -680,7 +681,6 @@ model Candidate {
   updatedAt                 DateTime  @updatedAt @map("updated_at")
 
   // Talent Pool Fields
-  isTalentPool              Boolean   @default(false) @map("is_talent_pool")
   talentPoolBatchId         String?   @map("talent_pool_batch_id")
   linkedInUrl               String?   @map("linkedin_url")
   cvFileUrl                 String?   @map("cv_file_url")

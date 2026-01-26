@@ -6,6 +6,7 @@ import axios from 'axios';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
 import { DashboardSummaryDto } from './dto/application-response.dto';
+import { AiMatchStatus } from '@prisma/client';
 
 @Injectable()
 export class CandidateApplicationsService {
@@ -750,16 +751,20 @@ export class CandidateApplicationsService {
    * Get HR dashboard summary metrics
    */
   async getHRDashboardSummary(): Promise<DashboardSummaryDto> {
+    const nonTalentPoolFilter = {
+      isTalentPool: false, // Filter at application level
+    };
+
     const [total, pass, partiallyPass, notPass] = await Promise.all([
-      this.prisma.candidateApplication.count(),
+      this.prisma.candidateApplication.count({ where: nonTalentPoolFilter }),
       this.prisma.candidateApplication.count({
-        where: { aiMatchStatus: 'STRONG MATCH' },
+        where: { ...nonTalentPoolFilter, aiMatchStatus: 'STRONG_MATCH' as any }, // Enforce enum string format
       }),
       this.prisma.candidateApplication.count({
-        where: { aiMatchStatus: 'MATCH' },
+        where: { ...nonTalentPoolFilter, aiMatchStatus: 'MATCH' as any },
       }),
       this.prisma.candidateApplication.count({
-        where: { aiMatchStatus: 'NOT MATCH' },
+        where: { ...nonTalentPoolFilter, aiMatchStatus: 'NOT_MATCH' as any },
       }),
     ]);
 
@@ -780,7 +785,10 @@ export class CandidateApplicationsService {
     statusId?: string;
     search?: string;
   }) {
-    const where: any = {};
+    const where: any = {
+      // Filter at application level - only show active (non-talent-pool) applications
+      isTalentPool: false,
+    };
 
     if (filters?.aiMatchStatus) {
       where.aiMatchStatus = filters.aiMatchStatus;
