@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { IsEnum, IsArray, IsString, IsOptional } from 'class-validator';
 
 export class ConvertCandidateDto {
   @ApiProperty({ 
@@ -9,4 +9,14 @@ export class ConvertCandidateDto {
   })
   @IsEnum(['HR Interview', 'User Interview', 'Online Assessment'])
   targetPipelineStage!: 'HR Interview' | 'User Interview' | 'Online Assessment';
+
+  @ApiProperty({
+    description: 'List of specific application IDs to promote (optional). If omitted, all applications are promoted.',
+    example: ['uuid1', 'uuid2'],
+    required: false
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  targetApplicationIds?: string[];
 }

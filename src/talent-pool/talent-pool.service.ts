@@ -524,11 +524,10 @@ export class TalentPoolService {
         },
       });
 
-      // 2. Create Candidate with isTalentPool=true
+      // 2. Create Candidate
       const candidate = await tx.candidate.create({
         data: {
           userId: user.id,
-          isTalentPool: true,
           talentPoolBatchId: batchId,
           candidateFullname: candidateData.fullName,
           candidateEmail: candidateData.email || null,
@@ -677,6 +676,7 @@ export class TalentPoolService {
   async convertToActivePipeline(
     candidateId: string,
     targetPipelineStage: 'HR Interview' | 'User Interview' | 'Online Assessment',
+    targetApplicationIds?: string[],
   ): Promise<{
     success: boolean;
     resetToken: string;
@@ -696,9 +696,9 @@ export class TalentPoolService {
       throw new NotFoundException(`Candidate ${candidateId} not found`);
     }
 
-    if (!candidate.isTalentPool) {
-      throw new BadRequestException('Candidate is not from talent pool');
-    }
+    // Note: No longer checking candidate.isTalentPool since it's now per-application
+    // Each application has its own isTalentPool flag
+
 
     // Get target pipeline stage
     const targetPipeline = await this.prisma.applicationPipeline.findFirst({
@@ -722,28 +722,44 @@ export class TalentPoolService {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+    // Determine applications to update
+    let applicationsToUpdate = candidate.applications;
+    
+    if (targetApplicationIds && targetApplicationIds.length > 0) {
+      applicationsToUpdate = candidate.applications.filter(app => targetApplicationIds.includes(app.id));
+    }
+
+    if (applicationsToUpdate.length === 0) {
+        this.logger.warn(`No applications matched for conversion for candidate ${candidateId}`);
+    }
+
     // Update in transaction
     await this.prisma.$transaction(async (tx) => {
-      // 1. Set isTalentPool = false
-      await tx.candidate.update({
-        where: { id: candidateId },
-        data: { isTalentPool: false },
-      });
-
-      // 2. Update user with reset token
-      await tx.user.update({
-        where: { id: candidate.userId },
-        data: {
-          passwordResetToken: resetToken,
-          passwordResetExpiry: resetExpiry,
+      // 1. Check if this is the first time converting ANY application for this candidate
+      const hasActiveApps = await tx.candidateApplication.count({
+        where: {
+          candidateId: candidateId,
+          isTalentPool: false,
         },
       });
 
-      // 3. Update all applications to target pipeline stage
-      for (const application of candidate.applications) {
+      // 2. If first conversion, set up password reset for the user
+      if (hasActiveApps === 0) {
+        await tx.user.update({
+            where: { id: candidate.userId },
+            data: {
+              passwordResetToken: resetToken,
+              passwordResetExpiry: resetExpiry,
+            },
+        });
+      }
+
+      // 3. Update TARGET applications - set isTalentPool = false and update pipeline
+      for (const application of applicationsToUpdate) {
         await tx.candidateApplication.update({
           where: { id: application.id },
           data: {
+            isTalentPool: false, // Mark this specific application as Active
             applicationPipelineId: targetPipeline.id,
           },
         });
@@ -764,29 +780,38 @@ export class TalentPoolService {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
     const resetLink = `${frontendUrl}/set-password?token=${resetToken}`;
 
-    this.logger.log(`Converted talent pool candidate ${candidateId} to ${targetPipelineStage}`);
+    this.logger.log(`Converted talent pool candidate ${candidateId} to ${targetPipelineStage} (${applicationsToUpdate.length} apps)`);
 
     // Send talent pool welcome email with profile completion reminder
-    try {
-      // Get job title from first application if available
-      const jobTitle = candidate.applications[0] ? 
-        (await this.prisma.jobVacancy.findUnique({
-          where: { id: candidate.applications[0].jobVacancyId },
-          include: { jobRole: true },
-        }))?.jobRole?.jobRoleName : undefined;
+    // Check if this is first time converting any application for this candidate
+    const wasFirstConversion = await this.prisma.candidateApplication.count({
+      where: {
+        candidateId: candidateId,
+        isTalentPool: false,
+      },
+    }) === applicationsToUpdate.length; // If count equals what we just converted, those are the first
 
-      await this.emailService.sendTalentPoolWelcomeEmail(
-        candidate.user.email,
-        candidate.candidateFullname || 'Candidate',
-        resetToken,
-        targetPipelineStage,
-        jobTitle,
-      );
-      
-      this.logger.log(`Talent pool welcome email sent to ${candidate.user.email}`);
-    } catch (error: any) {
-      this.logger.error(`Failed to send email: ${error.message}`);
-      // Don't throw - candidate is already converted, just log the error
+    if (wasFirstConversion) {
+        try {
+        // Get job title from first target application if available
+        const jobTitle = applicationsToUpdate[0] ? 
+            (await this.prisma.jobVacancy.findUnique({
+            where: { id: applicationsToUpdate[0].jobVacancyId },
+            include: { jobRole: true },
+            }))?.jobRole?.jobRoleName : undefined;
+
+        await this.emailService.sendTalentPoolWelcomeEmail(
+            candidate.user.email,
+            candidate.candidateFullname || 'Candidate',
+            resetToken,
+            targetPipelineStage,
+            jobTitle,
+        );
+        
+        this.logger.log(`Talent pool welcome email sent to ${candidate.user.email}`);
+        } catch (error: any) {
+        this.logger.error(`Failed to send email: ${error.message}`);
+        }
     }
 
     return {
@@ -844,59 +869,81 @@ export class TalentPoolService {
   }): Promise<{ candidates: any[]; total: number }> {
     const { skip = 0, take = 20, batchId } = params;
 
+    // Query applications that are in talent pool
     const whereClause: any = {
       isTalentPool: true,
     };
 
-    if (batchId) {
-      whereClause.talentPoolBatchId = batchId;
-    }
-
-    const [candidates, total] = await Promise.all([
-      this.prisma.candidate.findMany({
-        where: whereClause,
-        skip,
-        take,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              passwordSetRequired: true,
-            },
-          },
-          talentPoolBatch: {
-            select: {
-              id: true,
-              batchName: true,
-              status: true,
-            },
-          },
-          educations: true,
-          workExperiences: true,
-          skills: true,
-          certifications: true,
-          organizationExperiences: true,
-          applications: {
-            include: {
-              jobVacancy: {
-                select: {
-                  id: true,
-                  jobRole: {
-                    select: { jobRoleName: true },
-                  },
-                },
+    // Get distinct candidates who have applications in talent pool
+    const applications = await this.prisma.candidateApplication.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        candidate: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                passwordSetRequired: true,
               },
+            },
+            talentPoolBatch: {
+              select: {
+                id: true,
+                batchName: true,
+                status: true,
+              },
+            },
+            educations: true,
+            workExperiences: true,
+            skills: true,
+            certifications: true,
+            organizationExperiences: true,
+          },
+        },
+        jobVacancy: {
+          select: {
+            id: true,
+            jobRole: {
+              select: { jobRoleName: true },
             },
           },
         },
-      }),
-      this.prisma.candidate.count({ where: whereClause }),
-    ]);
+      },
+    });
 
-    return { candidates, total };
+    // Group applications by candidate for the response
+    const candidateMap = new Map<string, any>();
+    
+    for (const app of applications) {
+      const candidateId = app.candidateId;
+      
+      if (!candidateMap.has(candidateId)) {
+        candidateMap.set(candidateId, {
+          ...app.candidate,
+          applications: [],
+        });
+      }
+      
+      candidateMap.get(candidateId).applications.push({
+        id: app.id,
+        fitScore: app.fitScore,
+        aiMatchStatus: app.aiMatchStatus,
+        aiInsight: app.aiInsight,
+        jobVacancyId: app.jobVacancyId,
+        jobVacancy: app.jobVacancy,
+        isTalentPool: app.isTalentPool,
+      });
+    }
+
+    const allCandidates = Array.from(candidateMap.values());
+    
+    // Apply pagination
+    const paginatedCandidates = allCandidates.slice(skip, skip + take);
+    
+    return { candidates: paginatedCandidates, total: allCandidates.length };
   }
 
   // ============================================
