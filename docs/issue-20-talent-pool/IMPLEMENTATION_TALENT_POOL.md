@@ -129,10 +129,12 @@ Enable HR to upload CVs in bulk from their data bank, extract candidate informat
 - [ ] Pre-fill profile from Talent Pool data
 - [ ] Link application history
 
-### Phase 4: Email Notifications
-- [ ] Send email to high-scoring candidates
-- [ ] Email templates for different statuses
-- [ ] Track email delivery and opens
+### Phase 4: Email Notifications ✅
+- [x] EmailService with Gmail OAuth and App Password support
+- [x] Send welcome email on talent pool conversion
+- [x] Send pipeline update email for qualified candidates
+- [x] Send rejection email for not qualified candidates
+- [x] Gmail OAuth setup documentation
 
 ### Phase 5: Advanced Analytics
 - [ ] Dashboard showing talent pool health

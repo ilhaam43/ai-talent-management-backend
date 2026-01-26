@@ -13,13 +13,16 @@ datasource db {
 // ============================================
 
 model User {
-  id            String    @id @default(uuid())
-  name          String
-  email         String    @unique
-  emailVerified DateTime? @map("email_verified_at")
-  password      String
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                   String    @id @default(uuid())
+  name                 String
+  email                String    @unique
+  emailVerified        DateTime? @map("email_verified_at")
+  password             String
+  passwordSetRequired  Boolean   @default(false) @map("password_set_required")
+  passwordResetToken   String?   @map("password_reset_token")
+  passwordResetExpiry  DateTime? @map("password_reset_expiry")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   // Relations
   employees                 Employee[]
@@ -596,6 +599,7 @@ model CandidateApplication {
   aiCoreValue               String?        @map("ai_core_value") @db.Text
   resultSummary             String?        @map("result_summary") @db.Text
   submissionDate            DateTime       @map("submission_date") @db.Date
+  isTalentPool              Boolean        @default(true) @map("is_talent_pool")
   createdAt                 DateTime       @default(now()) @map("created_at")
   updatedAt                 DateTime       @updatedAt @map("updated_at")
 
@@ -676,6 +680,12 @@ model Candidate {
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
 
+  // Talent Pool Fields
+  talentPoolBatchId         String?   @map("talent_pool_batch_id")
+  linkedInUrl               String?   @map("linkedin_url")
+  cvFileUrl                 String?   @map("cv_file_url")
+  cvFileName                String?   @map("cv_file_name")
+
   // Relations
   user                    User                              @relation(fields: [userId], references: [id], onDelete: Cascade)
   candidateLastEducation  CandidateLastEducation?           @relation(fields: [candidateLastEducationId], references: [id])
@@ -684,6 +694,7 @@ model Candidate {
   nationality             Nationality?                      @relation(fields: [nationalityId], references: [id])
   languageProficiency     LanguageProficiency?              @relation(fields: [languageProficiencyId], references: [id])
   gender                  Gender?                           @relation(fields: [genderId], references: [id])
+  talentPoolBatch         TalentPoolBatch?                  @relation(fields: [talentPoolBatchId], references: [id])
   documents               CandidateDocument[]
   workExperiences         CandidateWorkExperience[]
   organizationExperiences CandidateOrganizationExperience[]
@@ -937,9 +948,10 @@ model TalentPoolBatch {
   updatedAt      DateTime               @updatedAt @map("updated_at")
 
   // Relations
-  uploadedBy  Employee              @relation(fields: [uploadedById], references: [id])
-  candidates  TalentPoolCandidate[]
-  queueItems  TalentPoolQueue[]
+  uploadedBy           Employee              @relation(fields: [uploadedById], references: [id])
+  candidates           TalentPoolCandidate[] // Legacy - for existing data
+  unifiedCandidates    Candidate[]           // New - unified candidate relation
+  queueItems           TalentPoolQueue[]
 
   @@map("talent_pool_batches")
 }
