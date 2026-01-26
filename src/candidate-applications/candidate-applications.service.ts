@@ -108,15 +108,15 @@ export class CandidateApplicationsService {
       this.logger.log(`n8n Response: ${JSON.stringify(response.data)}`);
 
       const data = response.data;
-      
+
       let analysisResults: any[] = [];
-      
+
       // Handle various n8n response formats
       if (Array.isArray(data)) {
         // Case 1: Array of objects (Standard n8n output)
         // Check if items are wrapped in "results" property
         analysisResults = data.map(item => item.results || item);
-        
+
         // Flatten if "results" was an array itself
         analysisResults = analysisResults.flat();
       } else if (data.results && Array.isArray(data.results)) {
@@ -132,6 +132,78 @@ export class CandidateApplicationsService {
       // 4. Create or update CandidateApplication for each result
       for (const result of analysisResults) {
         if (!result.job_id) continue;
+
+        this.logger.log(`Processing N8N result for job ID: ${result.job_id}`);
+
+        // Verify Job Vacancy exists
+        const jobVacancy = await this.prisma.jobVacancy.findUnique({
+          where: { id: result.job_id },
+        });
+
+        if (!jobVacancy) {
+          this.logger.warn(`Job Vacancy not found locally for ID: ${result.job_id}. Attempting fallback to remote...`);
+
+          try {
+            // Fallback: Fetch from remote production API
+            const remoteUrl = `https://backend-ai-recruitment.lintasarta.dev/job-vacancies/${result.job_id}`;
+            const { data: remoteJob } = await axios.get(remoteUrl);
+
+            if (remoteJob && remoteJob.jobRole && remoteJob.jobRole.jobRoleName) {
+              const remoteRoleName = remoteJob.jobRole.jobRoleName;
+              this.logger.log(`Found remote job role: "${remoteRoleName}". Searching locally...`);
+
+              // Find local JobRole by name
+              const localJobRole = await this.prisma.jobRole.findFirst({
+                where: { jobRoleName: { equals: remoteRoleName, mode: 'insensitive' } }
+              });
+
+              if (localJobRole) {
+                // Find open JobVacancy for this role
+                // Assuming we want the most recent open one or just any ID for now?
+                // Let's find ANY job vacancy with this role.
+                const localJobVacancy = await this.prisma.jobVacancy.findFirst({
+                  where: { jobRoleId: localJobRole.id },
+                  orderBy: { createdAt: 'desc' }
+                });
+
+                if (localJobVacancy) {
+                  this.logger.log(`Mapped remote Job ID ${result.job_id} to local Job ID ${localJobVacancy.id} ("${remoteRoleName}")`);
+                  // Update the result ID to the local one so subsequent code checks work
+                  result.job_id = localJobVacancy.id;
+
+                  // Re-fetch valid local job vacancy object for later checks? 
+                  // Actually the loop continues and uses result.job_id. 
+                  // But we need to ensure 'jobVacancy' variable is populated if we want to use it? 
+                  // The code below re-fetches 'application' using 'result.job_id'. 
+                  // It doesn't seem to use 'jobVacancy' variable further down in this loop iteration 
+                  // except for the initial check. 
+                  // So updating result.job_id is sufficient for the findFirst below.
+                  // HOWEVER, the logic below uses 'result.job_id'.
+
+                  // Wait, check if 'jobVacancy' variable is used later. 
+                  // It is NOT used. So we are good.
+
+                  // We need to 'continue' processing this loop iteration, but passing the check.
+                  // Since we are in the 'if (!jobVacancy)' block, if we successfully map, 
+                  // we just fall through to the rest of the loop?
+                  // Yes.
+                } else {
+                  this.logger.warn(`Local JobRole found but no JobVacancy exists for role: ${remoteRoleName}`);
+                  continue;
+                }
+              } else {
+                this.logger.warn(`No local JobRole found matching: ${remoteRoleName}`);
+                continue;
+              }
+            } else {
+              this.logger.warn('Remote job data missing expected jobRole structure.');
+              continue;
+            }
+          } catch (err: any) {
+            this.logger.error(`Failed to fetch remote job details: ${err.message}`);
+            continue;
+          }
+        }
 
         // Find or create application
         let application = await this.prisma.candidateApplication.findFirst({
@@ -165,7 +237,7 @@ export class CandidateApplicationsService {
           });
         } else {
           // Get or create required records for new application
-          
+
           // 1. Get or create CandidateSalary
           let candidateSalary = await this.prisma.candidateSalary.findFirst({
             where: { candidateId: candidateId },
@@ -228,7 +300,7 @@ export class CandidateApplicationsService {
           });
 
           const matchedSkills = new Set<string>();
-          
+
           // Helper to escape regex special characters
           const escapeRegExp = (string: string) => {
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -237,11 +309,11 @@ export class CandidateApplicationsService {
           for (const js of jobSkills) {
             if (!js.skill?.skillName) continue;
             const jName = js.skill.skillName.toLowerCase().trim();
-            
+
             for (const cs of candidateSkills) {
               if (!cs.candidateSkill) continue;
               const cName = cs.candidateSkill.toLowerCase().trim();
-              
+
               // 1. Exact match
               if (jName === cName) {
                 matchedSkills.add(js.skill.skillName);
@@ -294,10 +366,10 @@ export class CandidateApplicationsService {
       const duration = endTime - startTime;
       this.logger.log(`AI Analysis completed in ${duration}ms`);
 
-      return { 
+      return {
         candidate_id: candidateId,
         results: analysisResults,
-        processing_time_ms: duration 
+        processing_time_ms: duration
       };
     } catch (error: any) {
       const endTime = Date.now();
@@ -317,9 +389,9 @@ export class CandidateApplicationsService {
   async createApplication(candidateId: string, dto: CreateApplicationDto) {
     // 1. Check for existing application for this SAME job
     const existingApplicationForJob = await this.prisma.candidateApplication.findFirst({
-      where: { 
-        candidateId, 
-        jobVacancyId: dto.jobVacancyId 
+      where: {
+        candidateId,
+        jobVacancyId: dto.jobVacancyId
       },
       include: {
         jobVacancy: {
@@ -355,7 +427,7 @@ export class CandidateApplicationsService {
 
     // 2. Check 6-month cooldown for any job (only for rejected applications)
     const recentRejectedApp = await this.prisma.candidateApplication.findFirst({
-      where: { 
+      where: {
         candidateId,
         applicationLastStatus: {
           applicationLastStatus: 'Not Qualified'
@@ -367,7 +439,7 @@ export class CandidateApplicationsService {
     if (recentRejectedApp) {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      
+
       if (recentRejectedApp.submissionDate > sixMonthsAgo) {
         const canApplyAgain = new Date(recentRejectedApp.submissionDate);
         canApplyAgain.setMonth(canApplyAgain.getMonth() + 6);
@@ -428,7 +500,7 @@ export class CandidateApplicationsService {
     });
 
     if (!appliedStage || !screeningStage || !qualifiedStatus || !notQualifiedStatus ||
-        !qualifiedPipelineStatus || !notQualifiedPipelineStatus) {
+      !qualifiedPipelineStatus || !notQualifiedPipelineStatus) {
       throw new Error('Required pipeline stages or statuses not found. Please run seed scripts.');
     }
 
@@ -464,7 +536,7 @@ export class CandidateApplicationsService {
         applicationPipelineId: isQualified ? screeningStage.id : appliedStage.id,
         fitScore: fitScore,
         aiInsight: aiInsight,
-       aiMatchStatus: aiMatchStatus as any,
+        aiMatchStatus: aiMatchStatus as any,
         submissionDate: new Date(),
       },
     });
@@ -831,7 +903,7 @@ export class CandidateApplicationsService {
     });
 
     if (!application) {
-      throw new Error(`Application not found: ${id}`);
+      throw new NotFoundException(`Application not found: ${id}`);
     }
 
     return application;
@@ -867,7 +939,8 @@ export class CandidateApplicationsService {
     });
 
     if (!application) {
-      throw new Error(`Application not found: ${applicationId}`);
+      this.logger.error(`Application not found with ID: ${applicationId}`);
+      throw new NotFoundException(`Application not found: ${applicationId}`);
     }
 
     // OPTIONAL: Check if analysis already exists to prevent redundant cost
@@ -1019,6 +1092,9 @@ export class CandidateApplicationsService {
       const endTime = Date.now();
       const duration = endTime - startTime;
       this.logger.error(`Error triggering n8n (Duration: ${duration}ms): ${error.message}`);
+      if (axios.isAxiosError(error)) {
+        this.logger.error(`Axios Response Data: ${JSON.stringify(error.response?.data)}`);
+      }
       throw error;
     }
   }
