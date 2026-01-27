@@ -6,7 +6,7 @@ async function main() {
     try {
         // Step 1: Reset database using db push (works better in Docker)
         console.log('📦 Step 1: Resetting database schema...');
-        execSync('npx prisma db push --force-reset --skip-generate', { stdio: 'inherit' });
+        execSync('npx prisma db push --force-reset', { stdio: 'inherit' });
         console.log('✅ Database reset complete\n');
 
         // Step 2: Generate Prisma Client
