@@ -59,6 +59,42 @@ async function main() {
             roleId: hmRole.id,
             employeeIdNumber: 'EMP-HM-001',
         },
+        {
+            email: 'luthfi.fauzie@lintasarta.co.id',
+            name: 'Luthfi Fauzie',
+            roleId: hrRole.id,
+            employeeIdNumber: '90181807',
+        },
+        {
+            email: 'viranola.rizkiansha@lintasarta.co.id',
+            name: 'Viranola Rizkiansha',
+            roleId: hrRole.id,
+            employeeIdNumber: '98222803',
+        },
+        {
+            email: 'syifa.syarafina@lintasarta.co.id',
+            name: 'Siva Syarafina',
+            roleId: hrRole.id,
+            employeeIdNumber: '94192032',
+        },
+        {
+            email: 'awis.rahmat@lintasarta.co.id',
+            name: 'Awis Rahmat Trihari',
+            roleId: hrRole.id,
+            employeeIdNumber: '96243391',
+        },
+        {
+            email: 'azizah.aulia@lintasarta.co.id',
+            name: 'Azizah Aulia',
+            roleId: hrRole.id,
+            employeeIdNumber: '10233353',
+        },
+        {
+            email: 'junior.diogones@lintasarta.co.id',
+            name: 'Junior Diogones To’a',
+            roleId: hrRole.id,
+            employeeIdNumber: '89253494',
+        },
     ];
 
     for (const userData of usersToSeed) {

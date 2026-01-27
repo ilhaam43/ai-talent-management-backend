@@ -744,6 +744,79 @@ export class CandidateApplicationsService {
     });
   }
 
+  async findLatestByCandidate(candidateId: string) {
+    const application = await this.prisma.candidateApplication.findFirst({
+      where: { candidateId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        candidate: {
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        },
+        jobVacancy: {
+          include: {
+            jobRole: true,
+            directorate: true,
+            division: true,
+            department: true,
+          }
+        },
+        applicationPipeline: true,
+        candidateApplicationPipelines: {
+          include: {
+            applicationPipeline: true,
+            applicationPipelineStatus: true,
+            interviewer: true
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
+    });
+
+    if (!application) throw new NotFoundException(`No application found for candidate ${candidateId}`);
+    return application;
+  }
+
+  async findAllApplicationsByCandidate(candidateId: string) {
+    return this.prisma.candidateApplication.findMany({
+      where: { candidateId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        candidate: {
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        },
+        jobVacancy: {
+          include: {
+            jobRole: true,
+            directorate: true,
+            division: true,
+            department: true,
+          }
+        },
+        applicationPipeline: true,
+        candidateApplicationPipelines: {
+          include: {
+            applicationPipeline: true,
+            applicationPipelineStatus: true,
+            interviewer: {
+              include: {
+                user: { select: { name: true, email: true } }
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
+    });
+  }
+
   /**
    * Get candidate's application (max 1 due to business rule)
    */

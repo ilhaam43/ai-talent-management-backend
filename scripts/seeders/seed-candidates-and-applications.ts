@@ -12,16 +12,16 @@ const prisma = new PrismaClient({ adapter });
 
 // Data from the image
 const candidatesData = [
-    { name: 'Aulia Kayesha', score: 94, job: 'Product Manager', stage: 'INTERVIEW USER 1', date: '2025-11-26', status: 'PASSED' },
-    { name: 'Daniel', score: 70, job: 'Product Manager', stage: 'AI SCREENING', date: '2025-11-25', status: 'PARTIALLY PASSED' },
-    { name: 'Abdul Aziz', score: 69, job: 'Product Manager', stage: 'AI SCREENING', date: '2025-11-25', status: 'PARTIALLY PASSED' },
-    { name: 'Amelia Evi', score: 65, job: 'Product Manager', stage: 'AI SCREENING', date: '2025-11-25', status: 'PARTIALLY PASSED' },
-    { name: 'Elvita Carolina', score: 65, job: 'Lead Product Manager', stage: 'AI SCREENING', date: '2025-11-25', status: 'NOT PASSED' },
-    { name: 'Andi Bagus', score: 88, job: 'Lead Product Manager', stage: 'INTERVIEW USER 2', date: '2025-11-25', status: 'PASSED' },
-    { name: 'Aurelia Santika', score: 88, job: 'Sales Manager', stage: 'AI SCREENING', date: '2025-11-25', status: 'PASSED' },
-    { name: 'Finna Putri', score: 88, job: 'Product Manager', stage: 'AI SCREENING', date: '2025-11-25', status: 'PASSED' },
-    { name: 'Donny Kenan', score: 88, job: 'UI/UX Designer', stage: 'AI SCREENING', date: '2025-11-25', status: 'PASSED' },
-    { name: 'Fadli Anantama', score: 93, job: 'Lead Product Manager', stage: 'INTERVIEW USER 1', date: '2025-11-25', status: 'PASSED' },
+    { name: 'Aulia Kayesha', score: 94, job: 'PRODUCT MANAGER', stage: 'INTERVIEW USER 1', date: '2025-11-26', status: 'PASSED' },
+    { name: 'Daniel', score: 70, job: 'PRODUCT MANAGER', stage: 'AI SCREENING', date: '2025-11-25', status: 'PARTIALLY PASSED' },
+    { name: 'Abdul Aziz', score: 69, job: 'PRODUCT MANAGER', stage: 'AI SCREENING', date: '2025-11-25', status: 'PARTIALLY PASSED' },
+    { name: 'Amelia Evi', score: 65, job: 'PRODUCT MANAGER', stage: 'AI SCREENING', date: '2025-11-25', status: 'PARTIALLY PASSED' },
+    { name: 'Elvita Carolina', score: 65, job: 'LEAD PRODUCT MANAGER', stage: 'AI SCREENING', date: '2025-11-25', status: 'NOT PASSED' },
+    { name: 'Andi Bagus', score: 88, job: 'LEAD PRODUCT MANAGER', stage: 'INTERVIEW USER 2', date: '2025-11-25', status: 'PASSED' },
+    { name: 'Aurelia Santika', score: 88, job: 'SALES MANAGER', stage: 'AI SCREENING', date: '2025-11-25', status: 'PASSED' },
+    { name: 'Finna Putri', score: 88, job: 'PRODUCT MANAGER', stage: 'AI SCREENING', date: '2025-11-25', status: 'PASSED' },
+    { name: 'Donny Kenan', score: 88, job: 'UI/UX DESIGNER', stage: 'AI SCREENING', date: '2025-11-25', status: 'PASSED' },
+    { name: 'Fadli Anantama', score: 93, job: 'LEAD PRODUCT MANAGER', stage: 'INTERVIEW USER 1', date: '2025-11-25', status: 'PASSED' },
 ];
 
 async function main() {

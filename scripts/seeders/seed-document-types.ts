@@ -14,10 +14,12 @@ const documentTypes = [
   'Certificate',
   'Portfolio',
   'ID Card',
-  'Transcript',
+  'Ijazah',
+  'Academic Transcript',
   'Supporting Document',
   'Reference Letter',
   'Work Sample',
+  'Additional'
 ];
 
 async function main() {

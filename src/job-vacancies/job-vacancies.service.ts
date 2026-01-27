@@ -12,6 +12,20 @@ export class JobVacanciesService {
   async create(createJobVacancyDto: CreateJobVacancyDto) {
     const { skills, ...data } = createJobVacancyDto;
 
+    // Default status to 'OPEN' if not provided
+    if (!data.jobVacancyStatusId) {
+      const openStatus = await this.prisma.jobVacancyStatus.findFirst({
+        where: { jobVacancyStatus: 'OPEN' }
+      });
+      if (openStatus) {
+        data.jobVacancyStatusId = openStatus.id;
+      } else {
+        // Fallback: This might fail if the DB is empty, but we assume seeders ran.
+        // Or throw error if critical
+        this.logger.warn("Status 'OPEN' not found, creating without statusId might fail if required by DB");
+      }
+    }
+
     // Resolve skills to IDs
     let skillResolutions: { skillId: string }[] = [];
     if (skills && skills.length > 0) {
@@ -152,10 +166,10 @@ export class JobVacanciesService {
     // Supports both exact match and partial/contains match
     if (divisions && Array.isArray(divisions) && divisions.length > 0) {
       const orConditions: any[] = [];
-      
+
       for (const div of divisions) {
         if (!div || typeof div !== 'string' || div.trim() === '') continue;
-        
+
         const searchTerm = div.trim();
         // Add contains match for each division name
         orConditions.push(
@@ -165,7 +179,7 @@ export class JobVacanciesService {
           { directorate: { directorateName: { contains: searchTerm, mode: 'insensitive' } } }
         );
       }
-      
+
       if (orConditions.length > 0) {
         whereClause.OR = orConditions;
       }
@@ -201,11 +215,11 @@ export class JobVacanciesService {
       return jobs.map((job: any) => ({
         job_id: job.id,
         job_title: job.jobRole?.jobRoleName || 'Unknown Role',
-        department: job.department?.departmentName || 
-                   job.division?.divisionName || 
-                   job.group?.groupName || 
-                   job.directorate?.directorateName || 
-                   'General',
+        department: job.department?.departmentName ||
+          job.division?.divisionName ||
+          job.group?.groupName ||
+          job.directorate?.directorateName ||
+          'General',
         location: job.cityLocation || 'Not specified',
         employment_type: job.employmentType?.employmentType || 'Full-time',
         description: job.jobRequirement || 'No description provided.',

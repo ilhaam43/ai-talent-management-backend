@@ -26,7 +26,7 @@ async function testCandidateApplications() {
         // Candidate 1: Aulia Kayesha
         const aulia = apps.find((a: any) => a.candidate.user.name === 'Aulia Kayesha');
         assert(aulia, 'Aulia Kayesha should exist');
-        assert.strictEqual(aulia.jobVacancy.jobRole.jobRoleName, 'Product Manager');
+        assert.strictEqual(aulia.jobVacancy.jobRole.jobRoleName, 'PRODUCT MANAGER');
         assert.strictEqual(aulia.fitScore, '94');
         assert.strictEqual(aulia.applicationPipeline.applicationPipeline, 'INTERVIEW USER 1');
         assert.strictEqual(aulia.applicationLastStatus.applicationLastStatus, 'PASSED');
@@ -108,7 +108,7 @@ async function testCandidateApplications() {
         // Candidate 3: Elvita Carolina (Not Passed)
         const elvita = apps.find((a: any) => a.candidate.user.name === 'Elvita Carolina');
         assert(elvita, 'Elvita Carolina should exist');
-        assert.strictEqual(elvita.jobVacancy.jobRole.jobRoleName, 'Lead Product Manager');
+        assert.strictEqual(elvita.jobVacancy.jobRole.jobRoleName, 'LEAD PRODUCT MANAGER');
         assert.strictEqual(elvita.applicationLastStatus.applicationLastStatus, 'NOT PASSED');
         console.log('✅ Elvita Carolina verified');
 

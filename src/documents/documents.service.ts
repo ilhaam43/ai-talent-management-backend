@@ -11,7 +11,7 @@ import * as path from 'path';
 
 @Injectable()
 export class DocumentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   /**
    * Upload document and create database record

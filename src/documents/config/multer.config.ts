@@ -26,7 +26,7 @@ const FOLDER_ALLOWED_EXTENSIONS: Record<string, string[]> = {
   'ijazah': ['.pdf'],
   'ktp': ['.pdf', '.jpg', '.jpeg', '.png'],
   'transcript': ['.pdf'],
-  'other': ['.pdf'],
+  'other': ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'],
 };
 
 const FOLDER_ALLOWED_MIMES: Record<string, string[]> = {
@@ -38,7 +38,13 @@ const FOLDER_ALLOWED_MIMES: Record<string, string[]> = {
   'ijazah': ['application/pdf'],
   'ktp': ['application/pdf', 'image/jpeg', 'image/png'],
   'transcript': ['application/pdf'],
-  'other': ['application/pdf'],
+  'other': [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword'
+  ],
 };
 
 // Max file size: 10MB
@@ -57,12 +63,12 @@ export const multerConfig: MulterOptions = {
       const documentTypeName = (req as any).documentTypeName || 'other';
       const folder = getFolderFromDocumentType(documentTypeName);
       const destPath = `./uploads/documents/${folder}`;
-      
+
       // Create directory if not exists
       if (!fs.existsSync(destPath)) {
         fs.mkdirSync(destPath, { recursive: true });
       }
-      
+
       callback(null, destPath);
     },
     filename: (req, file, callback) => {
@@ -74,7 +80,7 @@ export const multerConfig: MulterOptions = {
     const ext = extname(file.originalname).toLowerCase();
     const documentTypeName = (req as any).documentTypeName || 'other';
     const folder = getFolderFromDocumentType(documentTypeName);
-    
+
     const allowedExtensions = FOLDER_ALLOWED_EXTENSIONS[folder] || FOLDER_ALLOWED_EXTENSIONS['other'];
     const allowedMimes = FOLDER_ALLOWED_MIMES[folder] || FOLDER_ALLOWED_MIMES['other'];
 

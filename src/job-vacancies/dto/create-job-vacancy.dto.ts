@@ -27,7 +27,8 @@ export class CreateJobVacancyDto {
     employeePositionId!: string;
 
     @IsUUID()
-    jobVacancyStatusId!: string;
+    @IsOptional()
+    jobVacancyStatusId?: string;
 
     @IsUUID()
     jobVacancyDurationId!: string;

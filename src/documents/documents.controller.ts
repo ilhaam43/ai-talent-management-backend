@@ -35,12 +35,12 @@ import * as fs from 'fs';
 @UseGuards(AuthGuard('jwt'))
 @ApiBearerAuth()
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(private readonly documentsService: DocumentsService) { }
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', multerConfig))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Upload CV or document',
     description: 'Upload documents to appropriate folders based on document type. ' +
       'Supported types: CV (pdf/docx), Ijazah (pdf), KTP (pdf/image), Transcript (pdf), Other (pdf)'

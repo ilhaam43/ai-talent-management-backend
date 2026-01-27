@@ -151,6 +151,7 @@ export class AuthService {
       const payload = {
         email: user.email || user.candidateEmail,
         sub: user.id,
+        name: user.name,
         candidateId: user.candidateId,
         role: user.role,
         type: 'access'
