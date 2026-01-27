@@ -10,7 +10,7 @@ const prisma = new PrismaClient({ adapter });
 
 const skills = [
     // Network & Infrastructure
-    'OSPF', 'BGP', 'VLANs', 'STP', 'Wireshark', 'GNS3', 'Puppet', 'Ansible',
+    'OSPF', 'BGP', 'VLANs', 'STP', 'Wireshark', 'Nmap', 'GNS3', 'Puppet', 'Ansible',
     'MPLS', 'SD-WAN', 'QoS', 'Network Security', 'Firewalls', 'VPN', 'Cisco DNA', 'Riverbed', 'Splunk',
 
     // Cybersecurity
@@ -37,7 +37,16 @@ const skills = [
 
     // HR
     'Recruitment', 'Administration', 'Labor Law', 'LinkedIn Recruiter', 'JobStreet', 'HRIS', 'Talent', 'Workday',
-    'Talent Management', 'OD', 'Compensation & Benefits', 'Industrial Relations', 'SuccessFactors', 'Mercer', 'DISC', 'MBTI'
+    'Talent Management', 'OD', 'Compensation & Benefits', 'Industrial Relations', 'SuccessFactors', 'Mercer', 'DISC', 'MBTI',
+
+    // QA & Testing
+    'Apache JMeter', 'Postman', 'Selenium', 'NeoLoad', 'IBM Rational Performance Tester', 'Performance Testing', 'Test Plans', 'Test Cases', 'DR Testing',
+
+    // IT Support & Infrastructure
+    'Microsoft Active Directory', 'Office 365', 'Microsoft Excel', 'Storage Area Networks', 'SAN', 'WAN Acceleration', 'Virtualization', 'Routers', 'Backup Applications', 'IT Asset Management', 'IT Service Management', 'ITSM', 'ITIL Foundation', 'LAN Cabling',
+
+    // Sales & Account Management
+    'Account Management', 'Client Relationship Management', 'Contract Negotiation', 'Solution Selling', 'Customer Success', 'Project Coordination', 'Sales Strategy', 'Presentation Skills'
 ];
 
 async function main() {

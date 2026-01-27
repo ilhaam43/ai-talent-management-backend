@@ -25,6 +25,7 @@ const seeders = [
     'seed-document-types.ts',
     'seed-auth.ts',
     'seed-candidate.ts',
+    'seed-lintasarta-candidates.ts',
     'seed-job-vacancies.ts',
     'seed-candidates-and-applications.ts',
 ];

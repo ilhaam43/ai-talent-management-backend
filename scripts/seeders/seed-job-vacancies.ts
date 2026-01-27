@@ -65,6 +65,10 @@ async function main() {
             where: { divisionName: 'Human Capital Strategy and Experience' },
             include: { directorate: true, group: true }
         }),
+        fsiDigitalCompanies: await prisma.division.findFirst({
+            where: { divisionName: 'FSI and Digital Companies Account' },
+            include: { directorate: true, group: true }
+        }),
     };
 
     // Get departments
@@ -77,6 +81,8 @@ async function main() {
         corporateComm: await prisma.department.findFirst({ where: { departmentName: 'Corporate Communication' } }),
         financialPlanning: await prisma.department.findFirst({ where: { departmentName: 'Financial Planning and Controlling' } }),
         peopleServices: await prisma.department.findFirst({ where: { departmentName: 'People Services' } }),
+        itProfessionalServices: await prisma.department.findFirst({ where: { departmentName: 'IT Professional Services' } }),
+        fsiAccount1: await prisma.department.findFirst({ where: { departmentName: 'FSI and Digital Companies Account 1' } }),
     };
 
     // Get job roles
@@ -90,6 +96,9 @@ async function main() {
         hrSpecialist: await prisma.jobRole.findFirst({ where: { jobRoleName: 'HUMAN RESOURCES GENERALIST' } }),
         financialAnalyst: await prisma.jobRole.findFirst({ where: { jobRoleName: 'FINANCIAL ANALYST' } }),
         businessAnalyst: await prisma.jobRole.findFirst({ where: { jobRoleName: 'BUSINESS ANALYST' } }),
+        penetrationTester: await prisma.jobRole.findFirst({ where: { jobRoleName: 'PENETRATION TESTER' } }),
+        qaEngineer: await prisma.jobRole.findFirst({ where: { jobRoleName: 'QUALITY ASSURANCE ENGINEER' } }),
+        accountManager: await prisma.jobRole.findFirst({ where: { jobRoleName: 'ACCOUNT MANAGER' } }),
     };
 
     // Define job vacancies data
@@ -160,6 +169,22 @@ async function main() {
             maxSalary: 24000000,
             skills: ['Threat Hunting', 'Forensics', 'Penetration Testing', 'Splunk', 'QRadar', 'EnCase', 'Burp Suite', 'Kali Linux', 'Zero Trust'],
         },
+        {
+            jobRoleId: jobRoles.penetrationTester?.id,
+            employeePositionId: positions.seniorEngineer?.id,
+            jobVacancyStatusId: jobVacancyStatus?.id,
+            jobVacancyDurationId: durations.days60?.id,
+            jobVacancyReasonId: jobVacancyReason?.id,
+            employmentTypeId: employmentTypes.pkwtt?.id,
+            divisionId: divisions.cybersecurity?.id,
+            departmentId: departments.cybersecurityDelivery?.id,
+            jobRequirement: "Bachelor's degree in Computer Science, Information Technology, Cybersecurity, or a related field. Minimum of 3 years of experience in penetration testing, with a proven track record of conducting advanced tests. Basic understanding of penetration testing techniques, tools, and methodologies. Familiarity with common penetration testing tools (e.g., Metasploit, Burp Suite, Nmap, Wireshark). Strong analytical and problem-solving skills. Good written and verbal communication skills. Ability to work collaboratively in a team-oriented environment. Eagerness to learn and adapt to new technologies and security practices. Basic knowledge of network protocols, operating systems, and security concepts. Detail-oriented with the ability to document findings accurately and thoroughly. Continuous willingness to stay updated with the latest security trends and technologies. Relevant certifications (e.g, OSCP, OSCE, CEH, CISSP) are highly desirable.",
+            jobDescription: "Support penetration testing activities under the guidance of senior team members. Conduct basic penetration tests on networks, applications, and systems. Document preliminary findings and vulnerabilities identified during tests. Assist in developing and refining penetration test plans and methodologies. Stay informed about current security threats, vulnerabilities, and penetration testing tools. Collaborate with other security team members to address identified vulnerabilities. Participate in the analysis of penetration test results and provide input on potential impacts. Contribute to the creation of detailed reports and presentations for management and technical audiences. Assist in the development and maintenance of standard operating procedures for penetration testing.",
+            cityLocation: 'Jakarta',
+            minSalary: 18000000,
+            maxSalary: 28000000,
+            skills: ['Penetration Testing', 'Metasploit', 'Burp Suite', 'Nmap', 'Wireshark', 'Vulnerability Assessment'],
+        },
 
         // Cloud Division - Technical positions
         {
@@ -223,6 +248,38 @@ async function main() {
             minSalary: 16000000,
             maxSalary: 23000000,
             skills: ['Next.js', 'Web Performance', 'Micro-frontends', 'PWA', 'WebSockets', 'CI/CD', 'Lighthouse', 'Vercel', 'Netlify', 'Cypress'],
+        },
+        {
+            jobRoleId: jobRoles.qaEngineer?.id,
+            employeePositionId: positions.engineer?.id,
+            jobVacancyStatusId: jobVacancyStatus?.id,
+            jobVacancyDurationId: durations.days60?.id,
+            jobVacancyReasonId: jobVacancyReason?.id,
+            employmentTypeId: employmentTypes.pkwtt?.id,
+            divisionId: divisions.itServices?.id,
+            departmentId: departments.itProfessionalServices?.id,
+            jobRequirement: "Holds a minimum of a Bachelor's degree (S1), preferably in Information Technology–related fields such as Informatics Engineering, Computer Science, Information Management, Computer Engineering, Information Systems, or equivalent. Able to understand application development documents and translate them into testing activities based on predefined testing scenarios. Proficient in performance testing concepts, including test plans, test cases, DR testing, and performance testing. Has a minimum of 3 (three) years of experience as a Performance Tester in application development projects. Experienced in using performance testing tools such as Apache JMeter, Postman, Selenium, NeoLoad, or IBM Rational Performance Tester, and has a good understanding of general IT infrastructure configurations. Preferably able to communicate effectively in both Indonesian and English.",
+            jobDescription: "Execute performance testing activities on applications and/or infrastructure in accordance with defined testing scenarios. Develop performance testing scripts based on testing scenarios. Document testing processes using the customer's ADLM and/or defect management system. Evaluate and monitor testing results and findings in a detailed and comprehensive manner, and ensure corrective actions have been properly implemented by developers. Prepare progress reports and final reports on application and/or infrastructure performance testing activities. Provide support for other tasks related to the development of Digital Technology Assets. Willing to be assigned at Lintasarta customer sites in Jakarta, specifically within the banking sector. Willing to be engaged under a Project-Based Fixed-Term Employment Contract (PKWT) with Lintasarta. Willing to work fully on-site (WFO) at Lintasarta customer locations.",
+            cityLocation: 'Jakarta',
+            minSalary: 10000000,
+            maxSalary: 15000000,
+            skills: ['Apache JMeter', 'Postman', 'Selenium', 'NeoLoad', 'Performance Testing', 'Test Plans', 'Test Cases'],
+        },
+        {
+            jobRoleId: jobRoles.itSupport?.id,
+            employeePositionId: positions.engineer?.id,
+            jobVacancyStatusId: jobVacancyStatus?.id,
+            jobVacancyDurationId: durations.days30?.id,
+            jobVacancyReasonId: jobVacancyReason?.id,
+            employmentTypeId: employmentTypes.pkwtt?.id,
+            divisionId: divisions.itServices?.id,
+            departmentId: departments.itProfessionalServices?.id,
+            jobRequirement: "Minimum Bachelor's degree (S1) in Information Systems, Informatics Engineering, Computer Science, or related fields. Minimum 1 year of experience in IT Support / IT Helpdesk. Knowledge of technologies such as Microsoft Active Directory, Office 365, with strong proficiency in Microsoft Excel being an advantage. Experience in areas such as Storage Area Networks (SAN), WAN acceleration, virtualization, firewalls, routers, and related technologies. Experience in Backup Applications. Experience and knowledge in IT Asset Management and IT Service Management (ITSM), preferably with ITIL Foundation exposure. Experience in managing LAN cabling projects. Willing to be assigned to banking industry customers located in Jakarta. Willing to work in shifts.",
+            jobDescription: "Handle user technical issues related to hardware, software, and network systems. Perform installation, configuration, and troubleshooting of IT equipment. Provide daily technical support (on-site and/or remote). Record, track, and follow up on incident tickets or issue reports. Coordinate and escalate issues to relevant teams when necessary. Understand and have hands-on experience implementing IT Service Management (ITSM). Experience using HR applications and/or ERP systems. Experience using Payment Systems applications and/or Core Banking Systems.",
+            cityLocation: 'Jakarta',
+            minSalary: 7000000,
+            maxSalary: 11000000,
+            skills: ['Microsoft Active Directory', 'Office 365', 'Microsoft Excel', 'SAN', 'WAN Acceleration', 'Virtualization', 'Firewalls', 'Routers', 'Backup Applications', 'IT Asset Management', 'ITSM', 'ITIL Foundation', 'LAN Cabling'],
         },
 
         // Strategy and Business Development Division - Non-technical positions
@@ -351,6 +408,24 @@ async function main() {
             minSalary: 13000000,
             maxSalary: 19000000,
             skills: ['Talent Management', 'OD', 'Compensation & Benefits', 'Industrial Relations', 'Workday', 'SuccessFactors', 'Mercer', 'DISC', 'MBTI'],
+        },
+
+        // FSI and Digital Companies Account Division - Sales positions
+        {
+            jobRoleId: jobRoles.accountManager?.id,
+            employeePositionId: positions.seniorOfficer?.id,
+            jobVacancyStatusId: jobVacancyStatus?.id,
+            jobVacancyDurationId: durations.days60?.id,
+            jobVacancyReasonId: jobVacancyReason?.id,
+            employmentTypeId: employmentTypes.pkwtt?.id,
+            divisionId: divisions.fsiDigitalCompanies?.id,
+            departmentId: departments.fsiAccount1?.id,
+            jobRequirement: "Proven work experience as an account executive / account manager in information technology or similar company. Demonstrable ability to communicate, present and influence credibly and effectively at all levels of the organization. Experience in delivering client-focused solutions based on customer needs. Proven ability to manage multiple projects at a time while paying strict attention to detail.",
+            jobDescription: "Operate as the lead point of contact for any and all matters specific to our customers. Build and maintain strong, long-lasting customer relationships. Negotiate contracts and close agreements to maximize profit. Develop a trusted advisor relationship with key accounts, customer stakeholders and executive sponsors. Ensure the timely and successful delivery of our solutions according to customer needs and objectives.",
+            cityLocation: 'Jakarta',
+            minSalary: 15000000,
+            maxSalary: 25000000,
+            skills: ['Account Management', 'Client Relationship Management', 'Contract Negotiation', 'Solution Selling', 'Customer Success', 'Project Coordination', 'Sales Strategy', 'Presentation Skills'],
         },
     ];
 

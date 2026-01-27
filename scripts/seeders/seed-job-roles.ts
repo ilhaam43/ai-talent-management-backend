@@ -29,6 +29,8 @@ const jobRoles = [
     'FINANCIAL ANALYST',
     'HUMAN RESOURCES GENERALIST',
     'IT SUPPORT ENGINEER',
+    'PENETRATION TESTER',
+    'ACCOUNT MANAGER',
 ];
 
 async function main() {
