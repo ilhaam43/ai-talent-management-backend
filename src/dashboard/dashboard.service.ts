@@ -132,4 +132,107 @@ export class DashboardService {
 
     return { pieData, barData };
   }
+
+  async getActionCenter(tab: number) {
+    let rawData: any[] = [];
+    let taskName = "";
+
+    const formatDate = (date: Date) => {
+      return date.toLocaleDateString("en-GB"); // DD/MM/YYYY
+    };
+
+    if (tab === 0) {
+      // Job Role Request (DRAFT Vacancies)
+      taskName = "Approval Job Role";
+      rawData = await this.prisma.jobVacancy.findMany({
+        where: {
+          jobVacancyStatus: {
+            jobVacancyStatus: "DRAFT",
+          },
+        },
+        include: {
+          jobRole: true,
+          division: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    } else {
+      // Application Stages
+      let stageNames: string[] = [];
+      switch (tab) {
+        case 1: // Online Assessment
+          taskName = "Send Online Assessment";
+          stageNames = ["AI SCREENING", "Online Assessment"];
+          break;
+        case 2: // Interview
+          taskName = "Schedule Interview";
+          stageNames = [
+            "HR Interview",
+            "User Interview",
+            "INTERVIEW USER 1",
+            "INTERVIEW USER 2",
+          ];
+          break;
+        case 3: // Offer Letter
+          taskName = "Prepare Offer Letter";
+          stageNames = ["Offering", "Offer Letter"];
+          break;
+        case 4: // MCU
+          taskName = "Schedule MCU";
+          stageNames = ["MCU"];
+          break;
+        case 5: // Onboarding
+          taskName = "Onboarding Preparation";
+          stageNames = ["Onboarding", "Hired"];
+          break;
+        default:
+          return [];
+      }
+
+      rawData = await this.prisma.candidateApplication.findMany({
+        where: {
+          applicationPipeline: {
+            applicationPipeline: { in: stageNames },
+          },
+        },
+        include: {
+          jobVacancy: {
+            include: {
+              jobRole: true,
+              division: true,
+            },
+          },
+        },
+        orderBy: { submissionDate: "desc" },
+      });
+    }
+
+    // Transform to Table Format
+    return rawData.map((item) => {
+      if (tab === 0) {
+        // Job Vacancy Item
+        const v = item;
+        return {
+          jobRole: v.jobRole?.jobRoleName || "Unknown Role",
+          pic: "HRD", // Hardcoded or derive from creator
+          department: v.division?.divisionName || "General",
+          task: taskName,
+          date: formatDate(v.createdAt),
+          actionIcon: "/action_icon.svg",
+        };
+      } else {
+        // Application Item
+        const app = item;
+        const v = app.jobVacancy;
+        return {
+          jobRole: v?.jobRole?.jobRoleName || "Unknown Role",
+          pic: "HRD",
+          department: v?.division?.divisionName || "General",
+          task: taskName,
+          date: formatDate(app.submissionDate),
+          actionIcon: "/action_icon.svg",
+        };
+      }
+    });
+  }
 }

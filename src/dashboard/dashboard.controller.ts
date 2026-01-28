@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, UseGuards, Query } from "@nestjs/common";
 import { DashboardService } from "./dashboard.service";
 // import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Assuming generic auth guard exists
 // import { Role } from '../common/enums/role.enum'; // If roles are needed
@@ -17,5 +17,10 @@ export class DashboardController {
   @Get("charts")
   async getCharts() {
     return this.dashboardService.getRecruitmentCharts();
+  }
+
+  @Get("action-center")
+  async getActionCenter(@Query("tab") tab: string) {
+    return this.dashboardService.getActionCenter(Number(tab) || 0);
   }
 }
