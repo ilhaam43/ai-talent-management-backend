@@ -173,7 +173,16 @@ export class TalentPoolService {
       });
       
       if (existingCandidate) {
-        this.logger.log(`Duplicate candidate found: ${candidateData.email}, updating screenings`);
+        this.logger.log(`Duplicate candidate found: ${candidateData.email}, updating profile data and screenings`);
+        
+        // Update profile data (skills, education, work experience, etc.) for existing candidate
+        await this.updateCandidateProfileData(existingCandidate.id, {
+          skills: candidateData.skills,
+          education: candidateData.education,
+          workExperience: candidateData.workExperience,
+          certifications: candidateData.certifications,
+          organizationExperience: candidateData.organizationExperience,
+        });
         
         // Create CandidateApplications for new job screenings
         await this.createCandidateApplicationsFromScreenings(
@@ -488,6 +497,13 @@ export class TalentPoolService {
    * Create a unified Candidate record from talent pool n8n callback
    * Creates: User (with passwordSetRequired=true) + Candidate (isTalentPool=true) + Profile records
    */
+  // Helper to safely parse dates
+  private safeDate(dateStr: any): Date | null {
+    if (!dateStr || dateStr === 'Present' || dateStr === 'Current') return null;
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
   async createUnifiedTalentPoolCandidate(
     batchId: string,
     candidateData: {
@@ -566,6 +582,8 @@ export class TalentPoolService {
     // Get default education level
     const defaultEducationLevel = await this.prisma.candidateLastEducation.findFirst();
 
+
+
     // Create education records
     if (data.education && data.education.length > 0) {
       for (const edu of data.education) {
@@ -578,8 +596,8 @@ export class TalentPoolService {
               candidateMajor: edu.major || edu.degree || null,
               candidateGpa: edu.gpa ? parseFloat(edu.gpa) : null,
               candidateCountry: 'Indonesia',
-              candidateStartedYearStudy: edu.startYear ? new Date(`${edu.startYear}-01-01`) : null,
-              candidateEndedYearStudy: edu.endYear ? new Date(`${edu.endYear}-12-31`) : null,
+              candidateStartedYearStudy: this.safeDate(edu.startYear),
+              candidateEndedYearStudy: this.safeDate(edu.endYear),
             },
           });
         } catch (e: any) {
@@ -599,8 +617,8 @@ export class TalentPoolService {
               jobTitle: work.position || work.title || 'Unknown',
               fieldOfWork: work.fieldOfWork || 'General',
               industry: work.industry || 'General',
-              employmentStartedDate: work.startDate ? new Date(work.startDate) : new Date(),
-              employmentEndedDate: work.endDate ? new Date(work.endDate) : null,
+              employmentStartedDate: this.safeDate(work.startDate) || new Date(),
+              employmentEndedDate: this.safeDate(work.endDate),
               workExperienceDescription: work.description || null,
               country: 'Indonesia',
               referenceName: 'N/A',
@@ -615,20 +633,26 @@ export class TalentPoolService {
     }
 
     // Create skill records
+    this.logger.log(`[DEBUG] Creating skills for candidate ${candidateId}, skills count: ${data.skills?.length || 0}`);
     if (data.skills && data.skills.length > 0) {
+      this.logger.log(`[DEBUG] Skills to create: ${JSON.stringify(data.skills)}`);
       for (const skill of data.skills) {
         try {
-          await this.prisma.candidateSkill.create({
+          const created = await this.prisma.candidateSkill.create({
             data: {
               candidateId,
               candidateSkill: skill,
-              candidateRating: CandidateRating.THREE, // Default rating
+              candidateRating: 'THREE' as CandidateRating, 
             },
           });
+          this.logger.log(`[DEBUG] Created skill: ${skill} with id ${created.id}`);
         } catch (e: any) {
           this.logger.warn(`Failed to create skill record: ${e.message}`);
         }
       }
+    } else {
+
+      this.logger.log(`[DEBUG] No skills to create for candidate ${candidateId}`);
     }
 
     // Create certification records
@@ -667,6 +691,198 @@ export class TalentPoolService {
         }
       }
     }
+  }
+
+  /**
+   * Update profile data for existing candidate (add missing skills, education, etc.)
+   * This is called when a duplicate candidate is detected to ensure their profile is complete
+   */
+  private async updateCandidateProfileData(
+    candidateId: string,
+    data: {
+      skills?: string[];
+      education?: any[];
+      workExperience?: any[];
+      certifications?: any[];
+      organizationExperience?: any[];
+    },
+  ): Promise<void> {
+    this.logger.log(`Updating profile data for candidate: ${candidateId}`);
+
+    // Get existing skills to avoid duplicates
+    const existingSkills = await this.prisma.candidateSkill.findMany({
+      where: { candidateId },
+      select: { candidateSkill: true },
+    });
+    const existingSkillNames = new Set(
+      existingSkills.map((s) => s.candidateSkill.toLowerCase().trim()),
+    );
+
+    // Add new skills that don't exist
+    if (data.skills && data.skills.length > 0) {
+      for (const skill of data.skills) {
+        const skillLower = skill.toLowerCase().trim();
+        if (!existingSkillNames.has(skillLower)) {
+          try {
+            await this.prisma.candidateSkill.create({
+              data: {
+                candidateId,
+                candidateSkill: skill,
+                candidateRating: 'THREE' as CandidateRating,
+              },
+            });
+            existingSkillNames.add(skillLower);
+            this.logger.log(`Added skill: ${skill} for candidate ${candidateId}`);
+          } catch (e: any) {
+            this.logger.warn(`Failed to add skill ${skill}: ${e.message}`);
+          }
+        }
+      }
+    }
+
+    // Get default education level for new education records
+    const defaultEducationLevel = await this.prisma.candidateLastEducation.findFirst();
+
+    // Get existing education to check for duplicates
+    const existingEducation = await this.prisma.candidateEducation.findMany({
+      where: { candidateId },
+      select: { candidateSchool: true },
+    });
+    const existingSchools = new Set(
+      existingEducation.map((e) => e.candidateSchool?.toLowerCase().trim()),
+    );
+
+    // Add new education records
+    if (data.education && data.education.length > 0) {
+      for (const edu of data.education) {
+        const schoolLower = (edu.institution || '')?.toLowerCase().trim();
+        if (schoolLower && !existingSchools.has(schoolLower)) {
+          try {
+            await this.prisma.candidateEducation.create({
+              data: {
+                candidateId,
+                candidateLastEducationId: defaultEducationLevel?.id || '',
+                candidateSchool: edu.institution || 'Unknown',
+                candidateMajor: edu.major || edu.degree || 'General',
+                candidateGpa: edu.gpa || 'N/A',
+                candidateStartedYearStudy: this.safeDate(edu.startYear),
+                candidateEndedYearStudy: this.safeDate(edu.endYear),
+                candidateCountry: 'Indonesia',
+              },
+            });
+            existingSchools.add(schoolLower);
+          } catch (e: any) {
+            this.logger.warn(`Failed to add education: ${e.message}`);
+          }
+        }
+      }
+    }
+
+    // Get existing work experience
+    const existingWork = await this.prisma.candidateWorkExperience.findMany({
+      where: { candidateId },
+      select: { companyName: true, jobTitle: true },
+    });
+    const existingWorkKeys = new Set(
+      existingWork.map(
+        (w) => `${w.companyName?.toLowerCase().trim()}-${w.jobTitle?.toLowerCase().trim()}`,
+      ),
+    );
+
+    // Add new work experience records
+    if (data.workExperience && data.workExperience.length > 0) {
+      for (const work of data.workExperience) {
+        const workKey = `${(work.company || '').toLowerCase().trim()}-${(work.position || '').toLowerCase().trim()}`;
+        if (!existingWorkKeys.has(workKey)) {
+          try {
+            await this.prisma.candidateWorkExperience.create({
+              data: {
+                candidateId,
+                companyName: work.company || 'Unknown',
+                jobTitle: work.position || work.title || 'Unknown',
+                fieldOfWork: work.fieldOfWork || 'General',
+                industry: work.industry || 'General',
+                employmentStartedDate: this.safeDate(work.startDate) || new Date(),
+                employmentEndedDate: this.safeDate(work.endDate),
+                workExperienceDescription: work.description || null,
+                country: 'Indonesia',
+                referenceName: 'N/A',
+                referencePhoneNumber: 'N/A',
+                referenceRelationship: 'N/A',
+              },
+            });
+            existingWorkKeys.add(workKey);
+          } catch (e: any) {
+            this.logger.warn(`Failed to add work experience: ${e.message}`);
+          }
+        }
+      }
+    }
+
+    // Get existing certifications
+    const existingCerts = await this.prisma.candidateCertification.findMany({
+      where: { candidateId },
+      select: { certificationTitle: true },
+    });
+    const existingCertTitles = new Set(
+      existingCerts.map((c) => c.certificationTitle?.toLowerCase().trim()),
+    );
+
+    // Add new certifications
+    if (data.certifications && data.certifications.length > 0) {
+      for (const cert of data.certifications) {
+        const certLower = (cert.name || cert.title || '').toLowerCase().trim();
+        if (certLower && !existingCertTitles.has(certLower)) {
+          try {
+            await this.prisma.candidateCertification.create({
+              data: {
+                candidateId,
+                certificationTitle: cert.name || cert.title || 'Unknown',
+                institutionName: cert.issuer || cert.institution || 'Unknown',
+                certificationStartDate: this.safeDate(cert.date),
+              },
+            });
+            existingCertTitles.add(certLower);
+          } catch (e: any) {
+            this.logger.warn(`Failed to add certification: ${e.message}`);
+          }
+        }
+      }
+    }
+
+    // Get existing organization experience
+    const existingOrgs = await this.prisma.candidateOrganizationExperience.findMany({
+      where: { candidateId },
+      select: { organizationName: true },
+    });
+    const existingOrgNames = new Set(
+      existingOrgs.map((o) => o.organizationName?.toLowerCase().trim()),
+    );
+
+    // Add new organization experience
+    if (data.organizationExperience && data.organizationExperience.length > 0) {
+      for (const org of data.organizationExperience) {
+        const orgLower = (org.organization || org.name || '').toLowerCase().trim();
+        if (orgLower && !existingOrgNames.has(orgLower)) {
+          try {
+            await this.prisma.candidateOrganizationExperience.create({
+              data: {
+                candidateId,
+                organizationName: org.organization || org.name || 'Unknown',
+                role: org.role || org.position || 'Member',
+                organizationExperienceStartedDate: this.safeDate(org.startDate) || new Date(),
+                organizationExperienceEndedDate: this.safeDate(org.endDate),
+              },
+            });
+            existingOrgNames.add(orgLower);
+          } catch (e: any) {
+            this.logger.warn(`Failed to add organization: ${e.message}`);
+          }
+        }
+      }
+    }
+
+    this.logger.log(`Profile data update completed for candidate: ${candidateId}`);
   }
 
   /**
@@ -874,9 +1090,38 @@ export class TalentPoolService {
       isTalentPool: true,
     };
 
-    // Get distinct candidates who have applications in talent pool
-    const applications = await this.prisma.candidateApplication.findMany({
+    if (batchId) {
+      whereClause.candidate = {
+        talentPoolBatchId: batchId,
+      };
+    }
+
+    // Get ALL applications first (Flattened Rows) to determine matches and total
+    const allApplications = await this.prisma.candidateApplication.findMany({
       where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      select: { 
+          id: true, 
+          candidateId: true 
+      }
+    });
+
+    const total = allApplications.length;
+
+    // Identify the IDs for the current page
+    const pagedAppIds = allApplications
+        .slice(skip, skip + take)
+        .map(app => app.id);
+
+    if (pagedAppIds.length === 0) {
+        return { candidates: [], total };
+    }
+
+    // Now fetch full data ONLY for these applications
+    const pagedApplications = await this.prisma.candidateApplication.findMany({
+      where: {
+        id: { in: pagedAppIds }
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         candidate: {
@@ -917,7 +1162,11 @@ export class TalentPoolService {
     // Group applications by candidate for the response
     const candidateMap = new Map<string, any>();
     
-    for (const app of applications) {
+    // We must iterate through pagedAppIds to maintain the sort order (createdAt desc)
+    // findMany result order is not guaranteed to match 'in' array order
+    // So we sort the result to match pagedAppIds order OR rely on order by createdAt desc which we added
+    
+    for (const app of pagedApplications) {
       const candidateId = app.candidateId;
       
       if (!candidateMap.has(candidateId)) {
@@ -932,18 +1181,17 @@ export class TalentPoolService {
         fitScore: app.fitScore,
         aiMatchStatus: app.aiMatchStatus,
         aiInsight: app.aiInsight,
+        aiInterview: app.aiInterview,
+        aiCoreValue: app.aiCoreValue,
         jobVacancyId: app.jobVacancyId,
         jobVacancy: app.jobVacancy,
         isTalentPool: app.isTalentPool,
       });
     }
 
-    const allCandidates = Array.from(candidateMap.values());
+    const groupedCandidates = Array.from(candidateMap.values());
     
-    // Apply pagination
-    const paginatedCandidates = allCandidates.slice(skip, skip + take);
-    
-    return { candidates: paginatedCandidates, total: allCandidates.length };
+    return { candidates: groupedCandidates, total: total };
   }
 
   // ============================================
