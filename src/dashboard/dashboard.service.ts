@@ -235,4 +235,125 @@ export class DashboardService {
       }
     });
   }
+
+  async getActionCenterInsights() {
+    const today = new Date();
+    const startOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
+    const startOfYesterday = new Date(startOfToday);
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+    const getGrowth = async (currentCount: number, whereClause: any) => {
+
+      const yesterdayCount = await this.prisma.candidateApplication.count({
+        where: {
+          ...whereClause,
+          submissionDate: {
+            lt: startOfToday,
+          },
+        },
+      });
+
+      // Actually if it says "+3 tasks from yesterday", it might mean "Tasks created today".
+      // Let's calculate tasks created today.
+      const createdToday = await this.prisma.candidateApplication.count({
+        where: {
+          ...whereClause,
+          submissionDate: {
+            gte: startOfToday,
+          },
+        },
+      });
+
+      return `+${createdToday} tasks from yesterday`;
+    };
+
+    // 1. Pending Approval (DRAFT Vacancies)
+    // Note: DRAFT vacancies use createdAt, not submissionDate
+    const pendingApprovalCount = await this.prisma.jobVacancy.count({
+      where: { jobVacancyStatus: { jobVacancyStatus: "DRAFT" } },
+    });
+    const pendingApprovalGrowth = await this.prisma.jobVacancy.count({
+      where: {
+        jobVacancyStatus: { jobVacancyStatus: "DRAFT" },
+        createdAt: { gte: startOfToday },
+      },
+    });
+
+    // 2. Scheduling Needed (Interviews)
+    const interviewStages = [
+      "HR Interview",
+      "User Interview",
+      "INTERVIEW USER 1",
+      "INTERVIEW USER 2",
+    ];
+    const schedulingNeededCount = await this.prisma.candidateApplication.count({
+      where: {
+        applicationPipeline: { applicationPipeline: { in: interviewStages } },
+      },
+    });
+    const schedulingNeededGrowth = await this.prisma.candidateApplication.count(
+      {
+        where: {
+          applicationPipeline: { applicationPipeline: { in: interviewStages } },
+          submissionDate: { gte: startOfToday },
+        },
+      },
+    );
+
+    // 3. Waiting Feedback (Online Assessment / Offering)
+    // Let's map to Online Assessment as "Waiting Result"
+    const feedbackStages = ["Online Assessment", "AI SCREENING"];
+    const waitingFeedbackCount = await this.prisma.candidateApplication.count({
+      where: {
+        applicationPipeline: { applicationPipeline: { in: feedbackStages } },
+      },
+    });
+    const waitingFeedbackGrowth = await this.prisma.candidateApplication.count({
+      where: {
+        applicationPipeline: { applicationPipeline: { in: feedbackStages } },
+        submissionDate: { gte: startOfToday },
+      },
+    });
+
+    // 4. Onboarding Soon (Onboarding / MCU)
+    const onboardingStages = ["Onboarding", "MCU"];
+    const onboardingCount = await this.prisma.candidateApplication.count({
+      where: {
+        applicationPipeline: { applicationPipeline: { in: onboardingStages } },
+      },
+    });
+    const onboardingGrowth = await this.prisma.candidateApplication.count({
+      where: {
+        applicationPipeline: { applicationPipeline: { in: onboardingStages } },
+        submissionDate: { gte: startOfToday },
+      },
+    });
+
+    return [
+      {
+        title: "Pending Approval",
+        number: pendingApprovalCount.toString(),
+        tasks: `+${pendingApprovalGrowth} tasks from yesterday`,
+      },
+      {
+        title: "Scheduling Needed",
+        number: schedulingNeededCount.toString(),
+        tasks: `+${schedulingNeededGrowth} tasks from yesterday`,
+      },
+      {
+        title: "Waiting Feedback",
+        number: waitingFeedbackCount.toString(),
+        tasks: `+${waitingFeedbackGrowth} tasks from yesterday`,
+      },
+      {
+        title: "Onboarding Soon",
+        number: onboardingCount.toString(),
+        tasks: `+${onboardingGrowth} tasks from yesterday`,
+      },
+    ];
+  }
 }

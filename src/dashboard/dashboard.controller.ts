@@ -23,4 +23,9 @@ export class DashboardController {
   async getActionCenter(@Query("tab") tab: string) {
     return this.dashboardService.getActionCenter(Number(tab) || 0);
   }
+
+  @Get("action-center/insights")
+  async getActionCenterInsights() {
+    return this.dashboardService.getActionCenterInsights();
+  }
 }
