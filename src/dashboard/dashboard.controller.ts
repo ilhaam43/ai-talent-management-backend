@@ -13,4 +13,9 @@ export class DashboardController {
   async getInsights() {
     return this.dashboardService.getInsights();
   }
+
+  @Get("charts")
+  async getCharts() {
+    return this.dashboardService.getRecruitmentCharts();
+  }
 }

@@ -69,4 +69,67 @@ export class DashboardService {
       },
     ];
   }
+
+  async getRecruitmentCharts() {
+    // 1. Pie Chart: Vacancy Status
+    // Mapping: OPEN -> In Progress, DRAFT -> Hold, CLOSED -> Done
+    const getStatusCount = async (statusName: string) => {
+      return this.prisma.jobVacancy.count({
+        where: {
+          jobVacancyStatus: {
+            jobVacancyStatus: statusName,
+          },
+        },
+      });
+    };
+
+    const inProgress = await getStatusCount("OPEN");
+    const hold = await getStatusCount("DRAFT");
+    const done = await getStatusCount("CLOSED");
+
+    const pieData = [
+      { name: "In Progress", value: inProgress, color: "#0B3983" },
+      { name: "Hold", value: hold, color: "#9CA3AF" },
+      { name: "Done", value: done, color: "#3D42DF" },
+    ];
+
+    // 2. Bar Chart: Reasons by Year
+    // Fetch all vacancies with reason and createdAt
+    const vacancies = await this.prisma.jobVacancy.findMany({
+      select: {
+        createdAt: true,
+        jobVacancyReason: {
+          select: { reason: true },
+        },
+      },
+    });
+
+    const years = new Set<number>();
+    vacancies.forEach((v) => years.add(v.createdAt.getFullYear()));
+    const sortedYears = Array.from(years).sort((a, b) => a - b);
+
+    // If no years, default to current and previous
+    if (sortedYears.length === 0) {
+      const y = new Date().getFullYear();
+      sortedYears.push(y);
+    }
+
+    const barData = sortedYears.flatMap((year) => {
+      const vYear = vacancies.filter((v) => v.createdAt.getFullYear() === year);
+
+      const replacement = vYear.filter(
+        (v) => v.jobVacancyReason.reason === "Replacement",
+      ).length;
+      const additional = vYear.filter(
+        (v) => v.jobVacancyReason.reason !== "Replacement",
+      ).length;
+
+      return [
+        { name: `Replacement ${year}`, value: replacement },
+        { name: `Additional ${year}`, value: additional },
+      ];
+    });
+
+    return { pieData, barData };
+  }
 }

@@ -297,6 +297,89 @@ async function main() {
     }
   }
 
+  // --- Seeding for Charts ---
+  console.log("🌱 Seeding Chart Data (Job Vacancies)...");
+
+  const chartVacancies = [
+    // 2023
+    { status: "CLOSED", reason: "Replacement", year: 2023, count: 1 },
+
+    // 2024
+    { status: "CLOSED", reason: "Replacement", year: 2024, count: 34 },
+    { status: "CLOSED", reason: "New Position", year: 2024, count: 12 },
+
+    // 2025
+    { status: "CLOSED", reason: "Replacement", year: 2025, count: 125 }, // High number for visual
+    { status: "CLOSED", reason: "New Position", year: 2025, count: 76 },
+
+    // Current Status Mix (Pie Chart) - Mostly 2025/2026
+    { status: "OPEN", reason: "Replacement", year: 2025, count: 48 }, // In Progress
+    { status: "DRAFT", reason: "New Position", year: 2025, count: 26 }, // Hold
+    // Done is covered by CLOSED above, but let's ensure some are recent
+    { status: "CLOSED", reason: "Replacement", year: 2025, count: 20 },
+  ];
+
+  for (const group of chartVacancies) {
+    console.log(
+      `Creating ${group.count} vacancies for ${group.year} - ${group.status} - ${group.reason}`,
+    );
+
+    // Get or Create Status
+    let statusObj = await prisma.jobVacancyStatus.findFirst({
+      where: { jobVacancyStatus: group.status },
+    });
+    if (!statusObj)
+      statusObj = await prisma.jobVacancyStatus.create({
+        data: { jobVacancyStatus: group.status },
+      });
+
+    // Get or Create Reason
+    let reasonObj = await prisma.jobVacancyReason.findFirst({
+      where: { reason: group.reason },
+    });
+    if (!reasonObj)
+      reasonObj = await prisma.jobVacancyReason.create({
+        data: { reason: group.reason },
+      });
+
+    // Defaults
+    const employmentType = await prisma.employmentType.findFirst();
+    const position = await prisma.employeePosition.findFirst();
+    const duration = await prisma.jobVacancyDuration.findFirst();
+    // Job Role - Generic
+    let jobRole = await prisma.jobRole.findFirst({
+      where: { jobRoleName: "Genetic Engineer" },
+    });
+    if (!jobRole)
+      jobRole = await prisma.jobRole.create({
+        data: { jobRoleName: "Genetic Engineer" },
+      });
+
+    const date = new Date(group.year, 5, 15); // Mid-year
+
+    // Batch create using loop because createMany is not supported nicely with relations in some versions, or just simple loop
+    // Optimizing: We can use createMany for speed if we don't need relations returned, but JobVacancy has many relation fields.
+    // Safest is simple loop or createMany. JobVacancy usually doesn't have unique constraint issues on non-id fields.
+
+    // To keep it simple and safe:
+    await prisma.jobVacancy.createMany({
+      data: Array(group.count)
+        .fill(null)
+        .map(() => ({
+          jobRoleId: jobRole!.id,
+          employeePositionId: position!.id,
+          employmentTypeId: employmentType!.id,
+          jobVacancyStatusId: statusObj!.id,
+          jobVacancyDurationId: duration!.id,
+          jobVacancyReasonId: reasonObj!.id,
+          jobRequirement: "Chart Data",
+          cityLocation: "Jakarta",
+          createdAt: date,
+          updatedAt: date,
+        })),
+    });
+  }
+
   console.log("✅ Demo Insights Data seeded successfully!");
 }
 
