@@ -6,18 +6,25 @@ services:
     restart: unless-stopped
     working_dir: /usr/src/app
     environment:
-      - DATABASE_URL=postgresql://n8n_user:n8ndevops@host.docker.internal:5432/n8n_db?schema=public
+      - DATABASE_URL=postgresql://n8n_user:n8ndevops@localhost:5432/n8n_db?schema=public
       - JWT_SECRET=supersecretjwt
       - JWT_REFRESH_SECRET=supersecretjwtrefresh
       - PORT=3001
       - NODE_ENV=production
-      # - LLM_ENABLED=true
-      # - LLM_API_KEY=your-api-key-here
-      # - LLM_BASE_URL=https://integrate.api.nvidia.com/v1
-      # - LLM_MODEL=meta/llama-3.1-8b-instruct
+      - LLM_ENABLED=true
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+      - LLM_MODEL=meta/llama-3.1-8b-instruct
       - N8N_WEBHOOK_URL=https://workflow-ai-recruitment.lintasarta.dev/webhook/read_data
       - N8N_TALENT_POOL_WEBHOOK_URL=https://workflow-ai-recruitment.lintasarta.dev/webhook-test/talent_pool
+      - N8N_CHATBOT_WEBHOOK_URL=https://workflow-ai-recruitment.lintasarta.dev/webhook/chatbot
       - FRONTEND_URL=https://ai-recruitment.lintasarta.dev
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
+      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
+      - GMAIL_REFRESH_TOKEN=${GMAIL_REFRESH_TOKEN}
+      - GMAIL_FROM_EMAIL=rezaazhar.p@gmail.com
+      - GMAIL_FROM_NAME=AI Talent Management
+      - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -43,7 +50,7 @@ services:
       - .:/usr/src/app
       - /usr/src/app/node_modules
     environment:
-      - DATABASE_URL=postgresql://n8n_user:n8ndevops@host.docker.internal:5432/n8n_db?schema=public
+      - DATABASE_URL=postgresql://n8n_user:n8ndevops@localhost:5432/n8n_db?schema=public
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: sh -c "apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npx prisma migrate deploy && npx tsx scripts/seed/seed-all.ts"
