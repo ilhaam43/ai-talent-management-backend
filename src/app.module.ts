@@ -18,6 +18,7 @@ import { TalentPoolModule } from './talent-pool/talent-pool.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { MasterModule } from './master/master.module';
 import { AnalysisModule } from './analysis/analysis.module';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AnalysisModule } from './analysis/analysis.module';
     NotificationsModule,
     MasterModule,
     AnalysisModule,
+    AiAssistantModule,
   ],
   controllers: [TestRbacController],
   providers: [RolesGuard],
