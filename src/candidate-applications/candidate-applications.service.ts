@@ -1155,6 +1155,19 @@ export class CandidateApplicationsService {
         },
         applicationPipeline: true,
         applicationLastStatus: true,
+        candidateApplicationPipelines: {
+          include: {
+            applicationPipeline: true,
+            applicationPipelineStatus: true,
+            employee: {
+              include: {
+                user: { select: { name: true, email: true } },
+              },
+            },
+            interviewData: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
