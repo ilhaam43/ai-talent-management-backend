@@ -973,6 +973,12 @@ export class CandidateApplicationsService {
         candidate: {
           include: {
             user: { select: { name: true, email: true } },
+            educations: { include: { candidateLastEducation: true } },
+            workExperiences: true,
+            skills: true,
+            certifications: true,
+            organizationExperiences: true,
+            documents: { include: { documentType: true } },
             religion: true,
             maritalStatus: true,
             gender: true,
@@ -1112,6 +1118,8 @@ export class CandidateApplicationsService {
             educations: { include: { candidateLastEducation: true } },
             workExperiences: true,
             skills: true,
+            certifications: true,
+            organizationExperiences: true,
             documents: { include: { documentType: true } },
             religion: true,
             maritalStatus: true,

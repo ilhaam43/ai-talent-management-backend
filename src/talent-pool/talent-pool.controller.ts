@@ -129,10 +129,12 @@ export class TalentPoolController {
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
   async getBatches(
-    @Query('skip') skip?: number,
-    @Query('take') take?: number,
+    @Query('skip') skip?: any,
+    @Query('take') take?: any,
   ) {
-    return this.service.getBatches(skip || 0, take || 20);
+    const skipNum = skip ? parseInt(skip.toString()) : 0;
+    const takeNum = take ? parseInt(take.toString()) : 20;
+    return this.service.getBatches(skipNum, takeNum);
   }
 
   @Get('batches/:id')
@@ -169,9 +171,12 @@ export class TalentPoolController {
     @Query('minScore') minScore?: number,
     @Query('search') search?: string,
   ) {
+    const skipNum = skip ? parseInt(skip.toString()) : 0;
+    const takeNum = take ? parseInt(take.toString()) : 20;
+
     return this.service.getCandidates({
-      skip: skip || 0,
-      take: take || 20,
+      skip: skipNum,
+      take: takeNum,
       batchId,
       jobVacancyId,
       hrStatus: hrStatus as any,
@@ -197,13 +202,16 @@ export class TalentPoolController {
   @ApiQuery({ name: 'take', required: false, type: Number })
   @ApiQuery({ name: 'batchId', required: false, type: String })
   async getUnifiedCandidates(
-    @Query('skip') skip?: number,
-    @Query('take') take?: number,
+    @Query('skip') skip?: any,
+    @Query('take') take?: any,
     @Query('batchId') batchId?: string,
   ) {
+    const skipNum = skip ? parseInt(skip.toString()) : 0;
+    const takeNum = take ? parseInt(take.toString()) : 20;
+
     return this.service.getUnifiedTalentPoolCandidates({
-      skip: skip || 0,
-      take: take || 20,
+      skip: skipNum,
+      take: takeNum,
       batchId,
     });
   }

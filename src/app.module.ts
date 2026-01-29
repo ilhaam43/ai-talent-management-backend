@@ -9,7 +9,6 @@ import { CandidateProfileModule } from "./candidate-profile/candidate-profile.mo
 import { CandidatesModule } from "./candidates/candidates.module";
 import { TestRbacController } from "./common/test-rbac.controller";
 import { RolesGuard } from "./common/guards/roles.guard";
-
 import { JobVacanciesModule } from "./job-vacancies/job-vacancies.module";
 import { CandidateApplicationsModule } from "./candidate-applications/candidate-applications.module";
 import { SkillsModule } from "./skills/skills.module";
@@ -19,6 +18,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { MasterModule } from "./master/master.module";
 import { AnalysisModule } from "./analysis/analysis.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
 
 @Module({
   imports: [
@@ -39,6 +39,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
     MasterModule,
     AnalysisModule,
     DashboardModule,
+    AiAssistantModule,
   ],
   controllers: [TestRbacController],
   providers: [RolesGuard],
