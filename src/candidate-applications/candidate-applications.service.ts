@@ -411,11 +411,12 @@ export class CandidateApplicationsService {
           include: {
             applicationPipeline: true,
             applicationPipelineStatus: true,
-            interviewer: {
+            employee: {
               include: {
                 user: { select: { name: true, email: true } },
               },
             },
+            interviewData: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -593,11 +594,12 @@ export class CandidateApplicationsService {
           include: {
             applicationPipeline: true,
             applicationPipelineStatus: true,
-            interviewer: {
+            employee: {
               include: {
                 user: { select: { name: true, email: true } },
               },
             },
+            interviewData: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -642,21 +644,30 @@ export class CandidateApplicationsService {
     }
 
     // 3. Create new pipeline entry with scheduling data
-    await this.prisma.candidateApplicationPipeline.create({
+    const pipelineEntry = await this.prisma.candidateApplicationPipeline.create({
       data: {
         candidateApplicationId: applicationId,
         applicationPipelineId: dto.applicationPipelineId,
         applicationPipelineStatusId: dto.applicationPipelineStatusId,
         notes: dto.notes,
-        scheduledDate: dto.scheduledDate ? new Date(dto.scheduledDate) : null,
-        scheduledStartTime: dto.scheduledStartTime ? new Date(dto.scheduledStartTime) : null,
-        scheduledEndTime: dto.scheduledEndTime ? new Date(dto.scheduledEndTime) : null,
-        link: dto.link,
-        location: dto.location,
-        stageScore: dto.stageScore,
-        interviewerId: dto.interviewerId,
+        employeeId: dto.interviewerId,
       },
     });
+
+    // Create interview data if scheduling info is provided
+    if (dto.scheduledDate || dto.scheduledStartTime || dto.interviewMethod) {
+      await this.prisma.candidateInterviewData.create({
+        data: {
+          candidateApplicationPipelineId: pipelineEntry.id,
+          scheduledDate: dto.scheduledDate ? new Date(dto.scheduledDate) : null,
+          scheduledStartTime: dto.scheduledStartTime ? new Date(dto.scheduledStartTime) : null,
+          scheduledEndTime: dto.scheduledEndTime ? new Date(dto.scheduledEndTime) : null,
+          interviewLink: dto.link,
+          interviewLocation: dto.location,
+          interviewMethod: dto.interviewMethod || 'ONLINE',
+        },
+      });
+    }
 
     // 4. Update main application record
     await this.prisma.candidateApplication.update({
@@ -732,11 +743,12 @@ export class CandidateApplicationsService {
           include: {
             applicationPipeline: true,
             applicationPipelineStatus: true,
-            interviewer: {
+            employee: {
               include: {
                 user: { select: { name: true, email: true } },
               },
             },
+            interviewData: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -767,7 +779,8 @@ export class CandidateApplicationsService {
           include: {
             applicationPipeline: true,
             applicationPipelineStatus: true,
-            interviewer: true
+            employee: true,
+            interviewData: true
           },
           orderBy: {
             createdAt: 'desc'
@@ -803,11 +816,12 @@ export class CandidateApplicationsService {
           include: {
             applicationPipeline: true,
             applicationPipelineStatus: true,
-            interviewer: {
+            employee: {
               include: {
                 user: { select: { name: true, email: true } }
               }
-            }
+            },
+            interviewData: true
           },
           orderBy: {
             createdAt: 'desc'
@@ -838,11 +852,12 @@ export class CandidateApplicationsService {
           include: {
             applicationPipeline: true,
             applicationPipelineStatus: true,
-            interviewer: {
+            employee: {
               include: {
                 user: { select: { name: true, email: true } },
               },
             },
+            interviewData: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -874,11 +889,12 @@ export class CandidateApplicationsService {
           include: {
             applicationPipeline: true,
             applicationPipelineStatus: true,
-            interviewer: {
+            employee: {
               include: {
                 user: { select: { name: true, email: true } },
               },
             },
+            interviewData: true,
           },
           orderBy: { createdAt: 'asc' },
         },
