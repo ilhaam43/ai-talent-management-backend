@@ -8,7 +8,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://n8n_user:n8ndevops@localhost:5432/n8n_db?schema=public
+      - DATABASE_URL=postgresql://n8n_user:n8ndevops@host.docker.internal:5432/n8n_db?schema=public
       - JWT_SECRET=supersecretjwt
       - JWT_REFRESH_SECRET=supersecretjwtrefresh
       - PORT=3001
@@ -54,7 +54,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://n8n_user:n8ndevops@localhost:5432/n8n_db?schema=public
+      - DATABASE_URL=postgresql://n8n_user:n8ndevops@host.docker.internal:5432/n8n_db?schema=public
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: sh -c "apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npx prisma migrate deploy && npx tsx scripts/seed/seed-all.ts"
