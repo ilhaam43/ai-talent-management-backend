@@ -372,12 +372,121 @@ async function main() {
           jobVacancyStatusId: statusObj!.id,
           jobVacancyDurationId: duration!.id,
           jobVacancyReasonId: reasonObj!.id,
-          jobRequirement: "Chart Data",
-          cityLocation: "Jakarta",
-          createdAt: date,
-          updatedAt: date,
         })),
     });
+  }
+
+  // --- Seeding for Action Center (Tabs) ---
+  console.log("🌱 Seeding Action Center Data...");
+
+  // Tab 0: Job Role Request (DRAFT Vacancies)
+  // We need DRAFT vacancies.
+  // We already add one DRAFT in chart data, but let's add specific ones for visual verification
+  const draftRoles = ["Cloud Architect", "DevOps Engineer", "Security Analyst"];
+  const group = await prisma.group.findFirst();
+  const division = await prisma.division.findFirst();
+  const directorate = await prisma.directorate.findFirst();
+  const draftStatus = await prisma.jobVacancyStatus.findFirst({
+    where: { jobVacancyStatus: "DRAFT" },
+  });
+
+  if (draftStatus) {
+    for (const roleName of draftRoles) {
+      let rRole = await prisma.jobRole.findFirst({
+        where: { jobRoleName: roleName },
+      });
+      if (!rRole)
+        rRole = await prisma.jobRole.create({
+          data: { jobRoleName: roleName },
+        });
+
+      const employmentType = await prisma.employmentType.findFirst();
+      const position = await prisma.employeePosition.findFirst();
+      const duration = await prisma.jobVacancyDuration.findFirst();
+      const reason = await prisma.jobVacancyReason.findFirst();
+
+      await prisma.jobVacancy.create({
+        data: {
+          jobRoleId: rRole.id,
+          employeePositionId: position!.id,
+          employmentTypeId: employmentType!.id,
+          jobVacancyStatusId: draftStatus.id,
+          jobVacancyDurationId: duration!.id,
+          jobVacancyReasonId: reason!.id,
+          groupId: group?.id,
+          divisionId: division?.id,
+          directorateId: directorate?.id,
+          createdAt: new Date(),
+          cityLocation: "Jakarta",
+        },
+      });
+    }
+  }
+
+  // Tab 1-5: Specific Stages
+  const actionCenterData = [
+    { name: "AC User 1", stage: "Offering", tab: "Offer Letter" },
+    { name: "AC User 2", stage: "MCU", tab: "MCU" },
+    { name: "AC User 3", stage: "Onboarding", tab: "Onboarding" },
+    { name: "AC User 4", stage: "AI SCREENING", tab: "Online Assessment" }, // More for tab 1
+    { name: "AC User 5", stage: "HR Interview", tab: "Interview" },
+  ];
+
+  for (const acItem of actionCenterData) {
+    // Create user/candidate/app
+    // Reuse logic or simplified
+    const email = `${acItem.name.toLowerCase().replace(/\s+/g, ".")}@ac.demo.com`;
+
+    // 1. User
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user)
+      user = await prisma.user.create({
+        data: { name: acItem.name, email, password: passwordHash },
+      });
+
+    // 2. Candidate
+    let candidate = await prisma.candidate.create({
+      data: {
+        userId: user.id,
+        candidateFullname: acItem.name,
+        candidateEmail: email,
+      },
+    });
+    let salary = await prisma.candidateSalary.create({
+      data: { candidateId: candidate.id },
+    });
+
+    // 3. Pipeline
+    let pipeline = await prisma.applicationPipeline.findFirst({
+      where: { applicationPipeline: acItem.stage },
+    });
+    if (!pipeline)
+      pipeline = await prisma.applicationPipeline.create({
+        data: { applicationPipeline: acItem.stage },
+      });
+
+    let status = await prisma.applicationLastStatus.findFirst(); // ANY is fine
+
+    // 4. App
+    // Use the generic vacancy
+    const vacancy = await prisma.jobVacancy.findFirst({
+      where: { jobVacancyStatus: { jobVacancyStatus: "OPEN" } },
+    });
+
+    if (vacancy) {
+      await prisma.candidateApplication.create({
+        data: {
+          candidateId: candidate.id,
+          jobVacancyId: vacancy.id,
+          candidateSalaryId: salary.id,
+          applicationPipelineId: pipeline.id,
+          applicationLatestStatusId: status!.id,
+          fitScore: 88,
+          submissionDate: new Date(),
+          isTalentPool: false,
+        },
+      });
+    }
   }
 
   console.log("✅ Demo Insights Data seeded successfully!");
