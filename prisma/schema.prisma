@@ -5,42 +5,34 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // url is managed by prisma.config.ts
+  url      = env("DATABASE_URL")
 }
 
-// ============================================
-// Identity & RBAC
-// ============================================
-
 model User {
-  id                  String    @id @default(uuid())
-  name                String
-  email               String    @unique
-  emailVerified       DateTime? @map("email_verified_at")
-  password            String
-  passwordSetRequired Boolean   @default(false) @map("password_set_required")
-  passwordResetToken  String?   @map("password_reset_token")
-  passwordResetExpiry DateTime? @map("password_reset_expiry")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  employees                 Employee[]
-  candidates                Candidate[]
+  id                        String                    @id @default(uuid())
+  name                      String
+  email                     String                    @unique
+  emailVerified             DateTime?                 @map("email_verified_at")
+  password                  String
+  passwordSetRequired       Boolean                   @default(false) @map("password_set_required")
+  passwordResetToken        String?                   @map("password_reset_token")
+  passwordResetExpiry       DateTime?                 @map("password_reset_expiry")
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  updatedAt                 DateTime                  @updatedAt @map("updated_at")
   candidateAddresses        CandidateAddress[]
   candidateCurrentAddresses CandidateCurrentAddress[]
+  candidates                Candidate[]
+  employees                 Employee[]
   notifications             Notification[]
 
   @@map("users")
 }
 
 model UserRole {
-  id        String   @id @default(uuid())
-  roleName  String   @map("role_name")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id              String           @id @default(uuid())
+  roleName        String           @map("role_name")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
   employees       Employee[]
   rolePermissions RolePermission[]
 
@@ -48,93 +40,77 @@ model UserRole {
 }
 
 model Permission {
-  id             String   @id @default(uuid())
-  permissionName String   @map("permission_name")
-  description    String?  @db.Text
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id              String           @id @default(uuid())
+  permissionName  String           @map("permission_name")
+  description     String?
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
   rolePermissions RolePermission[]
 
   @@map("permissions")
 }
 
 model RolePermission {
-  id           String   @id @default(uuid())
-  userRoleId   String   @map("user_role_id")
-  permissionId String   @map("permission_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  userRole   UserRole   @relation(fields: [userRoleId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  id           String     @id @default(uuid())
+  userRoleId   String     @map("user_role_id")
+  permissionId String     @map("permission_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  userRole     UserRole   @relation(fields: [userRoleId], references: [id], onDelete: Cascade)
 
   @@map("role_permissions")
 }
 
-// ============================================
-// Organization Structure
-// ============================================
-
 model Directorate {
-  id              String   @id @default(uuid())
-  directorateName String   @map("directorate_name")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  employees    Employee[]
-  jobVacancies JobVacancy[]
-  groups       Group[]
-  divisions    Division[]
+  id              String       @id @default(uuid())
+  directorateName String       @map("directorate_name")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  divisions       Division[]
+  employees       Employee[]
+  groups          Group[]
+  jobVacancies    JobVacancy[]
 
   @@map("directorates")
 }
 
 model Group {
-  id            String   @id @default(uuid())
-  directorateId String   @map("directorate_id")
-  groupName     String   @map("group_name")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  directorate  Directorate  @relation(fields: [directorateId], references: [id], onDelete: Cascade)
-  employees    Employee[]
-  jobVacancies JobVacancy[]
-  divisions    Division[]
+  id            String       @id @default(uuid())
+  directorateId String       @map("directorate_id")
+  groupName     String       @map("group_name")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  divisions     Division[]
+  employees     Employee[]
+  directorate   Directorate  @relation(fields: [directorateId], references: [id], onDelete: Cascade)
+  jobVacancies  JobVacancy[]
 
   @@map("groups")
 }
 
 model Division {
-  id            String   @id @default(uuid())
-  directorateId String   @map("directorate_id")
-  groupId       String?  @map("group_id")
-  divisionName  String   @map("division_name")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  directorate  Directorate  @relation(fields: [directorateId], references: [id], onDelete: Cascade)
-  group        Group?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  employees    Employee[]
-  jobVacancies JobVacancy[]
-  departments  Department[]
+  id            String       @id @default(uuid())
+  directorateId String       @map("directorate_id")
+  groupId       String?      @map("group_id")
+  divisionName  String       @map("division_name")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  departments   Department[]
+  directorate   Directorate  @relation(fields: [directorateId], references: [id], onDelete: Cascade)
+  group         Group?       @relation(fields: [groupId], references: [id])
+  employees     Employee[]
+  jobVacancies  JobVacancy[]
 
   @@map("divisions")
 }
 
 model Department {
-  id             String   @id @default(uuid())
-  divisionId     String   @map("division_id")
-  departmentName String   @map("department_name")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id             String          @id @default(uuid())
+  divisionId     String          @map("division_id")
+  departmentName String          @map("department_name")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
   division       Division        @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   employees      Employee[]
   jobVacancies   JobVacancy[]
@@ -144,237 +120,195 @@ model Department {
 }
 
 model SubDepartment {
-  id                String   @id @default(uuid())
-  departmentId      String   @map("department_id")
-  subDepartmentName String   @map("sub_department_name")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  department   Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  employees    Employee[]
-  jobVacancies JobVacancy[]
+  id                String       @id @default(uuid())
+  departmentId      String       @map("department_id")
+  subDepartmentName String       @map("sub_department_name")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  employees         Employee[]
+  jobVacancies      JobVacancy[]
+  department        Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
   @@map("sub_departments")
 }
 
 model EmployeePosition {
-  id               String   @id @default(uuid())
-  employeePosition String   @map("employee_position")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  employees    Employee[]
-  jobVacancies JobVacancy[]
+  id               String       @id @default(uuid())
+  employeePosition String       @map("employee_position")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  employees        Employee[]
+  jobVacancies     JobVacancy[]
 
   @@map("employee_positions")
 }
 
 model Employee {
-  id                           String    @id @default(uuid())
-  userId                       String    @map("user_id")
-  userRoleId                   String    @map("user_role_id")
-  employeePositionId           String    @map("employee_position_id")
-  directorateId                String?   @map("directorate_id")
-  groupId                      String?   @map("group_id")
-  divisionId                   String?   @map("division_id")
-  departmentId                 String?   @map("department_id")
-  subDepartmentId              String?   @map("sub_department_id")
-  employeeIdentificationNumber String    @unique @map("employee_identification_number")
-  phoneNumber                  String?   @map("phone_number")
-  dateOfBirth                  DateTime? @map("date_of_birth") @db.Date
-  createdAt                    DateTime  @default(now()) @map("created_at")
-  updatedAt                    DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  user                    User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userRole                UserRole                       @relation(fields: [userRoleId], references: [id])
-  employeePosition        EmployeePosition               @relation(fields: [employeePositionId], references: [id])
-  directorate             Directorate?                   @relation(fields: [directorateId], references: [id])
-  group                   Group?                         @relation(fields: [groupId], references: [id])
-  division                Division?                      @relation(fields: [divisionId], references: [id])
-  department              Department?                    @relation(fields: [departmentId], references: [id])
-  subDepartment           SubDepartment?                 @relation(fields: [subDepartmentId], references: [id])
-  conductedPipelineStages CandidateApplicationPipeline[]
-  talentPoolBatches       TalentPoolBatch[]
+  id                           String                         @id @default(uuid())
+  userId                       String                         @map("user_id")
+  userRoleId                   String                         @map("user_role_id")
+  employeePositionId           String                         @map("employee_position_id")
+  directorateId                String?                        @map("directorate_id")
+  groupId                      String?                        @map("group_id")
+  divisionId                   String?                        @map("division_id")
+  departmentId                 String?                        @map("department_id")
+  subDepartmentId              String?                        @map("sub_department_id")
+  employeeIdentificationNumber String                         @unique @map("employee_identification_number")
+  phoneNumber                  String?                        @map("phone_number")
+  dateOfBirth                  DateTime?                      @map("date_of_birth") @db.Date
+  createdAt                    DateTime                       @default(now()) @map("created_at")
+  updatedAt                    DateTime                       @updatedAt @map("updated_at")
+  conductedPipelineStages      CandidateApplicationPipeline[]
+  department                   Department?                    @relation(fields: [departmentId], references: [id])
+  directorate                  Directorate?                   @relation(fields: [directorateId], references: [id])
+  division                     Division?                      @relation(fields: [divisionId], references: [id])
+  employeePosition             EmployeePosition               @relation(fields: [employeePositionId], references: [id])
+  group                        Group?                         @relation(fields: [groupId], references: [id])
+  subDepartment                SubDepartment?                 @relation(fields: [subDepartmentId], references: [id])
+  user                         User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userRole                     UserRole                       @relation(fields: [userRoleId], references: [id])
+  talentPoolBatches            TalentPoolBatch[]
 
   @@map("employees")
 }
 
-// ============================================
-// Reference Dictionaries
-// ============================================
-
 model JobRole {
-  id          String   @id @default(uuid())
-  jobRoleName String   @map("job_role_name")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id           String       @id @default(uuid())
+  jobRoleName  String       @map("job_role_name")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
   jobVacancies JobVacancy[]
 
   @@map("job_roles")
 }
 
 model JobVacancyStatus {
-  id               String   @id @default(uuid())
-  jobVacancyStatus String   @map("job_vacancy_status")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  jobVacancies JobVacancy[]
+  id               String       @id @default(uuid())
+  jobVacancyStatus String       @map("job_vacancy_status")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  jobVacancies     JobVacancy[]
 
   @@map("job_vacancy_statuses")
 }
 
 model JobVacancyReason {
-  id        String   @id @default(uuid())
-  reason    String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id           String       @id @default(uuid())
+  reason       String
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
   jobVacancies JobVacancy[]
 
   @@map("job_vacancy_reason")
 }
 
 model EmploymentType {
-  id             String   @id @default(uuid())
-  employmentType String   @map("employment_type")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  jobVacancies JobVacancy[]
+  id             String       @id @default(uuid())
+  employmentType String       @map("employment_type")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  jobVacancies   JobVacancy[]
 
   @@map("employment_types")
 }
 
 model CandidateLastEducation {
-  id                 String   @id @default(uuid())
-  candidateEducation String   @map("candidate_education")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  candidates          Candidate[]
+  id                  String               @id @default(uuid())
+  candidateEducation  String               @map("candidate_education")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
   candidateEducations CandidateEducation[]
+  candidates          Candidate[]
 
   @@map("candidate_last_educations")
 }
 
 model Religion {
-  id        String   @id @default(uuid())
-  religion  String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id         String      @id @default(uuid())
+  religion   String
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
   candidates Candidate[]
 
   @@map("religions")
 }
 
 model MaritalStatus {
-  id            String   @id @default(uuid())
-  maritalStatus String   @map("marital_status")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  candidates Candidate[]
+  id            String      @id @default(uuid())
+  maritalStatus String      @map("marital_status")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  candidates    Candidate[]
 
   @@map("marital_statuses")
 }
 
 model Nationality {
-  id          String   @id @default(uuid())
+  id          String      @id @default(uuid())
   nationality String
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  candidates Candidate[]
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  candidates  Candidate[]
 
   @@map("nationalities")
 }
 
 model LanguageProficiency {
-  id                  String   @id @default(uuid())
-  languageProficiency String   @map("language_proficiency")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  candidates Candidate[]
+  id                  String      @id @default(uuid())
+  languageProficiency String      @map("language_proficiency")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+  candidates          Candidate[]
 
   @@map("language_proficiencies")
 }
 
 model Gender {
-  id        String   @id @default(uuid())
-  gender    String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id         String      @id @default(uuid())
+  gender     String
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
   candidates Candidate[]
 
   @@map("genders")
 }
 
 model SocialMedia {
-  id          String   @id @default(uuid())
-  socialMedia String   @map("social_media")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id                   String                 @id @default(uuid())
+  socialMedia          String                 @map("social_media")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
   candidateSocialMedia CandidateSocialMedia[]
 
   @@map("social_media")
 }
 
 model DocumentType {
-  id           String   @id @default(uuid())
-  documentType String   @unique @map("document_type")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  documents CandidateDocument[]
+  id           String              @id @default(uuid())
+  documentType String              @unique @map("document_type")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  documents    CandidateDocument[]
 
   @@map("document_types")
 }
-
-// ============================================
-// Geo & Address
-// ============================================
 
 model Province {
   id        String   @id @default(uuid())
   province  String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  cities City[]
+  cities    City[]
 
   @@map("provinces")
 }
 
 model City {
-  id         String   @id @default(uuid())
-  provinceId String   @map("province_id")
-  city       String
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id           String        @id @default(uuid())
+  provinceId   String        @map("province_id")
+  city         String
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
   province     Province      @relation(fields: [provinceId], references: [id], onDelete: Cascade)
   subdistricts Subdistrict[]
 
@@ -382,28 +316,24 @@ model City {
 }
 
 model Subdistrict {
-  id          String   @id @default(uuid())
-  cityId      String   @map("city_id")
+  id          String       @id @default(uuid())
+  cityId      String       @map("city_id")
   subdistrict String
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  city        City         @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
   postalCodes PostalCode[]
+  city        City         @relation(fields: [cityId], references: [id], onDelete: Cascade)
 
   @@map("subdistricts")
 }
 
 model PostalCode {
-  id            String   @id @default(uuid())
-  subdistrictId String   @map("subdistrict_id")
-  postalCode    String   @map("postal_code")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  subdistrict Subdistrict @relation(fields: [subdistrictId], references: [id], onDelete: Cascade)
+  id            String      @id @default(uuid())
+  subdistrictId String      @map("subdistrict_id")
+  postalCode    String      @map("postal_code")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  subdistrict   Subdistrict @relation(fields: [subdistrictId], references: [id], onDelete: Cascade)
 
   @@map("postal_codes")
 }
@@ -415,12 +345,10 @@ model CandidateAddress {
   city             String
   subdistrict      String
   postalCode       String   @map("postal_code")
-  candidateAddress String   @map("candidate_address") @db.Text
+  candidateAddress String   @map("candidate_address")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("candidate_addresses")
 }
@@ -432,68 +360,58 @@ model CandidateCurrentAddress {
   city             String
   subdistrict      String
   postalCode       String   @map("postal_code")
-  candidateAddress String   @map("candidate_address") @db.Text
+  candidateAddress String   @map("candidate_address")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("candidate_current_addresses")
 }
 
-// ============================================
-// Job Vacancies & Applications
-// ============================================
-
 model JobVacancyDuration {
-  id           String   @id @default(uuid())
-  daysDuration Int      @map("days_duration")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id           String       @id @default(uuid())
+  daysDuration Int          @map("days_duration")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
   jobVacancies JobVacancy[]
 
   @@map("job_vacancy_durations")
 }
 
 model JobVacancy {
-  id                   String    @id @default(uuid())
-  jobRoleId            String    @map("job_role_id")
-  employeePositionId   String    @map("employee_position_id")
-  jobVacancyStatusId   String    @map("job_vacancy_status_id")
-  jobVacancyDurationId String    @map("job_vacancy_duration_id")
-  jobVacancyReasonId   String    @map("job_vacancy_reason_id")
-  employmentTypeId     String    @map("employment_type_id")
-  directorateId        String?   @map("directorate_id")
-  groupId              String?   @map("group_id")
-  divisionId           String?   @map("division_id")
-  departmentId         String?   @map("department_id")
-  subDepartmentId      String?   @map("sub_department_id")
-  jobRequirement       String?   @map("job_requirement") @db.Text
-  jobDescription       String?   @map("job_description") @db.Text
-  jobQualification     String?   @map("job_qualification") @db.Text
-  jobVacancyClosedAt   DateTime? @map("job_vacancy_closed_at") @db.Date
-  cityLocation         String?   @map("city_location")
-  minSalary            Decimal?  @map("min_salary") @db.Decimal(15, 2)
-  maxSalary            Decimal?  @map("max_salary") @db.Decimal(15, 2)
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  jobRole               JobRole                @relation(fields: [jobRoleId], references: [id])
+  id                    String                 @id @default(uuid())
+  jobRoleId             String                 @map("job_role_id")
+  employeePositionId    String                 @map("employee_position_id")
+  jobVacancyStatusId    String                 @map("job_vacancy_status_id")
+  jobVacancyDurationId  String                 @map("job_vacancy_duration_id")
+  jobVacancyReasonId    String                 @map("job_vacancy_reason_id")
+  employmentTypeId      String                 @map("employment_type_id")
+  directorateId         String?                @map("directorate_id")
+  groupId               String?                @map("group_id")
+  divisionId            String?                @map("division_id")
+  departmentId          String?                @map("department_id")
+  subDepartmentId       String?                @map("sub_department_id")
+  jobRequirement        String?                @map("job_requirement")
+  jobDescription        String?                @map("job_description")
+  jobQualification      String?                @map("job_qualification")
+  jobVacancyClosedAt    DateTime?              @map("job_vacancy_closed_at") @db.Date
+  cityLocation          String?                @map("city_location")
+  minSalary             Decimal?               @map("min_salary") @db.Decimal(15, 2)
+  maxSalary             Decimal?               @map("max_salary") @db.Decimal(15, 2)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  candidateApplications CandidateApplication[]
+  department            Department?            @relation(fields: [departmentId], references: [id])
+  directorate           Directorate?           @relation(fields: [directorateId], references: [id])
+  division              Division?              @relation(fields: [divisionId], references: [id])
   employeePosition      EmployeePosition       @relation(fields: [employeePositionId], references: [id])
-  jobVacancyStatus      JobVacancyStatus       @relation(fields: [jobVacancyStatusId], references: [id])
+  employmentType        EmploymentType         @relation(fields: [employmentTypeId], references: [id])
+  group                 Group?                 @relation(fields: [groupId], references: [id])
+  jobRole               JobRole                @relation(fields: [jobRoleId], references: [id])
   jobVacancyDuration    JobVacancyDuration     @relation(fields: [jobVacancyDurationId], references: [id])
   jobVacancyReason      JobVacancyReason       @relation(fields: [jobVacancyReasonId], references: [id])
-  employmentType        EmploymentType         @relation(fields: [employmentTypeId], references: [id])
-  directorate           Directorate?           @relation(fields: [directorateId], references: [id])
-  group                 Group?                 @relation(fields: [groupId], references: [id])
-  division              Division?              @relation(fields: [divisionId], references: [id])
-  department            Department?            @relation(fields: [departmentId], references: [id])
+  jobVacancyStatus      JobVacancyStatus       @relation(fields: [jobVacancyStatusId], references: [id])
   subDepartment         SubDepartment?         @relation(fields: [subDepartmentId], references: [id])
-  candidateApplications CandidateApplication[]
   jobVacancySkills      JobVacancySkill[]
   talentPoolScreenings  TalentPoolScreening[]
 
@@ -501,51 +419,43 @@ model JobVacancy {
 }
 
 model Skill {
-  id          String   @id @default(uuid())
-  skillName   String   @unique @map("skill_name")
-  description String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id               String            @id @default(uuid())
+  skillName        String            @unique @map("skill_name")
+  description      String?
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
   jobVacancySkills JobVacancySkill[]
 
   @@map("skills")
 }
 
 model JobVacancySkill {
-  id           String   @id @default(uuid())
-  jobVacancyId String   @map("job_vacancy_id")
-  skillId      String   @map("skill_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  jobVacancy JobVacancy @relation(fields: [jobVacancyId], references: [id], onDelete: Cascade)
-  skill      Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  id           String     @id @default(uuid())
+  jobVacancyId String     @map("job_vacancy_id")
+  skillId      String     @map("skill_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  jobVacancy   JobVacancy @relation(fields: [jobVacancyId], references: [id], onDelete: Cascade)
+  skill        Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@map("job_vacancy_skills")
 }
 
 model ApplicationLastStatus {
-  id                    String   @id @default(uuid())
-  applicationLastStatus String   @map("application_last_status")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id                    String                 @id @default(uuid())
+  applicationLastStatus String                 @map("application_last_status")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
   candidateApplications CandidateApplication[]
 
   @@map("application_last_statuses")
 }
 
 model ApplicationPipeline {
-  id                  String   @id @default(uuid())
-  applicationPipeline String   @map("application_pipeline")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id                            String                         @id @default(uuid())
+  applicationPipeline           String                         @map("application_pipeline")
+  createdAt                     DateTime                       @default(now()) @map("created_at")
+  updatedAt                     DateTime                       @updatedAt @map("updated_at")
   candidateApplicationPipelines CandidateApplicationPipeline[]
   candidateApplications         CandidateApplication[]
 
@@ -553,186 +463,139 @@ model ApplicationPipeline {
 }
 
 model ApplicationPipelineStatus {
-  id                        String   @id @default(uuid())
-  applicationPipelineStatus String   @map("application_pipeline_status")
-  createdAt                 DateTime @default(now()) @map("created_at")
-  updatedAt                 DateTime @updatedAt @map("updated_at")
-
-  // Relations
+  id                            String                         @id @default(uuid())
+  applicationPipelineStatus     String                         @map("application_pipeline_status")
+  createdAt                     DateTime                       @default(now()) @map("created_at")
+  updatedAt                     DateTime                       @updatedAt @map("updated_at")
   candidateApplicationPipelines CandidateApplicationPipeline[]
 
   @@map("application_pipeline_statuses")
 }
 
 model CandidateSalary {
-  id                String   @id @default(uuid())
-  candidateId       String   @map("candidate_id")
-  currentSalary     Decimal? @map("current_salary") @db.Decimal(15, 2)
-  expectationSalary Decimal? @map("expectation_salary") @db.Decimal(15, 2)
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  candidate             Candidate              @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  id                    String                 @id @default(uuid())
+  candidateId           String                 @map("candidate_id")
+  currentSalary         Decimal?               @map("current_salary") @db.Decimal(15, 2)
+  expectationSalary     Decimal?               @map("expectation_salary") @db.Decimal(15, 2)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
   candidateApplications CandidateApplication[]
+  candidate             Candidate              @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_salaries")
 }
 
-enum AiMatchStatus {
-  STRONG_MATCH @map("STRONG MATCH")
-  MATCH
-  NOT_MATCH    @map("NOT MATCH")
-}
-
 model CandidateApplication {
-  id                        String         @id @default(uuid())
-  jobVacancyId              String         @map("job_vacancy_id")
-  candidateId               String         @map("candidate_id")
-  candidateSalaryId         String         @map("candidate_salary_id")
-  applicationLatestStatusId String         @map("application_latest_status_id")
-  applicationPipelineId     String         @map("application_pipeline_id")
-  fitScore                  Decimal?       @map("fit_score") @db.Decimal(5, 2)
-  aiInsight                 String?        @map("ai_insight") @db.Text
-  aiMatchStatus             AiMatchStatus? @map("ai_match_status")
-  aiInterview               String?        @map("ai_interview") @db.Text
-  aiCoreValue               String?        @map("ai_core_value") @db.Text
-  resultSummary             String?        @map("result_summary") @db.Text
-  submissionDate            DateTime       @map("submission_date") @db.Date
-  isTalentPool              Boolean        @default(true) @map("is_talent_pool")
-  createdAt                 DateTime       @default(now()) @map("created_at")
-  updatedAt                 DateTime       @updatedAt @map("updated_at")
-
-  // Relations
-  jobVacancy                    JobVacancy                     @relation(fields: [jobVacancyId], references: [id], onDelete: Cascade)
-  candidate                     Candidate                      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  candidateSalary               CandidateSalary                @relation(fields: [candidateSalaryId], references: [id])
+  id                            String                         @id @default(uuid())
+  jobVacancyId                  String                         @map("job_vacancy_id")
+  candidateId                   String                         @map("candidate_id")
+  candidateSalaryId             String                         @map("candidate_salary_id")
+  applicationLatestStatusId     String                         @map("application_latest_status_id")
+  applicationPipelineId         String                         @map("application_pipeline_id")
+  fitScore                      Decimal?                       @map("fit_score") @db.Decimal(5, 2)
+  aiInsight                     String?                        @map("ai_insight")
+  aiMatchStatus                 AiMatchStatus?                 @map("ai_match_status")
+  aiInterview                   String?                        @map("ai_interview")
+  aiCoreValue                   String?                        @map("ai_core_value")
+  resultSummary                 String?                        @map("result_summary")
+  submissionDate                DateTime                       @map("submission_date") @db.Date
+  isTalentPool                  Boolean                        @default(true) @map("is_talent_pool")
+  createdAt                     DateTime                       @default(now()) @map("created_at")
+  updatedAt                     DateTime                       @updatedAt @map("updated_at")
+  candidateApplicationPipelines CandidateApplicationPipeline[]
   applicationLastStatus         ApplicationLastStatus          @relation(fields: [applicationLatestStatusId], references: [id])
   applicationPipeline           ApplicationPipeline            @relation(fields: [applicationPipelineId], references: [id])
-  candidateApplicationPipelines CandidateApplicationPipeline[]
+  candidate                     Candidate                      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidateSalary               CandidateSalary                @relation(fields: [candidateSalaryId], references: [id])
+  jobVacancy                    JobVacancy                     @relation(fields: [jobVacancyId], references: [id], onDelete: Cascade)
   candidateMatchSkills          CandidateMatchSkill[]
 
   @@map("candidate_applications")
 }
 
 model CandidateApplicationPipeline {
-  id                          String  @id @default(uuid())
-  candidateApplicationId      String  @map("candidate_application_id")
-  applicationPipelineId       String  @map("application_pipeline_id")
-  applicationPipelineStatusId String  @map("application_pipeline_status_id")
-  notes                       String? @db.Text
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  candidateApplication      CandidateApplication      @relation(fields: [candidateApplicationId], references: [id], onDelete: Cascade)
-  applicationPipeline       ApplicationPipeline       @relation(fields: [applicationPipelineId], references: [id])
-  applicationPipelineStatus ApplicationPipelineStatus @relation(fields: [applicationPipelineStatusId], references: [id])
-  interviewData             CandidateInterviewData?
-  employee                  Employee?                 @relation(fields: [employeeId], references: [id])
-  employeeId                String?
+  id                          String                    @id @default(uuid())
+  candidateApplicationId      String                    @map("candidate_application_id")
+  applicationPipelineId       String                    @map("application_pipeline_id")
+  applicationPipelineStatusId String                    @map("application_pipeline_status_id")
+  notes                       String?
+  createdAt                   DateTime                  @default(now()) @map("created_at")
+  updatedAt                   DateTime                  @updatedAt @map("updated_at")
+  employeeId                  String?
+  applicationPipeline         ApplicationPipeline       @relation(fields: [applicationPipelineId], references: [id])
+  applicationPipelineStatus   ApplicationPipelineStatus @relation(fields: [applicationPipelineStatusId], references: [id])
+  candidateApplication        CandidateApplication      @relation(fields: [candidateApplicationId], references: [id], onDelete: Cascade)
+  employee                    Employee?                 @relation(fields: [employeeId], references: [id])
+  interviewData               CandidateInterviewData?
 
   @@map("candidate_application_pipelines")
 }
 
-enum InterviewMethod {
-  ONLINE
-  ONSITE
-}
-
 model CandidateInterviewData {
-  id                             String          @id @default(uuid())
-  candidateApplicationPipelineId String          @unique @map("candidate_application_pipeline_id")
-  scheduledDate                  DateTime?       @map("scheduled_date") @db.Date
-  scheduledStartTime             DateTime?       @map("scheduled_start_time") @db.Timestamptz
-  scheduledEndTime               DateTime?       @map("scheduled_end_time") @db.Timestamptz
-  interviewLink                  String?         @map("interview_link") @db.Text
-  hrInterviewScore               Decimal?        @map("hr_interview_score") @db.Decimal(5, 2)
-  userInterviewScore             Decimal?        @map("user_interview_score") @db.Decimal(5, 2)
-  interviewMethod                InterviewMethod @map("interview_method")
-  interviewLocation              String?         @map("interview_location") @db.Text
-  createdAt                      DateTime        @default(now()) @map("created_at")
-  updatedAt                      DateTime        @updatedAt @map("updated_at")
-
-  // Relations
-  candidateApplicationPipeline CandidateApplicationPipeline @relation(fields: [candidateApplicationPipelineId], references: [id], onDelete: Cascade)
+  id                             String                       @id @default(uuid())
+  candidateApplicationPipelineId String                       @unique @map("candidate_application_pipeline_id")
+  scheduledDate                  DateTime?                    @map("scheduled_date") @db.Date
+  scheduledStartTime             DateTime?                    @map("scheduled_start_time") @db.Timestamptz(6)
+  scheduledEndTime               DateTime?                    @map("scheduled_end_time") @db.Timestamptz(6)
+  interviewLink                  String?                      @map("interview_link")
+  hrInterviewScore               Decimal?                     @map("hr_interview_score") @db.Decimal(5, 2)
+  userInterviewScore             Decimal?                     @map("user_interview_score") @db.Decimal(5, 2)
+  interviewMethod                InterviewMethod              @map("interview_method")
+  interviewLocation              String?                      @map("interview_location")
+  createdAt                      DateTime                     @default(now()) @map("created_at")
+  updatedAt                      DateTime                     @updatedAt @map("updated_at")
+  candidateApplicationPipeline   CandidateApplicationPipeline @relation(fields: [candidateApplicationPipelineId], references: [id], onDelete: Cascade)
 
   @@map("candidate_interview_data")
 }
 
-// ============================================
-// Candidates & Profiles
-// ============================================
-
-enum FamilyStatus {
-  FATHER
-  MOTHER
-  SPOUSE
-  CHILD
-  SIBLING
-  OTHER
-}
-
 model Candidate {
-  id                        String    @id @default(uuid())
-  userId                    String    @map("user_id")
-  candidateLastEducationId  String?   @map("candidate_last_education_id")
-  religionId                String?   @map("religion_id")
-  maritalStatusId           String?   @map("marital_status_id")
-  nationalityId             String?   @map("nationality_id")
-  languageProficiencyId     String?   @map("language_proficiency_id")
-  genderId                  String?   @map("gender_id")
-  candidateAddressId        String?   @map("candidate_address_id")
-  candidateCurrentAddressId String?   @map("candidate_current_address_id")
-  candidateFullname         String?   @map("candidate_fullname")
-  candidateNickname         String?   @map("candidate_nickname")
-  candidateEmail            String?   @unique @map("candidate_email")
-  cityDomicile              String?   @map("city_domicile")
-  dateOfBirth               DateTime? @map("date_of_birth") @db.Date
-  placeOfBirth              String?   @map("place_of_birth")
-  idCardNumber              String?   @unique @map("id_card_number")
-  phoneNumber               String?   @map("phone_number")
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updatedAt                 DateTime  @updatedAt @map("updated_at")
-
-  // Talent Pool Fields
-  talentPoolBatchId String? @map("talent_pool_batch_id")
-  linkedInUrl       String? @map("linkedin_url")
-  cvFileUrl         String? @map("cv_file_url")
-  cvFileName        String? @map("cv_file_name")
-
-  // Relations
-  user                    User                              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  candidateLastEducation  CandidateLastEducation?           @relation(fields: [candidateLastEducationId], references: [id])
-  religion                Religion?                         @relation(fields: [religionId], references: [id])
-  maritalStatus           MaritalStatus?                    @relation(fields: [maritalStatusId], references: [id])
-  nationality             Nationality?                      @relation(fields: [nationalityId], references: [id])
-  languageProficiency     LanguageProficiency?              @relation(fields: [languageProficiencyId], references: [id])
-  gender                  Gender?                           @relation(fields: [genderId], references: [id])
-  talentPoolBatch         TalentPoolBatch?                  @relation(fields: [talentPoolBatchId], references: [id])
-  documents               CandidateDocument[]
-  workExperiences         CandidateWorkExperience[]
-  organizationExperiences CandidateOrganizationExperience[]
-  educations              CandidateEducation[]
-  families                CandidateFamily[]
-  familiesLintasarta      CandidateFamilyLintasarta[]
-  socialMedia             CandidateSocialMedia[]
-  skills                  CandidateSkill[]
-  certifications          CandidateCertification[]
-  salaries                CandidateSalary[]
-  applications            CandidateApplication[]
-  matchSkills             CandidateMatchSkill[]
+  id                        String                            @id @default(uuid())
+  userId                    String                            @map("user_id")
+  candidateLastEducationId  String?                           @map("candidate_last_education_id")
+  religionId                String?                           @map("religion_id")
+  maritalStatusId           String?                           @map("marital_status_id")
+  nationalityId             String?                           @map("nationality_id")
+  languageProficiencyId     String?                           @map("language_proficiency_id")
+  genderId                  String?                           @map("gender_id")
+  candidateAddressId        String?                           @map("candidate_address_id")
+  candidateCurrentAddressId String?                           @map("candidate_current_address_id")
+  candidateFullname         String?                           @map("candidate_fullname")
+  candidateNickname         String?                           @map("candidate_nickname")
+  candidateEmail            String?                           @unique @map("candidate_email")
+  cityDomicile              String?                           @map("city_domicile")
+  dateOfBirth               DateTime?                         @map("date_of_birth") @db.Date
+  placeOfBirth              String?                           @map("place_of_birth")
+  idCardNumber              String?                           @unique @map("id_card_number")
+  phoneNumber               String?                           @map("phone_number")
+  createdAt                 DateTime                          @default(now()) @map("created_at")
+  updatedAt                 DateTime                          @updatedAt @map("updated_at")
+  talentPoolBatchId         String?                           @map("talent_pool_batch_id")
+  linkedInUrl               String?                           @map("linkedin_url")
+  cvFileUrl                 String?                           @map("cv_file_url")
+  cvFileName                String?                           @map("cv_file_name")
+  applications              CandidateApplication[]
+  certifications            CandidateCertification[]
+  documents                 CandidateDocument[]
+  educations                CandidateEducation[]
+  families                  CandidateFamily[]
+  familiesLintasarta        CandidateFamilyLintasarta[]
+  matchSkills               CandidateMatchSkill[]
+  organizationExperiences   CandidateOrganizationExperience[]
+  salaries                  CandidateSalary[]
+  skills                    CandidateSkill[]
+  socialMedia               CandidateSocialMedia[]
+  workExperiences           CandidateWorkExperience[]
+  candidateLastEducation    CandidateLastEducation?           @relation(fields: [candidateLastEducationId], references: [id])
+  gender                    Gender?                           @relation(fields: [genderId], references: [id])
+  languageProficiency       LanguageProficiency?              @relation(fields: [languageProficiencyId], references: [id])
+  maritalStatus             MaritalStatus?                    @relation(fields: [maritalStatusId], references: [id])
+  nationality               Nationality?                      @relation(fields: [nationalityId], references: [id])
+  religion                  Religion?                         @relation(fields: [religionId], references: [id])
+  talentPoolBatch           TalentPoolBatch?                  @relation(fields: [talentPoolBatchId], references: [id])
+  user                      User                              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("candidates")
-}
-
-enum JobType {
-  FULL_TIME  @map("FULL-TIME")
-  PART_TIME  @map("PART-TIME")
-  CONTRACT   @map("CONTRACT")
-  FREELANCE  @map("FREELANCE")
-  INTERNSHIP @map("INTERNSHIP")
 }
 
 model CandidateWorkExperience {
@@ -745,18 +608,16 @@ model CandidateWorkExperience {
   industry                  String
   employmentStartedDate     DateTime  @map("employment_started_date") @db.Date
   employmentEndedDate       DateTime? @map("employment_ended_date") @db.Date
-  workExperienceDescription String?   @map("work_experience_description") @db.Text
+  workExperienceDescription String?   @map("work_experience_description")
   country                   String
-  reasonForResignation      String?   @map("reason_for_resignation") @db.Text
-  benefit                   String?   @db.Text
+  reasonForResignation      String?   @map("reason_for_resignation")
+  benefit                   String?
   referenceName             String    @map("reference_name")
   referencePhoneNumber      String    @map("reference_phone_number")
   referenceRelationship     String    @map("reference_relationship")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate                 Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_work_experiences")
 }
@@ -768,34 +629,30 @@ model CandidateOrganizationExperience {
   role                              String
   organizationExperienceStartedDate DateTime  @map("organization_experience_started_date") @db.Date
   organizationExperienceEndedDate   DateTime? @map("organization_experience_ended_date") @db.Date
-  organizationExperienceDescription String?   @map("organization_experience_description") @db.Text
+  organizationExperienceDescription String?   @map("organization_experience_description")
   location                          String?
   createdAt                         DateTime  @default(now()) @map("created_at")
   updatedAt                         DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate                         Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_organization_experiences")
 }
 
 model CandidateEducation {
-  id                        String    @id @default(uuid())
-  candidateId               String    @map("candidate_id")
-  candidateLastEducationId  String    @map("candidate_last_education_id")
-  candidateSchool           String    @map("candidate_school")
-  candidateMajor            String?   @map("candidate_major")
-  candidateGpa              Decimal?  @map("candidate_gpa") @db.Decimal(3, 2)
-  candidateMaxGpa           Decimal?  @map("candidate_max_gpa") @db.Decimal(3, 2)
-  candidateCountry          String?   @map("candidate_country")
-  candidateStartedYearStudy DateTime? @map("candidate_started_year_study") @db.Date
-  candidateEndedYearStudy   DateTime? @map("candidate_ended_year_study") @db.Date
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updatedAt                 DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  candidate              Candidate              @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  candidateLastEducation CandidateLastEducation @relation(fields: [candidateLastEducationId], references: [id])
+  id                        String                 @id @default(uuid())
+  candidateId               String                 @map("candidate_id")
+  candidateLastEducationId  String                 @map("candidate_last_education_id")
+  candidateSchool           String                 @map("candidate_school")
+  candidateMajor            String?                @map("candidate_major")
+  candidateGpa              Decimal?               @map("candidate_gpa") @db.Decimal(3, 2)
+  candidateMaxGpa           Decimal?               @map("candidate_max_gpa") @db.Decimal(3, 2)
+  candidateCountry          String?                @map("candidate_country")
+  candidateStartedYearStudy DateTime?              @map("candidate_started_year_study") @db.Date
+  candidateEndedYearStudy   DateTime?              @map("candidate_ended_year_study") @db.Date
+  createdAt                 DateTime               @default(now()) @map("created_at")
+  updatedAt                 DateTime               @updatedAt @map("updated_at")
+  candidate                 Candidate              @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidateLastEducation    CandidateLastEducation @relation(fields: [candidateLastEducationId], references: [id])
 
   @@map("candidate_educations")
 }
@@ -808,9 +665,7 @@ model CandidateFamily {
   familyJob    String?      @map("family_job")
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
-
-  // Relations
-  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate    Candidate    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_families")
 }
@@ -823,47 +678,33 @@ model CandidateFamilyLintasarta {
   familyPosition String?      @map("family_position")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
-
-  // Relations
-  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate      Candidate    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_families_lintasarta")
 }
 
 model CandidateSocialMedia {
-  id                      String @id @default(uuid())
-  candidateId             String @map("candidate_id")
-  socialMediaId           String @map("social_media_id")
-  candidateSocialMediaUrl String @map("candidate_social_media_url") @db.Text
-
-  // Relations
-  candidate   Candidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  socialMedia SocialMedia @relation(fields: [socialMediaId], references: [id])
+  id                      String      @id @default(uuid())
+  candidateId             String      @map("candidate_id")
+  socialMediaId           String      @map("social_media_id")
+  candidateSocialMediaUrl String      @map("candidate_social_media_url")
+  candidate               Candidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  socialMedia             SocialMedia @relation(fields: [socialMediaId], references: [id])
 
   @@map("candidate_social_media")
 }
 
 model CandidateMatchSkill {
-  id                     String   @id @default(uuid())
-  candidateId            String   @map("candidate_id")
-  candidateApplicationId String   @map("candidate_applications_id")
-  candidateMatchSkill    String   @map("candidate_match_skill")
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  candidate            Candidate            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  candidateApplication CandidateApplication @relation(fields: [candidateApplicationId], references: [id], onDelete: Cascade)
+  id                     String               @id @default(uuid())
+  candidateId            String               @map("candidate_id")
+  candidateApplicationId String               @map("candidate_applications_id")
+  candidateMatchSkill    String               @map("candidate_match_skill")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  candidateApplication   CandidateApplication @relation(fields: [candidateApplicationId], references: [id], onDelete: Cascade)
+  candidate              Candidate            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_match_skills")
-}
-
-enum CandidateRating {
-  ONE   @map("1")
-  TWO   @map("2")
-  THREE @map("3")
-  FOUR  @map("4")
-  FIVE  @map("5")
 }
 
 model CandidateSkill {
@@ -873,9 +714,7 @@ model CandidateSkill {
   candidateRating CandidateRating @map("candidate_rating")
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
-
-  // Relations
-  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate       Candidate       @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_skills")
 }
@@ -888,36 +727,155 @@ model CandidateCertification {
   location                 String?
   certificationStartDate   DateTime? @map("certification_start_date") @db.Date
   certificationEndedDate   DateTime? @map("certification_ended_date") @db.Date
-  certificationDescription String?   @map("certification_description") @db.Text
+  certificationDescription String?   @map("certification_description")
   filePath                 String?   @map("file_path")
   createdAt                DateTime  @default(now()) @map("created_at")
   updatedAt                DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate                Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@map("candidate_certifications")
 }
 
 model CandidateDocument {
-  id             String   @id @default(uuid())
-  candidateId    String   @map("candidate_id")
-  documentTypeId String   @map("document_type_id")
-  filePath       String   @map("file_path")
-  extractedText  String?  @map("extracted_text") @db.Text
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  candidate    Candidate    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  documentType DocumentType @relation(fields: [documentTypeId], references: [id])
+  id             String       @id @default(uuid())
+  candidateId    String       @map("candidate_id")
+  documentTypeId String       @map("document_type_id")
+  filePath       String       @map("file_path")
+  extractedText  String?      @map("extracted_text")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  candidate      Candidate    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id])
 
   @@map("candidate_documents")
 }
 
-// ============================================
-// Talent Pool (HR Bulk Upload)
-// ============================================
+model TalentPoolBatch {
+  id                String                @id @default(uuid())
+  batchName         String?               @map("batch_name")
+  uploadedById      String                @map("uploaded_by_id")
+  sourceType        TalentPoolSourceType  @default(MANUAL_UPLOAD) @map("source_type")
+  sourceUrl         String?               @map("source_url")
+  totalFiles        Int                   @map("total_files")
+  processedFiles    Int                   @default(0) @map("processed_files")
+  failedFiles       Int                   @default(0) @map("failed_files")
+  status            TalentPoolBatchStatus @default(PENDING)
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  unifiedCandidates Candidate[]
+  uploadedBy        Employee              @relation(fields: [uploadedById], references: [id])
+  candidates        TalentPoolCandidate[]
+  queueItems        TalentPoolQueue[]
+
+  @@map("talent_pool_batches")
+}
+
+model TalentPoolQueue {
+  id          String                @id @default(uuid())
+  batchId     String                @map("batch_id")
+  fileUrl     String                @map("file_url")
+  fileName    String                @map("file_name")
+  status      TalentPoolQueueStatus @default(PENDING)
+  errorMsg    String?               @map("error_msg")
+  processedAt DateTime?             @map("processed_at")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  batch       TalentPoolBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@map("talent_pool_queue")
+}
+
+model TalentPoolCandidate {
+  id                 String                @id @default(uuid())
+  batchId            String                @map("batch_id")
+  fullName           String                @map("full_name")
+  email              String?
+  phone              String?
+  city               String?
+  linkedin           String?
+  educationData      Json?                 @map("education_data")
+  workExperienceData Json?                 @map("work_experience_data")
+  skillsData         Json?                 @map("skills_data")
+  certificationsData Json?                 @map("certifications_data")
+  organizationData   Json?                 @map("organization_data")
+  cvFileUrl          String                @map("cv_file_url")
+  cvFileName         String                @map("cv_file_name")
+  hrStatus           TalentPoolHRStatus    @default(PENDING) @map("hr_status")
+  hrNotes            String?               @map("hr_notes")
+  processedToStep    String?               @map("processed_to_step")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  batch              TalentPoolBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  screenings         TalentPoolScreening[]
+
+  @@map("talent_pool_candidates")
+}
+
+model TalentPoolScreening {
+  id                    String              @id @default(uuid())
+  talentPoolCandidateId String              @map("talent_pool_candidate_id")
+  jobVacancyId          String              @map("job_vacancy_id")
+  fitScore              Decimal             @map("fit_score") @db.Decimal(5, 2)
+  aiMatchStatus         AiMatchStatus       @map("ai_match_status")
+  aiInsight             String?             @map("ai_insight")
+  aiInterview           String?             @map("ai_interview")
+  aiCoreValue           String?             @map("ai_core_value")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  jobVacancy            JobVacancy          @relation(fields: [jobVacancyId], references: [id])
+  candidate             TalentPoolCandidate @relation(fields: [talentPoolCandidateId], references: [id], onDelete: Cascade)
+
+  @@unique([talentPoolCandidateId, jobVacancyId])
+  @@map("talent_pool_screenings")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum AiMatchStatus {
+  STRONG_MATCH @map("STRONG MATCH")
+  MATCH
+  NOT_MATCH    @map("NOT MATCH")
+}
+
+enum InterviewMethod {
+  ONLINE
+  ONSITE
+}
+
+enum FamilyStatus {
+  FATHER
+  MOTHER
+  SPOUSE
+  CHILD
+  SIBLING
+  OTHER
+}
+
+enum JobType {
+  FULL_TIME  @map("FULL-TIME")
+  PART_TIME  @map("PART-TIME")
+  CONTRACT   @map("CONTRACT")
+  FREELANCE  @map("FREELANCE")
+  INTERNSHIP @map("INTERNSHIP")
+}
+
+enum CandidateRating {
+  ONE   @map("1")
+  TWO   @map("2")
+  THREE @map("3")
+  FOUR  @map("4")
+  FIVE  @map("5")
+}
 
 enum TalentPoolSourceType {
   MANUAL_UPLOAD
@@ -950,126 +908,9 @@ enum TalentPoolHRStatus {
   REJECTED
 }
 
-model TalentPoolBatch {
-  id             String                @id @default(uuid())
-  batchName      String?               @map("batch_name")
-  uploadedById   String                @map("uploaded_by_id")
-  sourceType     TalentPoolSourceType  @default(MANUAL_UPLOAD) @map("source_type")
-  sourceUrl      String?               @map("source_url")
-  totalFiles     Int                   @map("total_files")
-  processedFiles Int                   @default(0) @map("processed_files")
-  failedFiles    Int                   @default(0) @map("failed_files")
-  status         TalentPoolBatchStatus @default(PENDING)
-  createdAt      DateTime              @default(now()) @map("created_at")
-  updatedAt      DateTime              @updatedAt @map("updated_at")
-
-  // Relations
-  uploadedBy        Employee              @relation(fields: [uploadedById], references: [id])
-  candidates        TalentPoolCandidate[] // Legacy - for existing data
-  unifiedCandidates Candidate[] // New - unified candidate relation
-  queueItems        TalentPoolQueue[]
-
-  @@map("talent_pool_batches")
-}
-
-model TalentPoolQueue {
-  id          String                @id @default(uuid())
-  batchId     String                @map("batch_id")
-  fileUrl     String                @map("file_url")
-  fileName    String                @map("file_name")
-  status      TalentPoolQueueStatus @default(PENDING)
-  errorMsg    String?               @map("error_msg") @db.Text
-  processedAt DateTime?             @map("processed_at")
-  createdAt   DateTime              @default(now()) @map("created_at")
-
-  // Relations
-  batch TalentPoolBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-
-  @@map("talent_pool_queue")
-}
-
-model TalentPoolCandidate {
-  id      String @id @default(uuid())
-  batchId String @map("batch_id")
-
-  // Core identity (for duplicate detection)
-  fullName String  @map("full_name")
-  email    String?
-  phone    String?
-  city     String?
-  linkedin String?
-
-  // Parsed CV data (JSON for flexibility)
-  educationData      Json? @map("education_data")
-  workExperienceData Json? @map("work_experience_data")
-  skillsData         Json? @map("skills_data")
-  certificationsData Json? @map("certifications_data")
-  organizationData   Json? @map("organization_data")
-
-  // CV document
-  cvFileUrl  String @map("cv_file_url")
-  cvFileName String @map("cv_file_name")
-
-  // HR Actions
-  hrStatus        TalentPoolHRStatus @default(PENDING) @map("hr_status")
-  hrNotes         String?            @map("hr_notes") @db.Text
-  processedToStep String?            @map("processed_to_step")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  batch      TalentPoolBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  screenings TalentPoolScreening[]
-
-  @@map("talent_pool_candidates")
-}
-
-model TalentPoolScreening {
-  id                    String @id @default(uuid())
-  talentPoolCandidateId String @map("talent_pool_candidate_id")
-  jobVacancyId          String @map("job_vacancy_id")
-
-  // AI Results
-  fitScore      Decimal       @map("fit_score") @db.Decimal(5, 2)
-  aiMatchStatus AiMatchStatus @map("ai_match_status")
-  aiInsight     String?       @map("ai_insight") @db.Text
-  aiInterview   String?       @map("ai_interview") @db.Text
-  aiCoreValue   String?       @map("ai_core_value") @db.Text
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  // Relations
-  candidate  TalentPoolCandidate @relation(fields: [talentPoolCandidateId], references: [id], onDelete: Cascade)
-  jobVacancy JobVacancy          @relation(fields: [jobVacancyId], references: [id])
-
-  @@unique([talentPoolCandidateId, jobVacancyId])
-  @@map("talent_pool_screenings")
-}
-
-// ============================================
-// Notifications
-// ============================================
-
 enum NotificationType {
-  APPLICANT_QUALIFIED // Candidate applied and qualified
-  JOB_VACANCY_CREATED // New job vacancy created
-  JOB_VACANCY_UPDATED // Job vacancy updated
-  TALENT_POOL_COMPLETE // Talent Pool batch analysis complete
-}
-
-model Notification {
-  id        String           @id @default(uuid())
-  userId    String           @map("user_id")
-  type      NotificationType
-  title     String
-  message   String           @db.Text
-  data      Json? // Additional context (batchId, applicationId, jobId, etc.)
-  isRead    Boolean          @default(false) @map("is_read")
-  createdAt DateTime         @default(now()) @map("created_at")
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("notifications")
+  APPLICANT_QUALIFIED
+  JOB_VACANCY_CREATED
+  JOB_VACANCY_UPDATED
+  TALENT_POOL_COMPLETE
 }

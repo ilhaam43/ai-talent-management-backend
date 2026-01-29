@@ -40,12 +40,9 @@ import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
     NotificationsModule,
     MasterModule,
     AnalysisModule,
-<<<<<<< HEAD
     CalendarModule,
-=======
     DashboardModule,
     AiAssistantModule,
->>>>>>> 8c1996b286e1eafca41238f8c68408a4195ffdb8
   ],
   controllers: [TestRbacController],
   providers: [RolesGuard],
