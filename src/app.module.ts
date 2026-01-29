@@ -19,7 +19,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { MasterModule } from './master/master.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { CalendarModule } from './calendar/calendar.module';
-
+import { DashboardModule } from "./dashboard/dashboard.module";
+import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
 
 @Module({
   imports: [
@@ -39,7 +40,12 @@ import { CalendarModule } from './calendar/calendar.module';
     NotificationsModule,
     MasterModule,
     AnalysisModule,
+<<<<<<< HEAD
     CalendarModule,
+=======
+    DashboardModule,
+    AiAssistantModule,
+>>>>>>> 8c1996b286e1eafca41238f8c68408a4195ffdb8
   ],
   controllers: [TestRbacController],
   providers: [RolesGuard],
