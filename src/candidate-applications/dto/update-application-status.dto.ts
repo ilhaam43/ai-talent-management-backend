@@ -91,4 +91,13 @@ export class UpdateApplicationStatusDto {
   @IsOptional()
   @IsUUID()
   interviewerId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Interview method (ONLINE or ONSITE)',
+    example: 'ONLINE',
+    enum: ['ONLINE', 'ONSITE'],
+  })
+  @IsOptional()
+  @IsString()
+  interviewMethod?: 'ONLINE' | 'ONSITE';
 }
