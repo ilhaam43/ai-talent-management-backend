@@ -5,6 +5,8 @@ services:
     container_name: ai-talent-backend-app
     restart: unless-stopped
     working_dir: /usr/src/app
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://n8n_user:n8ndevops@localhost:5432/n8n_db?schema=public
       - JWT_SECRET=supersecretjwt
@@ -49,6 +51,8 @@ services:
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://n8n_user:n8ndevops@localhost:5432/n8n_db?schema=public
     extra_hosts:
