@@ -22,7 +22,7 @@ export class DashboardService {
       return { total, previous };
     };
 
-    const candidates = await getCounts(this.prisma.candidate);
+    const candidates = await getCounts(this.prisma.candidateApplication);
 
     const pass = await getCounts(this.prisma.candidateApplication, {
       aiMatchStatus: "STRONG_MATCH" as any,
@@ -71,41 +71,64 @@ export class DashboardService {
   }
 
   async getRecruitmentCharts() {
-    // 1. Pie Chart: Vacancy Status
-    // Mapping: OPEN -> In Progress, DRAFT -> Hold, CLOSED -> Done
-    const getStatusCount = async (statusName: string) => {
-      return this.prisma.jobVacancy.count({
-        where: {
-          jobVacancyStatus: {
-            jobVacancyStatus: statusName,
+    // 1. Pie Chart: Candidate Application Status
+    // Mapping:
+    // - In Progress: Status != Not Qualified && Pipeline != Hired/Onboarding
+    // - Hired: Pipeline == Hired OR Onboarding
+    // - Rejected: Status == Not Qualified
+
+    // Fetch Hired Count
+    const hired = await this.prisma.candidateApplication.count({
+      where: {
+        applicationPipeline: {
+          applicationPipeline: {
+            in: ["Hired", "Onboarding", "Offering", "Offer Letter"], // Assuming these mean "Done" or close to it
           },
         },
-      });
-    };
+      },
+    });
 
-    const inProgress = await getStatusCount("OPEN");
-    const hold = await getStatusCount("DRAFT");
-    const done = await getStatusCount("CLOSED");
+    // Fetch Rejected Count
+    const rejected = await this.prisma.candidateApplication.count({
+      where: {
+        applicationLastStatus: {
+          applicationLastStatus: {
+            in: ["Not Qualified", "Rejected", "Withdrawn"],
+          },
+        },
+      },
+    });
+
+    // Fetch Total to calculate In Progress
+    const totalApplications = await this.prisma.candidateApplication.count();
+
+    // In Progress = Total - Hired - Rejected (Approximation)
+    // A more precise way would be: Where matches neither of above.
+    const inProgress = Math.max(0, totalApplications - hired - rejected);
 
     const pieData = [
       { name: "In Progress", value: inProgress, color: "#0B3983" },
-      { name: "Hold", value: hold, color: "#9CA3AF" },
-      { name: "Done", value: done, color: "#3D42DF" },
+      { name: "Rejected", value: rejected, color: "#9CA3AF" }, // Replaces "Hold"
+      { name: "Hired", value: hired, color: "#3D42DF" }, // Replaces "Done"
     ];
 
-    // 2. Bar Chart: Reasons by Year
-    // Fetch all vacancies with reason and createdAt
-    const vacancies = await this.prisma.jobVacancy.findMany({
+    // 2. Bar Chart: Reasons by Year (Based on Candidate Applications)
+    // Fetch all applications with associated job reason and submissionDate
+    const applications = await this.prisma.candidateApplication.findMany({
       select: {
-        createdAt: true,
-        jobVacancyReason: {
-          select: { reason: true },
+        submissionDate: true,
+        jobVacancy: {
+          select: {
+            jobVacancyReason: {
+              select: { reason: true },
+            },
+          },
         },
       },
     });
 
     const years = new Set<number>();
-    vacancies.forEach((v) => years.add(v.createdAt.getFullYear()));
+    applications.forEach((app) => years.add(app.submissionDate.getFullYear()));
     const sortedYears = Array.from(years).sort((a, b) => a - b);
 
     // If no years, default to current and previous
@@ -115,13 +138,15 @@ export class DashboardService {
     }
 
     const barData = sortedYears.flatMap((year) => {
-      const vYear = vacancies.filter((v) => v.createdAt.getFullYear() === year);
+      const appYear = applications.filter(
+        (app) => app.submissionDate.getFullYear() === year,
+      );
 
-      const replacement = vYear.filter(
-        (v) => v.jobVacancyReason.reason === "Replacement",
+      const replacement = appYear.filter(
+        (app) => app.jobVacancy?.jobVacancyReason?.reason === "Replacement",
       ).length;
-      const additional = vYear.filter(
-        (v) => v.jobVacancyReason.reason !== "Replacement",
+      const additional = appYear.filter(
+        (app) => app.jobVacancy?.jobVacancyReason?.reason !== "Replacement",
       ).length;
 
       return [
@@ -247,7 +272,6 @@ export class DashboardService {
     startOfYesterday.setDate(startOfYesterday.getDate() - 1);
 
     const getGrowth = async (currentCount: number, whereClause: any) => {
-
       const yesterdayCount = await this.prisma.candidateApplication.count({
         where: {
           ...whereClause,
