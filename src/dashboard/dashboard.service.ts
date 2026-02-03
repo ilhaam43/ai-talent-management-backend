@@ -72,44 +72,46 @@ export class DashboardService {
 
   async getRecruitmentCharts() {
     // 1. Pie Chart: Candidate Application Status
-    // Mapping:
-    // - In Progress: Status != Not Qualified && Pipeline != Hired/Onboarding
-    // - Hired: Pipeline == Hired OR Onboarding
-    // - Rejected: Status == Not Qualified
+    // Categories:
+    // - Talent Pool: isTalentPool = true
+    // - Done: isTalentPool = false AND (Status = Rejected OR Pipeline = Hired)
+    // - In Progress: isTalentPool = false AND (Remainder)
 
-    // Fetch Hired Count
-    const hired = await this.prisma.candidateApplication.count({
+    // 1. Talent Pool Count
+    const talentPoolCount = await this.prisma.candidateApplication.count({
       where: {
+        isTalentPool: true,
+      },
+    });
+
+    // 2. Active Done Count (Hired + Onboarding ONLY)
+    // User Request: "Done" when candidate is already "Onboarding", else "In Progress"
+    const doneCount = await this.prisma.candidateApplication.count({
+      where: {
+        isTalentPool: false,
         applicationPipeline: {
           applicationPipeline: {
-            in: ["Hired", "Onboarding", "Offering", "Offer Letter"], // Assuming these mean "Done" or close to it
+            in: ["Hired", "Onboarding"],
           },
         },
       },
     });
 
-    // Fetch Rejected Count
-    const rejected = await this.prisma.candidateApplication.count({
+    // 3. Total Active Applications to calculate In Progress
+    const totalActive = await this.prisma.candidateApplication.count({
       where: {
-        applicationLastStatus: {
-          applicationLastStatus: {
-            in: ["Not Qualified", "Rejected", "Withdrawn"],
-          },
-        },
+        isTalentPool: false,
       },
     });
 
-    // Fetch Total to calculate In Progress
-    const totalApplications = await this.prisma.candidateApplication.count();
-
-    // In Progress = Total - Hired - Rejected (Approximation)
-    // A more precise way would be: Where matches neither of above.
-    const inProgress = Math.max(0, totalApplications - hired - rejected);
+    // In Progress = Total Active - Done
+    // This includes: Offering, Offer Letter, Screening, Interview, Rejected, Withdrawn
+    const inProgressCount = Math.max(0, totalActive - doneCount);
 
     const pieData = [
-      { name: "In Progress", value: inProgress, color: "#0B3983" },
-      { name: "Rejected", value: rejected, color: "#9CA3AF" }, // Replaces "Hold"
-      { name: "Hired", value: hired, color: "#3D42DF" }, // Replaces "Done"
+      { name: "In Progress", value: inProgressCount, color: "#0B3983" },
+      { name: "Done", value: doneCount, color: "#3D42DF" },
+      { name: "Talent Pool", value: talentPoolCount, color: "#9CA3AF" },
     ];
 
     // 2. Bar Chart: Reasons by Year (Based on Candidate Applications)
