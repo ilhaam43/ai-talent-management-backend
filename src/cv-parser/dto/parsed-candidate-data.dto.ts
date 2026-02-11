@@ -10,6 +10,7 @@ export interface PersonalInfo {
   nationality?: string;
   religion?: string;
   dateOfBirth?: string;
+  language?: string;
 }
 
 export interface SocialMedia {
@@ -77,18 +78,60 @@ export interface Certification {
   description?: string;
 }
 
+export interface Family {
+  status: string;
+  name: string;
+  job?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  education?: string;
+  remarks?: string;
+}
+
+export interface LintasartaFamily {
+  status: string; // e.g., "Parent", "Sibling"
+  name: string;
+  position?: string; // e.g. "Manager"
+  department?: string;
+  relationship?: string;
+}
+
+export interface Salary {
+  currentSalary?: string;
+  expectationSalary?: string;
+  currency?: string;
+  benefits?: string; // JSON or string description
+}
+
+export interface Reference {
+  name: string;
+  relationship: string;
+  phone?: string;
+  company?: string;
+  email?: string;
+}
+
 export interface ParsedCandidateData {
   extractedText: string;
   parsedData: {
     personalInfo: PersonalInfo;
     socialMedia?: SocialMedia;
+
+    // Address - supporting both generic or specific
     address?: Address;
+    idCardAddress?: Address;
+    currentAddress?: Address;
+
     education: Education[];
     workExperience: WorkExperience[];
     organizationExperience: OrganizationExperience[];
     skills: string[];
     certifications: Certification[];
+
+    // New fields
+    family?: Family[];
+    lintasartaFamily?: LintasartaFamily[];
+    salary?: Salary;
+    references?: Reference[];
   };
 }
-
-

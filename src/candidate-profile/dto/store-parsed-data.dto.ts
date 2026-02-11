@@ -1,6 +1,13 @@
-import { IsOptional, IsString, IsArray, ValidateNested, IsBoolean, IsObject } from 'class-validator';
-import { Type, Transform } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsOptional,
+  IsString,
+  IsArray,
+  ValidateNested,
+  IsBoolean,
+  IsObject,
+} from "class-validator";
+import { Type, Transform } from "class-transformer";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   PersonalInfo,
   SocialMedia,
@@ -9,7 +16,7 @@ import {
   WorkExperience,
   OrganizationExperience,
   Certification,
-} from '../../cv-parser/dto/parsed-candidate-data.dto';
+} from "../../cv-parser/dto/parsed-candidate-data.dto";
 
 export class StorePersonalInfoDto implements PersonalInfo {
   @ApiPropertyOptional()
@@ -66,6 +73,11 @@ export class StorePersonalInfoDto implements PersonalInfo {
   @IsOptional()
   @IsString()
   dateOfBirth?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  language?: string;
 }
 
 export class StoreAddressDto implements Address {
@@ -170,11 +182,71 @@ export class StoreSocialMediaDto implements SocialMedia {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   tiktok?: string;
 }
 
+export class StoreFamilyDto {
+  @ApiProperty()
+  @IsString()
+  status!: string;
+
+  @ApiProperty()
+  @IsString()
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  job?: string;
+}
+
+export class StoreLintasartaFamilyDto {
+  @ApiProperty()
+  @IsString()
+  status!: string;
+
+  @ApiProperty()
+  @IsString()
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  position?: string;
+}
+
+export class StoreSalaryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  currentSalary?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  expectationSalary?: string;
+}
+
+export class StoreReferenceDto {
+  @ApiProperty()
+  @IsString()
+  name!: string;
+
+  @ApiProperty()
+  @IsString()
+  relationship!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  phone?: string;
+}
+
 export class StoreParsedDataDto {
-  @ApiProperty({ type: Object, description: 'Parsed CV data to store' })
+  @ApiProperty({ type: Object, description: "Parsed CV data to store" })
   @IsObject()
   @Transform(({ value }) => value || {})
   parsedData: any;

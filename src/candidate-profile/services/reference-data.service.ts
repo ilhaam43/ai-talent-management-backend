@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../database/prisma.service";
 
 @Injectable()
 export class ReferenceDataService {
@@ -15,7 +15,7 @@ export class ReferenceDataService {
     if (!normalized) return null;
 
     const religion = await this.prisma.religion.findFirst({
-      where: { religion: { equals: normalized, mode: 'insensitive' } },
+      where: { religion: { equals: normalized, mode: "insensitive" } },
     });
 
     if (religion) {
@@ -40,7 +40,7 @@ export class ReferenceDataService {
     if (!normalized) return null;
 
     const nationality = await this.prisma.nationality.findFirst({
-      where: { nationality: { equals: normalized, mode: 'insensitive' } },
+      where: { nationality: { equals: normalized, mode: "insensitive" } },
     });
 
     if (nationality) {
@@ -66,16 +66,19 @@ export class ReferenceDataService {
 
     // Map common variations
     let genderName = normalized;
-    if (normalized.toUpperCase().includes('MALE') && !normalized.toUpperCase().includes('FEMALE')) {
-      genderName = 'Male';
-    } else if (normalized.toUpperCase().includes('FEMALE')) {
-      genderName = 'Female';
-    } else if (normalized.toUpperCase().includes('OTHER')) {
-      genderName = 'Other';
+    if (
+      normalized.toUpperCase().includes("MALE") &&
+      !normalized.toUpperCase().includes("FEMALE")
+    ) {
+      genderName = "Male";
+    } else if (normalized.toUpperCase().includes("FEMALE")) {
+      genderName = "Female";
+    } else if (normalized.toUpperCase().includes("OTHER")) {
+      genderName = "Other";
     }
 
     const gender = await this.prisma.gender.findFirst({
-      where: { gender: { equals: genderName, mode: 'insensitive' } },
+      where: { gender: { equals: genderName, mode: "insensitive" } },
     });
 
     if (gender) {
@@ -97,7 +100,7 @@ export class ReferenceDataService {
     const normalized = name.trim();
 
     const socialMedia = await this.prisma.socialMedia.findFirst({
-      where: { socialMedia: { equals: normalized, mode: 'insensitive' } },
+      where: { socialMedia: { equals: normalized, mode: "insensitive" } },
     });
 
     if (socialMedia) {
@@ -115,14 +118,18 @@ export class ReferenceDataService {
   /**
    * Find or create Education Level (CandidateLastEducation)
    */
-  async findOrCreateEducationLevel(level?: string | null): Promise<string | null> {
+  async findOrCreateEducationLevel(
+    level?: string | null,
+  ): Promise<string | null> {
     if (!level) return null;
 
     const normalized = level.trim();
     if (!normalized) return null;
 
     const education = await this.prisma.candidateLastEducation.findFirst({
-      where: { candidateEducation: { equals: normalized, mode: 'insensitive' } },
+      where: {
+        candidateEducation: { equals: normalized, mode: "insensitive" },
+      },
     });
 
     if (education) {
@@ -136,6 +143,64 @@ export class ReferenceDataService {
 
     return newEducation.id;
   }
+
+  /**
+   * Find or create Marital Status
+   */
+  async findOrCreateMaritalStatus(
+    name?: string | null,
+  ): Promise<string | null> {
+    if (!name) return null;
+
+    const normalized = name.trim();
+    if (!normalized) return null;
+
+    // Normalize input (e.g., "SINGLE" -> "Single")
+    let statusName =
+      normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+
+    const maritalStatus = await this.prisma.maritalStatus.findFirst({
+      where: { maritalStatus: { equals: normalized, mode: "insensitive" } },
+    });
+
+    if (maritalStatus) {
+      return maritalStatus.id;
+    }
+
+    // Create if not found
+    const newStatus = await this.prisma.maritalStatus.create({
+      data: { maritalStatus: statusName },
+    });
+
+    return newStatus.id;
+  }
+
+  /**
+   * Find or create Language Proficiency
+   */
+  async findOrCreateLanguageProficiency(
+    name?: string | null,
+  ): Promise<string | null> {
+    if (!name) return null;
+
+    const normalized = name.trim();
+    if (!normalized) return null;
+
+    const proficiency = await this.prisma.languageProficiency.findFirst({
+      where: {
+        languageProficiency: { equals: normalized, mode: "insensitive" },
+      },
+    });
+
+    if (proficiency) {
+      return proficiency.id;
+    }
+
+    // Create if not found
+    const newProficiency = await this.prisma.languageProficiency.create({
+      data: { languageProficiency: normalized },
+    });
+
+    return newProficiency.id;
+  }
 }
-
-
