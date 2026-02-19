@@ -212,6 +212,7 @@ export class AuthService {
       const newPayload = {
         email: user.email,
         sub: user.id,
+        candidateId: candidate?.id || null,
         role: user.employees?.[0]?.userRole?.roleName || (user.candidates?.length > 0 ? 'CANDIDATE' : 'USER'),
         type: 'access',
       }

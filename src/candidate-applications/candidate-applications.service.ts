@@ -423,8 +423,17 @@ export class CandidateApplicationsService {
       },
     });
 
-    // If already applied for this job, return the existing application (has AI data)
+    // If already applied for this job, convert from talent pool and return
     if (existingApplicationForJob) {
+      // Convert from talent pool to active candidate when applying
+      if (existingApplicationForJob.isTalentPool) {
+        this.logger.log(`Converting application ${existingApplicationForJob.id} from talent pool (isTalentPool: true -> false)`);
+        await this.prisma.candidateApplication.update({
+          where: { id: existingApplicationForJob.id },
+          data: { isTalentPool: false },
+        });
+        existingApplicationForJob.isTalentPool = false;
+      }
       this.logger.log(`Returning existing application ${existingApplicationForJob.id} with AI data`);
       return existingApplicationForJob;
     }
@@ -530,7 +539,7 @@ export class CandidateApplicationsService {
 
     const isQualified = aiMatchStatus === 'STRONG_MATCH' || aiMatchStatus === 'MATCH';
 
-    // 7. Create application
+    // 7. Create application (explicitly set isTalentPool=false since candidate is actively applying)
     const application = await this.prisma.candidateApplication.create({
       data: {
         candidateId,
@@ -541,6 +550,7 @@ export class CandidateApplicationsService {
         fitScore: fitScore,
         aiInsight: aiInsight,
         aiMatchStatus: aiMatchStatus as any,
+        isTalentPool: false, // Candidate is actively applying, not from talent pool
         submissionDate: new Date(),
       },
     });
