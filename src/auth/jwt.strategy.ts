@@ -2,10 +2,14 @@ import { Injectable } from '@nestjs/common'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { ConfigService } from '@nestjs/config'
+import { PrismaService } from '../database/prisma.service'
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -14,12 +18,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
+    let candidateId = payload.candidateId;
+
+    // If candidateId is not in the JWT payload, do a live DB lookup
+    if (!candidateId && payload.sub) {
+      const candidate = await this.prisma.candidate.findFirst({
+        where: { userId: payload.sub },
+        select: { id: true },
+      });
+      candidateId = candidate?.id || null;
+    }
+
     return {
       id: payload.sub,
       userId: payload.sub,
       email: payload.email,
       name: payload.name,
-      candidateId: payload.candidateId,
+      candidateId,
       role: payload.role
     }
   }

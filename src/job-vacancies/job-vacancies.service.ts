@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
 import { CreateJobVacancyDto } from './dto/create-job-vacancy.dto';
 import { UpdateJobVacancyDto } from './dto/update-job-vacancy.dto';
@@ -6,6 +7,21 @@ import { UpdateJobVacancyDto } from './dto/update-job-vacancy.dto';
 @Injectable()
 export class JobVacanciesService {
   private readonly logger = new Logger(JobVacanciesService.name);
+
+  // Standard includes for all queries
+  private readonly standardIncludes = {
+    jobRole: true,
+    department: true,
+    division: true,
+    group: true,
+    directorate: true,
+    employmentType: true,
+    employeePosition: true,
+    jobVacancyStatus: true,
+    jobVacancyDuration: true,
+    jobVacancyReason: true,
+    jobVacancySkills: { include: { skill: true } },
+  };
 
   constructor(private readonly prisma: PrismaService) { }
 
@@ -20,8 +36,6 @@ export class JobVacanciesService {
       if (openStatus) {
         data.jobVacancyStatusId = openStatus.id;
       } else {
-        // Fallback: This might fail if the DB is empty, but we assume seeders ran.
-        // Or throw error if critical
         this.logger.warn("Status 'OPEN' not found, creating without statusId might fail if required by DB");
       }
     }
@@ -42,24 +56,13 @@ export class JobVacanciesService {
           create: skillResolutions
         }
       } as any,
-      include: {
-        jobVacancySkills: { include: { skill: true } }
-      }
+      include: this.standardIncludes
     });
   }
 
   async findAll() {
     return this.prisma.jobVacancy.findMany({
-      include: {
-        jobRole: true,
-        department: true,
-        division: true,
-        group: true,
-        directorate: true,
-        employmentType: true,
-        employeePosition: true,
-        jobVacancySkills: { include: { skill: true } },
-      },
+      include: this.standardIncludes,
       orderBy: { createdAt: 'desc' }
     });
   }
@@ -67,16 +70,7 @@ export class JobVacanciesService {
   async findOne(id: string) {
     const job = await this.prisma.jobVacancy.findUnique({
       where: { id },
-      include: {
-        jobRole: true,
-        department: true,
-        division: true,
-        group: true,
-        directorate: true,
-        employmentType: true,
-        employeePosition: true,
-        jobVacancySkills: { include: { skill: true } },
-      },
+      include: this.standardIncludes,
     });
     if (!job) throw new NotFoundException(`Job Vacancy with ID ${id} not found`);
     return job;
@@ -123,7 +117,17 @@ export class JobVacanciesService {
       return prisma.jobVacancy.findUnique({
         where: { id },
         include: {
-          jobVacancySkills: { include: { skill: true } }
+          jobRole: true,
+          department: true,
+          division: true,
+          group: true,
+          directorate: true,
+          employmentType: true,
+          employeePosition: true,
+          jobVacancyStatus: true,
+          jobVacancyDuration: true,
+          jobVacancyReason: true,
+          jobVacancySkills: { include: { skill: true } },
         }
       });
     });
@@ -131,9 +135,101 @@ export class JobVacanciesService {
     return updated;
   }
 
+  /**
+   * Soft delete: set status to CLOSED instead of hard delete
+   */
   async remove(id: string) {
     await this.findOne(id); // Ensure exists
-    return this.prisma.jobVacancy.delete({ where: { id } });
+
+    // Find the CLOSED status
+    const closedStatus = await this.prisma.jobVacancyStatus.findFirst({
+      where: { jobVacancyStatus: 'CLOSED' }
+    });
+
+    if (!closedStatus) {
+      this.logger.error("Status 'CLOSED' not found in database. Cannot soft delete.");
+      throw new NotFoundException("Status 'CLOSED' not found. Please seed the database with a CLOSED status.");
+    }
+
+    return this.prisma.jobVacancy.update({
+      where: { id },
+      data: {
+        jobVacancyStatusId: closedStatus.id,
+        jobVacancyClosedAt: new Date(),
+      },
+      include: this.standardIncludes
+    });
+  }
+
+  /**
+   * Cron job: runs every hour to auto-close expired job vacancies.
+   * Uses Jakarta timezone (Asia/Jakarta, UTC+7).
+   */
+  @Cron('0 * * * *') // Every hour at minute 0
+  async closeExpiredJobs() {
+    this.logger.log('Running auto-close expired jobs cron (Jakarta timezone)...');
+
+    try {
+      // Get current time in Jakarta (UTC+7)
+      const nowJakarta = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+      this.logger.log(`Current Jakarta time: ${nowJakarta.toISOString()}`);
+
+      // Find the OPEN status
+      const openStatus = await this.prisma.jobVacancyStatus.findFirst({
+        where: { jobVacancyStatus: 'OPEN' }
+      });
+      if (!openStatus) {
+        this.logger.warn("Status 'OPEN' not found, skipping auto-close.");
+        return;
+      }
+
+      // Find the CLOSED status
+      const closedStatus = await this.prisma.jobVacancyStatus.findFirst({
+        where: { jobVacancyStatus: 'CLOSED' }
+      });
+      if (!closedStatus) {
+        this.logger.warn("Status 'CLOSED' not found, skipping auto-close.");
+        return;
+      }
+
+      // Find all OPEN jobs with their duration
+      const openJobs = await this.prisma.jobVacancy.findMany({
+        where: { jobVacancyStatusId: openStatus.id },
+        include: { jobVacancyDuration: true, jobRole: true },
+      });
+
+      let closedCount = 0;
+
+      for (const job of openJobs) {
+        const durationDays = job.jobVacancyDuration?.daysDuration;
+        if (!durationDays) continue;
+
+        // Calculate expiry date: createdAt + daysDuration
+        const createdAt = new Date(job.createdAt);
+        const expiryDate = new Date(createdAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+        if (nowJakarta >= expiryDate) {
+          // Job has expired, close it
+          await this.prisma.jobVacancy.update({
+            where: { id: job.id },
+            data: {
+              jobVacancyStatusId: closedStatus.id,
+              jobVacancyClosedAt: new Date(),
+            },
+          });
+          closedCount++;
+          this.logger.log(`Auto-closed expired job: ${(job as any).jobRole?.jobRoleName || job.id} (created: ${createdAt.toISOString()}, duration: ${durationDays} days)`);
+        }
+      }
+
+      if (closedCount > 0) {
+        this.logger.log(`Auto-closed ${closedCount} expired job(s).`);
+      } else {
+        this.logger.log('No expired jobs found.');
+      }
+    } catch (error: any) {
+      this.logger.error(`Error in closeExpiredJobs cron: ${error.message}`);
+    }
   }
 
 
@@ -154,7 +250,6 @@ export class JobVacanciesService {
     // Build where clause - start with empty object
     const whereClause: any = {};
 
-    // Only filter by status if we need to - for now, return all jobs
     // Filter for OPEN jobs
     whereClause.jobVacancyStatus = { jobVacancyStatus: 'OPEN' };
 
@@ -163,7 +258,6 @@ export class JobVacanciesService {
     }
 
     // Build OR conditions for each division/track
-    // Supports both exact match and partial/contains match
     if (divisions && Array.isArray(divisions) && divisions.length > 0) {
       const orConditions: any[] = [];
 
@@ -171,7 +265,6 @@ export class JobVacanciesService {
         if (!div || typeof div !== 'string' || div.trim() === '') continue;
 
         const searchTerm = div.trim();
-        // Add contains match for each division name
         orConditions.push(
           { division: { divisionName: { contains: searchTerm, mode: 'insensitive' } } },
           { department: { departmentName: { contains: searchTerm, mode: 'insensitive' } } },
@@ -185,7 +278,6 @@ export class JobVacanciesService {
       }
     }
 
-    // Start with basic query - no filtering to debug
     this.logger.log(`Building query with whereClause: ${JSON.stringify(whereClause)}`);
 
     try {
@@ -207,7 +299,7 @@ export class JobVacanciesService {
         orderBy: {
           createdAt: 'desc',
         },
-        take: 20, // Limit results
+        take: 20,
       });
 
       this.logger.log(`Found ${jobs.length} matching jobs for criteria.`);
@@ -230,7 +322,6 @@ export class JobVacanciesService {
       }));
     } catch (error: any) {
       this.logger.error(`Error in matchJobs: ${error.message}`);
-      // Return empty array instead of throwing to allow workflow to continue
       return [];
     }
   }
