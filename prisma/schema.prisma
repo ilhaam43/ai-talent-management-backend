@@ -574,6 +574,7 @@ model Candidate {
   linkedInUrl               String?                           @map("linkedin_url")
   cvFileUrl                 String?                           @map("cv_file_url")
   cvFileName                String?                           @map("cv_file_name")
+  profilePhotoUrl           String?                           @map("profile_photo_url")
   applications              CandidateApplication[]
   certifications            CandidateCertification[]
   documents                 CandidateDocument[]

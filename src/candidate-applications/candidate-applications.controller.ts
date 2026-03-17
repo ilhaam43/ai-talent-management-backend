@@ -51,7 +51,7 @@ export class CandidateApplicationsController {
     if (!candidateId) {
       throw new Error('User does not have a candidate profile');
     }
-    return this.candidateApplicationsService.findAllByCandidate(candidateId);
+    return this.candidateApplicationsService.findAllApplicationsByCandidate(candidateId);
   }
 
   @Post('analyze')

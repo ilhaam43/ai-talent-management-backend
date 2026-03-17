@@ -9,13 +9,21 @@ import {
   HttpStatus,
   BadRequestException,
   UnauthorizedException,
+  UseInterceptors,
+  UploadedFile,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { diskStorage } from "multer";
+import { extname } from "path";
+import { v4 as uuidv4 } from "uuid";
+import * as fs from "fs";
 import {
   ApiTags,
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
+  ApiConsumes,
 } from "@nestjs/swagger";
 import { CandidateProfileService } from "./candidate-profile.service";
 import { PrismaService } from "../database/prisma.service";
@@ -265,6 +273,66 @@ export class CandidateProfileController {
       data: results,
     };
   }
+  @Post("upload-photo")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Upload profile photo" })
+  @ApiConsumes("multipart/form-data")
+  @ApiResponse({ status: 200, description: "Photo uploaded successfully" })
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: (req, file, callback) => {
+          const destPath = "./uploads/documents/photos";
+          if (!fs.existsSync(destPath)) {
+            fs.mkdirSync(destPath, { recursive: true });
+          }
+          callback(null, destPath);
+        },
+        filename: (req, file, callback) => {
+          const uniqueFilename = `${uuidv4()}${extname(file.originalname)}`;
+          callback(null, uniqueFilename);
+        },
+      }),
+      fileFilter: (req, file, callback) => {
+        const allowedMimes = ["image/jpeg", "image/png", "image/webp"];
+        if (!allowedMimes.includes(file.mimetype)) {
+          return callback(
+            new BadRequestException("Only JPG, PNG, and WebP images are allowed"),
+            false,
+          );
+        }
+        callback(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    }),
+  )
+  async uploadPhoto(
+    @Req() req: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException("No file uploaded");
+    }
+
+    const userId = req.user.id;
+    const candidateId = await this.getCandidateIdFromUserId(userId);
+
+    // Build the relative path for serving
+    const photoUrl = `uploads/documents/photos/${file.filename}`;
+
+    // Update the candidate's profilePhotoUrl
+    await this.prisma.candidate.update({
+      where: { id: candidateId },
+      data: { profilePhotoUrl: photoUrl },
+    });
+
+    return {
+      success: true,
+      message: "Profile photo uploaded successfully",
+      data: { profilePhotoUrl: photoUrl },
+    };
+  }
+
   @Get("me")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Get current user candidate profile" })

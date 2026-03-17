@@ -225,4 +225,26 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token')
     }
   }
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    // 1. Fetch user
+    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    if (!user || !user.password) {
+      throw new UnauthorizedException('User not found')
+    }
+
+    // 2. Verify current password
+    const isValid = await bcrypt.compare(currentPassword, user.password)
+    if (!isValid) {
+      throw new UnauthorizedException('Current password is incorrect')
+    }
+
+    // 3. Hash new password and update
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    })
+
+    return { message: 'Password changed successfully' }
+  }
 }
