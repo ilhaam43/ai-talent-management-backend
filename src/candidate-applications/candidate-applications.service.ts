@@ -805,7 +805,7 @@ export class CandidateApplicationsService {
 
   async findAllApplicationsByCandidate(candidateId: string) {
     return this.prisma.candidateApplication.findMany({
-      where: { candidateId },
+      where: { candidateId, isTalentPool: false },
       orderBy: { createdAt: 'desc' },
       include: {
         candidate: {
