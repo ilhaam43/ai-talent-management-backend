@@ -22,6 +22,7 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
+import { PipelineActionsModule } from './pipeline-actions/pipeline-actions.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
     CalendarModule,
     DashboardModule,
     AiAssistantModule,
+    PipelineActionsModule,
   ],
   controllers: [TestRbacController],
   providers: [RolesGuard],

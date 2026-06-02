@@ -417,6 +417,7 @@ export class CandidateApplicationsService {
               },
             },
             interviewData: true,
+            onlineAssessment: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -610,6 +611,7 @@ export class CandidateApplicationsService {
               },
             },
             interviewData: true,
+            onlineAssessment: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -759,6 +761,7 @@ export class CandidateApplicationsService {
               },
             },
             interviewData: true,
+            onlineAssessment: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -790,7 +793,8 @@ export class CandidateApplicationsService {
             applicationPipeline: true,
             applicationPipelineStatus: true,
             employee: true,
-            interviewData: true
+            interviewData: true,
+            onlineAssessment: true
           },
           orderBy: {
             createdAt: 'desc'
@@ -831,7 +835,8 @@ export class CandidateApplicationsService {
                 user: { select: { name: true, email: true } }
               }
             },
-            interviewData: true
+            interviewData: true,
+            onlineAssessment: true
           },
           orderBy: {
             createdAt: 'desc'
@@ -868,6 +873,7 @@ export class CandidateApplicationsService {
               },
             },
             interviewData: true,
+            onlineAssessment: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -905,6 +911,7 @@ export class CandidateApplicationsService {
               },
             },
             interviewData: true,
+            onlineAssessment: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -1175,6 +1182,7 @@ export class CandidateApplicationsService {
               },
             },
             interviewData: true,
+            onlineAssessment: true,
           },
           orderBy: { createdAt: 'asc' },
         },

@@ -1,20 +1,8 @@
-import { IsUUID, IsNotEmpty, IsOptional, IsString, IsDateString, IsEnum } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsDateString, IsEnum, IsNumber, Min, Max } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { InterviewMethodEnum } from './create-interview-data.dto';
 
-export enum InterviewMethodEnum {
-    ONLINE = 'ONLINE',
-    ONSITE = 'ONSITE',
-}
-
-export class CreateInterviewDataDto {
-    @ApiProperty({
-        description: 'Candidate application pipeline ID',
-        example: '123e4567-e89b-12d3-a456-426614174000',
-    })
-    @IsUUID()
-    @IsNotEmpty()
-    candidateApplicationPipelineId!: string;
-
+export class UpdateInterviewDataDto {
     @ApiPropertyOptional({
         description: 'Scheduled date for interview (YYYY-MM-DD)',
         example: '2026-02-01',
@@ -47,14 +35,14 @@ export class CreateInterviewDataDto {
     @IsString()
     interviewLink?: string;
 
-    @ApiProperty({
+    @ApiPropertyOptional({
         description: 'Interview method',
         enum: InterviewMethodEnum,
         example: 'ONLINE',
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsEnum(InterviewMethodEnum)
-    interviewMethod!: InterviewMethodEnum;
+    interviewMethod?: InterviewMethodEnum;
 
     @ApiPropertyOptional({
         description: 'Interview location (for onsite interviews)',
@@ -79,4 +67,24 @@ export class CreateInterviewDataDto {
     @IsOptional()
     @IsString()
     interviewerEmail?: string;
+
+    @ApiPropertyOptional({
+        description: 'HR interview score (0-100)',
+        example: 85,
+    })
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    @Max(100)
+    hrInterviewScore?: number;
+
+    @ApiPropertyOptional({
+        description: 'User/technical interview score (0-100)',
+        example: 90,
+    })
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    @Max(100)
+    userInterviewScore?: number;
 }

@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CalendarService } from './calendar.service';
 import { CalendarResponseDto } from './dto/calendar-response.dto';
 import { CreateInterviewDataDto } from './dto/create-interview-data.dto';
+import { UpdateInterviewDataDto } from './dto/update-interview-data.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 
@@ -51,5 +52,23 @@ export class CalendarController {
     @ApiResponse({ status: 404, description: 'Candidate application pipeline not found' })
     async createInterviewData(@Body() dto: CreateInterviewDataDto) {
         return this.calendarService.createInterviewData(dto);
+    }
+
+    @Patch('interview-data/:id')
+    @UseGuards(AuthGuard('jwt'), RolesGuard)
+    @Roles('HUMAN RESOURCES')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Update interview data',
+        description:
+            'Updates interview data for an existing interview record. Can update schedule, interviewer info, and scores.',
+    })
+    @ApiResponse({ status: 200, description: 'Interview data updated successfully' })
+    @ApiResponse({ status: 404, description: 'Interview data not found' })
+    async updateInterviewData(
+        @Param('id') id: string,
+        @Body() dto: UpdateInterviewDataDto,
+    ) {
+        return this.calendarService.updateInterviewData(id, dto);
     }
 }

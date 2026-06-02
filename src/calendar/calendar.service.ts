@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { PrismaService } from '../database/prisma.service';
 import { CalendarResponseDto } from './dto/calendar-response.dto';
 import { CreateInterviewDataDto } from './dto/create-interview-data.dto';
+import { UpdateInterviewDataDto } from './dto/update-interview-data.dto';
 import { InterviewMethod } from '@prisma/client';
 
 @Injectable()
@@ -52,6 +53,8 @@ export class CalendarService {
                 interviewLink: dto.interviewLink || null,
                 interviewMethod: dto.interviewMethod as InterviewMethod,
                 interviewLocation: dto.interviewLocation || null,
+                interviewerName: dto.interviewerName || null,
+                interviewerEmail: dto.interviewerEmail || null,
             },
             include: {
                 candidateApplicationPipeline: {
@@ -105,6 +108,68 @@ export class CalendarService {
             jobVacancy: {
                 id: interviewData.candidateApplicationPipeline.candidateApplication.jobVacancy.id,
                 jobRole: interviewData.candidateApplicationPipeline.candidateApplication.jobVacancy.jobRole?.jobRoleName,
+            },
+        };
+    }
+
+    /**
+     * Update interview data (reschedule, add scores, update interviewer)
+     */
+    async updateInterviewData(id: string, dto: UpdateInterviewDataDto) {
+        this.logger.log(`Updating interview data: ${id}`);
+
+        const existing = await this.prisma.candidateInterviewData.findUnique({
+            where: { id },
+        });
+
+        if (!existing) {
+            throw new NotFoundException(`Interview data not found: ${id}`);
+        }
+
+        const updateData: any = {};
+        if (dto.scheduledDate !== undefined) updateData.scheduledDate = new Date(dto.scheduledDate);
+        if (dto.scheduledStartTime !== undefined) updateData.scheduledStartTime = new Date(dto.scheduledStartTime);
+        if (dto.scheduledEndTime !== undefined) updateData.scheduledEndTime = new Date(dto.scheduledEndTime);
+        if (dto.interviewLink !== undefined) updateData.interviewLink = dto.interviewLink;
+        if (dto.interviewMethod !== undefined) updateData.interviewMethod = dto.interviewMethod as InterviewMethod;
+        if (dto.interviewLocation !== undefined) updateData.interviewLocation = dto.interviewLocation;
+        if (dto.interviewerName !== undefined) updateData.interviewerName = dto.interviewerName;
+        if (dto.interviewerEmail !== undefined) updateData.interviewerEmail = dto.interviewerEmail;
+        if (dto.hrInterviewScore !== undefined) updateData.hrInterviewScore = dto.hrInterviewScore;
+        if (dto.userInterviewScore !== undefined) updateData.userInterviewScore = dto.userInterviewScore;
+
+        const updated = await this.prisma.candidateInterviewData.update({
+            where: { id },
+            data: updateData,
+            include: {
+                candidateApplicationPipeline: {
+                    include: {
+                        applicationPipeline: true,
+                        applicationPipelineStatus: true,
+                    },
+                },
+            },
+        });
+
+        this.logger.log(`Interview data updated: ${id}`);
+
+        return {
+            id: updated.id,
+            scheduledDate: updated.scheduledDate,
+            scheduledStartTime: updated.scheduledStartTime,
+            scheduledEndTime: updated.scheduledEndTime,
+            interviewLink: updated.interviewLink,
+            interviewMethod: updated.interviewMethod,
+            interviewLocation: updated.interviewLocation,
+            interviewerName: updated.interviewerName,
+            interviewerEmail: updated.interviewerEmail,
+            hrInterviewScore: updated.hrInterviewScore ? Number(updated.hrInterviewScore) : null,
+            userInterviewScore: updated.userInterviewScore ? Number(updated.userInterviewScore) : null,
+            updatedAt: updated.updatedAt,
+            pipeline: {
+                id: updated.candidateApplicationPipeline.id,
+                stage: updated.candidateApplicationPipeline.applicationPipeline.applicationPipeline,
+                status: updated.candidateApplicationPipeline.applicationPipelineStatus.applicationPipelineStatus,
             },
         };
     }

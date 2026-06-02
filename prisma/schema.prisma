@@ -527,6 +527,7 @@ model CandidateApplicationPipeline {
   candidateApplication        CandidateApplication      @relation(fields: [candidateApplicationId], references: [id], onDelete: Cascade)
   employee                    Employee?                 @relation(fields: [employeeId], references: [id])
   interviewData               CandidateInterviewData?
+  onlineAssessment             CandidateOnlineAssessment?
 
   @@map("candidate_application_pipelines")
 }
@@ -542,11 +543,31 @@ model CandidateInterviewData {
   userInterviewScore             Decimal?                     @map("user_interview_score") @db.Decimal(5, 2)
   interviewMethod                InterviewMethod              @map("interview_method")
   interviewLocation              String?                      @map("interview_location")
+  interviewerName                String?                      @map("interviewer_name")
+  interviewerEmail               String?                      @map("interviewer_email")
   createdAt                      DateTime                     @default(now()) @map("created_at")
   updatedAt                      DateTime                     @updatedAt @map("updated_at")
   candidateApplicationPipeline   CandidateApplicationPipeline @relation(fields: [candidateApplicationPipelineId], references: [id], onDelete: Cascade)
 
   @@map("candidate_interview_data")
+}
+
+model CandidateOnlineAssessment {
+  id                             String                       @id @default(uuid())
+  candidateApplicationPipelineId String                       @unique @map("candidate_application_pipeline_id")
+  assessmentLink                 String                       @map("assessment_link")
+  startDate                      DateTime                     @map("start_date") @db.Date
+  endDate                        DateTime                     @map("end_date") @db.Date
+  vendorResultFileUrl            String?                      @map("vendor_result_file_url")
+  vendorResultFileName           String?                      @map("vendor_result_file_name")
+  roleFitScore                   Int?                         @map("role_fit_score")
+  parsedResultSummary            String?                      @map("parsed_result_summary") @db.Text
+  notes                          String?
+  createdAt                      DateTime                     @default(now()) @map("created_at")
+  updatedAt                      DateTime                     @updatedAt @map("updated_at")
+  candidateApplicationPipeline   CandidateApplicationPipeline @relation(fields: [candidateApplicationPipelineId], references: [id], onDelete: Cascade)
+
+  @@map("candidate_online_assessments")
 }
 
 model Candidate {
