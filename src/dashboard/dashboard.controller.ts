@@ -1,10 +1,9 @@
 import { Controller, Get, UseGuards, Query } from "@nestjs/common";
 import { DashboardService } from "./dashboard.service";
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Assuming generic auth guard exists
-// import { Role } from '../common/enums/role.enum'; // If roles are needed
-// import { Roles } from '../common/decorators/roles.decorator';
+import { AuthGuard } from "@nestjs/passport";
 
 @Controller("dashboard")
+@UseGuards(AuthGuard("jwt"))
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 

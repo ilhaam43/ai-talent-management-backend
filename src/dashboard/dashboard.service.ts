@@ -229,6 +229,7 @@ export class DashboardService {
               division: true,
             },
           },
+          candidate: true,
         },
         orderBy: { submissionDate: "desc" },
       });
@@ -240,6 +241,7 @@ export class DashboardService {
         // Job Vacancy Item
         const v = item;
         return {
+          id: v.id,
           jobRole: v.jobRole?.jobRoleName || "Unknown Role",
           pic: "HRD", // Hardcoded or derive from creator
           department: v.division?.divisionName || "General",
@@ -252,6 +254,9 @@ export class DashboardService {
         const app = item;
         const v = app.jobVacancy;
         return {
+          id: app.id,
+          candidateId: app.candidateId,
+          candidateName: app.candidate?.candidateFullname || "Unknown Candidate",
           jobRole: v?.jobRole?.jobRoleName || "Unknown Role",
           pic: "HRD",
           department: v?.division?.divisionName || "General",
@@ -332,7 +337,7 @@ export class DashboardService {
 
     // 3. Waiting Feedback (Online Assessment / Offering)
     // Let's map to Online Assessment as "Waiting Result"
-    const feedbackStages = ["Online Assessment", "AI SCREENING"];
+    const feedbackStages = ["Online Assessment", "AI SCREENING", "Offering", "Offer Letter"];
     const waitingFeedbackCount = await this.prisma.candidateApplication.count({
       where: {
         applicationPipeline: { applicationPipeline: { in: feedbackStages } },
@@ -346,7 +351,7 @@ export class DashboardService {
     });
 
     // 4. Onboarding Soon (Onboarding / MCU)
-    const onboardingStages = ["Onboarding", "MCU"];
+    const onboardingStages = ["Onboarding", "MCU", "Hired"];
     const onboardingCount = await this.prisma.candidateApplication.count({
       where: {
         applicationPipeline: { applicationPipeline: { in: onboardingStages } },
