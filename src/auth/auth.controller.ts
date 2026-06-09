@@ -4,6 +4,7 @@ import { ApiBody, ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nes
 import { Response } from 'express'
 import { AuthService } from './auth.service'
 import { SignupDto } from './dto/signup.dto'
+import { SetPasswordDto } from './dto/set-password.dto'
 
 @ApiTags('auth')
 @Controller('auth')
@@ -155,5 +156,14 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Current password is incorrect' })
   async changePassword(@Req() req: any, @Body() body: { currentPassword: string; newPassword: string }) {
     return this.authService.changePassword(req.user.id, body.currentPassword, body.newPassword)
+  }
+
+  @Post('set-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set password using reset token (e.g. for converted candidates)' })
+  @ApiResponse({ status: 200, description: 'Password set successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  async setPassword(@Body() setPasswordDto: SetPasswordDto) {
+    return this.authService.setPasswordFromToken(setPasswordDto.token, setPasswordDto.password)
   }
 }
