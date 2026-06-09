@@ -929,20 +929,37 @@ export class CandidateApplicationsService {
    * Get HR dashboard summary metrics
    */
   async getHRDashboardSummary(): Promise<DashboardSummaryDto> {
-    const nonTalentPoolFilter = {
-      isTalentPool: false, // Filter at application level
+    const activeFilter = {
+      isTalentPool: false,
     };
 
     const [total, pass, partiallyPass, notPass] = await Promise.all([
-      this.prisma.candidateApplication.count({ where: nonTalentPoolFilter }),
+      // Total Candidates (active)
+      this.prisma.candidateApplication.count({ where: activeFilter }),
+      
+      // AI Shortlisted / Recommended (STRONG_MATCH or MATCH)
       this.prisma.candidateApplication.count({
-        where: { ...nonTalentPoolFilter, aiMatchStatus: 'STRONG_MATCH' as any }, // Enforce enum string format
+        where: { 
+          ...activeFilter, 
+          aiMatchStatus: { in: ['STRONG_MATCH', 'MATCH'] } as any 
+        },
       }),
+      
+      // Under Evaluation (Active evaluation pipelines)
       this.prisma.candidateApplication.count({
-        where: { ...nonTalentPoolFilter, aiMatchStatus: 'MATCH' as any },
+        where: {
+          ...activeFilter,
+          applicationPipeline: {
+            applicationPipeline: {
+              notIn: ['Applied', 'Hired', 'Onboarding']
+            }
+          }
+        },
       }),
+      
+      // Talent Pool (Historical / backup)
       this.prisma.candidateApplication.count({
-        where: { ...nonTalentPoolFilter, aiMatchStatus: 'NOT_MATCH' as any },
+        where: { isTalentPool: true },
       }),
     ]);
 

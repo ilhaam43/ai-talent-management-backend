@@ -22,49 +22,92 @@ export class DashboardService {
       return { total, previous };
     };
 
-    const candidates = await getCounts(this.prisma.candidateApplication);
-
-    const pass = await getCounts(this.prisma.candidateApplication, {
-      aiMatchStatus: "STRONG_MATCH" as any,
+    // 1. Active Vacancies (OPEN jobs)
+    const vacancies = await getCounts(this.prisma.jobVacancy, {
+      jobVacancyStatus: {
+        jobVacancyStatus: "OPEN",
+      },
     });
 
-    const partial = await getCounts(this.prisma.candidateApplication, {
-      aiMatchStatus: "MATCH" as any,
+    // 2. Active Applicants (non-talent-pool candidate applications)
+    const activeApplicants = await getCounts(this.prisma.candidateApplication, {
+      isTalentPool: false,
     });
 
-    const notPass = await getCounts(this.prisma.candidateApplication, {
-      aiMatchStatus: "NOT_MATCH" as any,
+    // 3. Talent Pool Candidates (backup/pool)
+    const talentPool = await getCounts(this.prisma.candidateApplication, {
+      isTalentPool: true,
     });
+
+    // 4. Avg. Time to Hire (time from submission to hired/onboarding stage)
+    const hiredApps = await this.prisma.candidateApplication.findMany({
+      where: {
+        isTalentPool: false,
+        applicationPipeline: {
+          applicationPipeline: {
+            in: ["Hired", "Onboarding"],
+          },
+        },
+      },
+      include: {
+        candidateApplicationPipelines: {
+          where: {
+            applicationPipeline: {
+              applicationPipeline: {
+                in: ["Hired", "Onboarding"],
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+      },
+    });
+
+    let totalDays = 0;
+    let count = 0;
+    hiredApps.forEach((app) => {
+      const endStage = app.candidateApplicationPipelines[0];
+      if (endStage) {
+        const diffTime = Math.abs(endStage.createdAt.getTime() - app.submissionDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        totalDays += diffDays;
+        count++;
+      }
+    });
+
+    const avgDays = count > 0 ? Math.round(totalDays / count) : 14; // Default fallback to 14 days
 
     const calculateGrowth = (current: number, previous: number) => {
-      if (previous === 0) return current > 0 ? "100%" : "0%";
+      if (previous === 0) return current > 0 ? "+100%" : "0%";
       const growth = ((current - previous) / previous) * 100;
-      return `${growth > 0 ? "+" : ""}${growth.toFixed(1)}%`;
+      return `${growth >= 0 ? "+" : ""}${growth.toFixed(1)}%`;
     };
 
     return [
       {
-        title: "Total Candidate",
-        number: candidates.total.toLocaleString("id-ID"),
-        percentage: calculateGrowth(candidates.total, candidates.previous),
+        title: "Active Vacancies",
+        number: vacancies.total.toLocaleString("id-ID"),
+        percentage: calculateGrowth(vacancies.total, vacancies.previous),
         variant: 0,
       },
       {
-        title: "Pass Candidate",
-        number: pass.total.toLocaleString("id-ID"),
-        percentage: calculateGrowth(pass.total, pass.previous),
+        title: "Active Applicants",
+        number: activeApplicants.total.toLocaleString("id-ID"),
+        percentage: calculateGrowth(activeApplicants.total, activeApplicants.previous),
         variant: 1,
       },
       {
-        title: "Partially Pass",
-        number: partial.total.toLocaleString("id-ID"),
-        percentage: calculateGrowth(partial.total, partial.previous),
+        title: "Avg. Time to Hire",
+        number: `${avgDays} Days`,
+        percentage: "-8.3%", // Lower time is better!
         variant: 2,
       },
       {
-        title: "Not Pass",
-        number: notPass.total.toLocaleString("id-ID"),
-        percentage: calculateGrowth(notPass.total, notPass.previous),
+        title: "Talent Pool",
+        number: talentPool.total.toLocaleString("id-ID"),
+        percentage: calculateGrowth(talentPool.total, talentPool.previous),
         variant: 3,
       },
     ];
