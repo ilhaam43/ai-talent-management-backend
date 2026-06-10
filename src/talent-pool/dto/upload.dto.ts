@@ -34,3 +34,18 @@ export class FileUploadInfoDto {
   @IsString()
   fileName!: string;
 }
+
+export class UploadLinkDto {
+  @ApiProperty({
+    description: 'Google Drive folder or file link containing candidate CV PDFs',
+    example: 'https://drive.google.com/drive/folders/1ABCxyz',
+  })
+  @IsUrl({}, { message: 'sourceUrl must be a valid URL' })
+  sourceUrl!: string;
+
+  @ApiPropertyOptional({ description: 'Optional name for this batch upload', example: 'Q2 2026 Talent Pool' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  batchName?: string;
+}

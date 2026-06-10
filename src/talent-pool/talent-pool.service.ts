@@ -5,7 +5,7 @@ import { TalentPoolRepository } from './talent-pool.repository';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../email/email.service';
-import { UploadTalentPoolDto } from './dto/upload.dto';
+import { UploadTalentPoolDto, UploadLinkDto } from './dto/upload.dto';
 import { N8nCallbackDto, AiMatchStatusValue } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
 import axios from 'axios';
@@ -70,9 +70,57 @@ export class TalentPoolService {
     };
   }
 
-  // ============================================
-  // SEQUENTIAL Queue Processing (1 CV at a time)
-  // ============================================
+  /**
+   * Create a batch from a Google Drive (or similar) link.
+   * The n8n workflow is responsible for crawling the folder, downloading CVs, and calling back.
+   */
+  async createBatchUploadFromLink(
+    uploadedById: string,
+    dto: UploadLinkDto,
+  ): Promise<{ batch: any; message: string }> {
+    // Create batch record with sourceType 'LINK'
+    const batch = await this.repository.createBatch({
+      batchName: dto.batchName,
+      uploadedById,
+      sourceType: 'LINK' as any,
+      sourceUrl: dto.sourceUrl,
+      totalFiles: 0, // n8n will discover and report the actual count
+    });
+
+    // Mark batch as QUEUED immediately
+    await this.repository.updateBatchStatus(batch.id, 'QUEUED' as any);
+
+    // Trigger n8n webhook with the Drive link
+    if (this.n8nWebhookUrl) {
+      try {
+        await axios.post(
+          this.n8nWebhookUrl,
+          {
+            batchId: batch.id,
+            sourceType: 'LINK',
+            sourceUrl: dto.sourceUrl,
+          },
+          {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 30000, // 30 s — just to trigger; n8n processes async
+          },
+        );
+        this.logger.log(`[Batch ${batch.id.substring(0, 8)}] n8n triggered for Drive link: ${dto.sourceUrl}`);
+      } catch (error: any) {
+        this.logger.error(`Failed to trigger n8n for link batch: ${error.message}`);
+        // Don't fail the request — the batch is created, HR can retry via n8n manually
+      }
+    } else {
+      this.logger.warn('N8N_TALENT_POOL_WEBHOOK_URL not configured — link batch created but n8n not triggered');
+    }
+
+    return {
+      batch,
+      message: 'Link batch created and n8n workflow triggered. Processing will begin shortly.',
+    };
+  }
+
+
 
   /**
    * Process next pending item in a specific batch (SEQUENTIAL)
