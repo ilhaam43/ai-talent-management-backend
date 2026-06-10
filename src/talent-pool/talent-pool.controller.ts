@@ -39,15 +39,7 @@ enum TalentPoolHRStatusEnum {
   REJECTED = 'REJECTED',
 }
 
-// Configure local storage for uploaded files
-const storage = diskStorage({
-  destination: './uploads/talent-pool',
-  filename: (req, file, callback) => {
-    const uniqueSuffix = uuidv4();
-    const ext = extname(file.originalname);
-    callback(null, `${uniqueSuffix}${ext}`);
-  },
-});
+import { getMulterPdfConfig } from '../common/config/multer-pdf.config';
 
 @ApiTags('Talent Pool')
 @Controller('talent-pool')
@@ -67,16 +59,7 @@ export class TalentPoolController {
   @ApiOperation({ summary: 'Upload CVs for bulk screening' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FilesInterceptor('files', 50, {
-      storage,
-      fileFilter: (req, file, callback) => {
-        if (file.mimetype !== 'application/pdf') {
-          return callback(new Error('Only PDF files are allowed'), false);
-        }
-        callback(null, true);
-      },
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
-    }),
+    FilesInterceptor('files', 50, getMulterPdfConfig('talent-pool')),
   )
   async uploadCVs(
     @UploadedFiles() files: Express.Multer.File[],

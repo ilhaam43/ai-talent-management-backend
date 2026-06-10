@@ -4,6 +4,7 @@ import { TextExtractorService } from './parsers/text-extractor.service';
 import { DataExtractorService } from './parsers/data-extractor.service';
 import { LLMParserService } from './parsers/llm-parser.service';
 import { ParsedCandidateData } from './dto/parsed-candidate-data.dto';
+import { stripHtmlTags } from '../common/utils/sanitize.util';
 
 @Injectable()
 export class CVParserService {
@@ -44,10 +45,13 @@ export class CVParserService {
     const derivedMimeType = mimeTypeMap[ext] || 'application/octet-stream';
 
     // Extract text from document
-    const extractedText = await this.textExtractor.extractText(
+    let extractedText = await this.textExtractor.extractText(
       document.filePath,
       derivedMimeType,
     );
+    
+    // Sanitize extracted text to prevent XSS
+    extractedText = stripHtmlTags(extractedText);
 
     // Save extracted text to database for future reference
     await this.documentsService.updateExtractedText(documentId, extractedText);
@@ -68,10 +72,13 @@ export class CVParserService {
     file: Express.Multer.File,
   ): Promise<ParsedCandidateData> {
     // Extract text from file
-    const extractedText = await this.textExtractor.extractText(
+    let extractedText = await this.textExtractor.extractText(
       file.path,
       file.mimetype,
     );
+
+    // Sanitize extracted text to prevent XSS
+    extractedText = stripHtmlTags(extractedText);
 
     // Parse structured data from text (using LLM if available)
     const parsedData = await this.parseText(extractedText);

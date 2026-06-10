@@ -11,6 +11,7 @@ import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
 import axios from 'axios';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { stripHtmlTags } from '../common/utils/sanitize.util';
 
 @Injectable()
 export class TalentPoolService {
@@ -371,9 +372,9 @@ export class TalentPoolService {
             applicationPipelineId: screeningPipeline.id,
             fitScore: screening.fitScore,
             aiMatchStatus: screening.aiMatchStatus as any,
-            aiInsight: screening.aiInsight,
-            aiInterview: screening.aiInterview,
-            aiCoreValue: screening.aiCoreValue,
+            aiInsight: stripHtmlTags(screening.aiInsight),
+            aiInterview: stripHtmlTags(screening.aiInterview),
+            aiCoreValue: stripHtmlTags(screening.aiCoreValue),
             submissionDate: new Date(),
             candidateApplicationPipelines: {
               create: [{
@@ -472,9 +473,9 @@ export class TalentPoolService {
           applicationLatestStatusId: qualifiedStatus.id,
           applicationPipelineId: screeningStage.id,
           fitScore: screening.fitScore,
-          aiInsight: screening.aiInsight,
-          aiInterview: screening.aiInterview,
-          aiCoreValue: screening.aiCoreValue,
+          aiInsight: stripHtmlTags(screening.aiInsight),
+          aiInterview: stripHtmlTags(screening.aiInterview),
+          aiCoreValue: stripHtmlTags(screening.aiCoreValue),
           aiMatchStatus: screening.aiMatchStatus as any,
           submissionDate: new Date(),
         },

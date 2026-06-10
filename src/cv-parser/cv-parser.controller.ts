@@ -21,8 +21,9 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { CVParserService } from './cv-parser.service';
-import { multerConfig } from '../documents/config/multer.config';
+// import { multerConfig } from '../documents/config/multer.config';
 import { PrismaService } from '../database/prisma.service';
+import { getMulterPdfConfig } from '../common/config/multer-pdf.config';
 
 @ApiTags('cv-parser')
 @Controller('cv-parser')
@@ -149,7 +150,7 @@ export class CVParserController {
   }
 
   @Post('parse-file')
-  @UseInterceptors(FileInterceptor('file', multerConfig))
+  @UseInterceptors(FileInterceptor('file', getMulterPdfConfig('documents/cv')))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Parse CV from uploaded file directly (without storing)',
@@ -180,5 +181,6 @@ export class CVParserController {
     return this.cvParserService.parseFile(file);
   }
 }
+
 
 

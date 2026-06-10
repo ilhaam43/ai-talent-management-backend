@@ -12,13 +12,14 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+// import { diskStorage } from 'multer';
+// import { extname } from 'path';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PipelineActionsService } from './pipeline-actions.service';
 import { QualifyDto, DisqualifyDto } from './dto/qualify.dto';
 import { CreateOnlineAssessmentDto } from './dto/online-assessment.dto';
+import { getMulterPdfConfig } from '../common/config/multer-pdf.config';
 
 @ApiTags('pipeline-actions')
 @Controller('pipeline-actions')
@@ -75,23 +76,7 @@ export class PipelineActionsController {
     @ApiOperation({ summary: 'Upload vendor assessment result PDF' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(
-        FileInterceptor('file', {
-            storage: diskStorage({
-                destination: './uploads/assessment-results',
-                filename: (_req, file, cb) => {
-                    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-                    cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
-                },
-            }),
-            fileFilter: (_req, file, cb) => {
-                if (file.mimetype === 'application/pdf') {
-                    cb(null, true);
-                } else {
-                    cb(new Error('Only PDF files are allowed'), false);
-                }
-            },
-            limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-        }),
+        FileInterceptor('file', getMulterPdfConfig('assessment-results')),
     )
     async uploadResult(
         @Param('pipelineId') pipelineId: string,
