@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { NotificationsRepository } from './notifications.repository';
 import { NotificationType } from '@prisma/client';
 
@@ -13,7 +13,11 @@ export class NotificationsService {
   // ============================================
 
   async getMyNotifications(userId: string, skip = 0, take = 50) {
-    return this.repository.findByUserId(userId, { skip, take });
+    const [data, total] = await Promise.all([
+      this.repository.findByUserId(userId, { skip, take }),
+      this.repository.countByUserId(userId),
+    ]);
+    return { data, total, skip, take };
   }
 
   async getUnreadCount(userId: string): Promise<{ count: number }> {
@@ -21,7 +25,11 @@ export class NotificationsService {
     return { count };
   }
 
-  async markAsRead(id: string) {
+  async markAsRead(id: string, userId: string) {
+    const notification = await this.repository.findOneByIdAndUserId(id, userId);
+    if (!notification) {
+      throw new NotFoundException(`Notification not found or does not belong to you`);
+    }
     return this.repository.markAsRead(id);
   }
 
