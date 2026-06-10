@@ -179,9 +179,14 @@ export class CandidateApplicationsController {
   // === LEGACY ENDPOINT ===
 
   @Post(':id/analyze')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('HUMAN RESOURCES')
+  @ApiBearerAuth()
   @ApiOperation({ summary: '[DEPRECATED] Trigger AI analysis by application ID' })
   @ApiParam({ name: 'id', description: 'Application ID' })
   @ApiResponse({ status: 200, description: 'Analysis triggered successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - HR role required' })
   async triggerAnalysisLegacy(@Param('id') id: string) {
     return this.candidateApplicationsService.triggerAiAnalysis(id);
   }
