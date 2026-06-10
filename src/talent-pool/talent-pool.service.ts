@@ -78,44 +78,44 @@ export class TalentPoolService {
     uploadedById: string,
     dto: UploadLinkDto,
   ): Promise<{ batch: any; message: string }> {
-    // Create batch record with sourceType 'LINK'
+    // Create batch record with sourceType 'GOOGLE_DRIVE'
     const batch = await this.repository.createBatch({
       batchName: dto.batchName,
       uploadedById,
-      sourceType: 'LINK' as any,
+      sourceType: 'GOOGLE_DRIVE' as any,
       sourceUrl: dto.sourceUrl,
       totalFiles: 0, // n8n will discover and report the actual count
     });
 
-    // Mark batch as QUEUED immediately
+    // Mark batch as QUEUED immediately and fetch updated record so response reflects the new status
     await this.repository.updateBatchStatus(batch.id, 'QUEUED' as any);
+    const updatedBatch = await this.repository.findBatchById(batch.id);
 
-    // Trigger n8n webhook with the Drive link
+    // Trigger n8n webhook with the Drive link (fire-and-forget style — don't block the response)
     if (this.n8nWebhookUrl) {
-      try {
-        await axios.post(
-          this.n8nWebhookUrl,
-          {
-            batchId: batch.id,
-            sourceType: 'LINK',
-            sourceUrl: dto.sourceUrl,
-          },
-          {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 30000, // 30 s — just to trigger; n8n processes async
-          },
-        );
+      axios.post(
+        this.n8nWebhookUrl,
+        {
+          batchId: batch.id,
+          sourceType: 'GOOGLE_DRIVE',
+          sourceUrl: dto.sourceUrl,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 30000, // 30 s — just to trigger; n8n processes async
+        },
+      ).then(() => {
         this.logger.log(`[Batch ${batch.id.substring(0, 8)}] n8n triggered for Drive link: ${dto.sourceUrl}`);
-      } catch (error: any) {
+      }).catch((error: any) => {
         this.logger.error(`Failed to trigger n8n for link batch: ${error.message}`);
         // Don't fail the request — the batch is created, HR can retry via n8n manually
-      }
+      });
     } else {
       this.logger.warn('N8N_TALENT_POOL_WEBHOOK_URL not configured — link batch created but n8n not triggered');
     }
 
     return {
-      batch,
+      batch: updatedBatch,
       message: 'Link batch created and n8n workflow triggered. Processing will begin shortly.',
     };
   }

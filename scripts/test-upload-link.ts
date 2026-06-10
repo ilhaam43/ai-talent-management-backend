@@ -89,7 +89,7 @@ async function submitLink(token: string): Promise<string> {
 
   assert(res.status === 201, 'HTTP 201 Created', String(res.status));
   assert(typeof batch?.id === 'string', 'Response contains batch.id', batch?.id);
-  assert(batch?.sourceType === 'LINK', 'batch.sourceType is LINK', batch?.sourceType);
+  assert(batch?.sourceType === 'GOOGLE_DRIVE', 'batch.sourceType is GOOGLE_DRIVE', batch?.sourceType);
   assert(batch?.sourceUrl === DRIVE_LINK, 'batch.sourceUrl matches submitted URL');
   assert(
     ['QUEUED', 'PROCESSING'].includes(batch?.status),
@@ -121,7 +121,7 @@ async function verifyBatchInList(token: string, batchId: string): Promise<void> 
     headers: { Authorization: `Bearer ${token}` },
   });
   assert(detailRes.data?.id === batchId, 'GET /batches/:id returns correct batch');
-  assert(detailRes.data?.sourceType === 'LINK', 'Detail confirms sourceType LINK');
+  assert(detailRes.data?.sourceType === 'GOOGLE_DRIVE', 'Detail confirms sourceType GOOGLE_DRIVE');
   assert(detailRes.data?.sourceUrl === DRIVE_LINK, 'Detail confirms sourceUrl');
 }
 
