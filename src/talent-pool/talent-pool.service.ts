@@ -1082,8 +1082,9 @@ export class TalentPoolService {
     skip?: number;
     take?: number;
     batchId?: string;
+    search?: string;
   }): Promise<{ candidates: any[]; total: number }> {
-    const { skip = 0, take = 20, batchId } = params;
+    const { skip = 0, take = 20, batchId, search } = params;
 
     // Query applications that are in talent pool
     const whereClause: any = {
@@ -1094,6 +1095,39 @@ export class TalentPoolService {
       whereClause.candidate = {
         talentPoolBatchId: batchId,
       };
+    }
+
+    if (search) {
+      whereClause.OR = [
+        {
+          candidate: {
+            candidateFullname: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          candidate: {
+            user: {
+              name: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+        {
+          jobVacancy: {
+            jobRole: {
+              jobRoleName: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+      ];
     }
 
     // Get ALL applications first (Flattened Rows) to determine matches and total

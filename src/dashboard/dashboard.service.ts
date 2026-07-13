@@ -232,13 +232,18 @@ export class DashboardService {
       switch (tab) {
         case 1: // Online Assessment
           taskName = "Send Online Assessment";
-          stageNames = ["AI SCREENING", "Online Assessment"];
+          // Covers: legacy "AI SCREENING", converted "Online Assessment", pipeline-actions "Ai Screening"
+          stageNames = ["AI SCREENING", "Online Assessment", "Ai Screening"];
           break;
         case 2: // Interview
           taskName = "Schedule Interview";
+          // Covers: converted "HR Interview"/"User Interview", pipeline-actions "User Interview 1/2/3", legacy names
           stageNames = [
             "HR Interview",
             "User Interview",
+            "User Interview 1",
+            "User Interview 2",
+            "User Interview 3",
             "INTERVIEW USER 1",
             "INTERVIEW USER 2",
           ];
@@ -249,7 +254,7 @@ export class DashboardService {
           break;
         case 4: // MCU
           taskName = "Schedule MCU";
-          stageNames = ["MCU"];
+          stageNames = ["MCU", "Medical Checkup", "MEDICAL CHECKUP"];
           break;
         case 5: // Onboarding
           taskName = "Onboarding Preparation";
@@ -361,6 +366,9 @@ export class DashboardService {
     const interviewStages = [
       "HR Interview",
       "User Interview",
+      "User Interview 1",
+      "User Interview 2",
+      "User Interview 3",
       "INTERVIEW USER 1",
       "INTERVIEW USER 2",
     ];
@@ -380,7 +388,7 @@ export class DashboardService {
 
     // 3. Waiting Feedback (Online Assessment / Offering)
     // Let's map to Online Assessment as "Waiting Result"
-    const feedbackStages = ["Online Assessment", "AI SCREENING", "Offering", "Offer Letter"];
+    const feedbackStages = ["Online Assessment", "Ai Screening", "AI SCREENING", "Offering", "Offer Letter"];
     const waitingFeedbackCount = await this.prisma.candidateApplication.count({
       where: {
         applicationPipeline: { applicationPipeline: { in: feedbackStages } },

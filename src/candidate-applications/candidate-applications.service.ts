@@ -236,7 +236,10 @@ export class CandidateApplicationsService {
         if (application) {
           await this.prisma.candidateApplication.update({
             where: { id: application.id },
-            data: updateData as any,
+            data: {
+              ...updateData,
+              isTalentPool: true, // Keep as recommendation only, user will apply manually
+            } as any,
           });
         } else {
           // Get or create required records for new application
@@ -286,9 +289,28 @@ export class CandidateApplicationsService {
               applicationLatestStatusId: appLastStatus.id,
               applicationPipelineId: appPipeline.id,
               submissionDate: new Date(),
+              isTalentPool: true, // Keep as recommendation only, user will apply manually
               ...updateData,
             } as any,
           });
+
+          // Create initial pipeline stage record
+          let pendingStatus = await this.prisma.applicationPipelineStatus.findFirst({
+            where: { applicationPipelineStatus: 'Pending' },
+          });
+          if (!pendingStatus) {
+            pendingStatus = await this.prisma.applicationPipelineStatus.findFirst();
+          }
+          if (pendingStatus) {
+            await this.prisma.candidateApplicationPipeline.create({
+              data: {
+                candidateApplicationId: application.id,
+                applicationPipelineId: appPipeline.id,
+                applicationPipelineStatusId: pendingStatus.id,
+                notes: 'Automatically generated during parser import',
+              },
+            });
+          }
         }
 
         // --- SKILL MATCHING LOGIC ---
@@ -810,6 +832,45 @@ export class CandidateApplicationsService {
   async findAllApplicationsByCandidate(candidateId: string) {
     return this.prisma.candidateApplication.findMany({
       where: { candidateId, isTalentPool: false },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        candidate: {
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        },
+        jobVacancy: {
+          include: {
+            jobRole: true,
+            directorate: true,
+            division: true,
+            department: true,
+          }
+        },
+        applicationPipeline: true,
+        candidateApplicationPipelines: {
+          include: {
+            applicationPipeline: true,
+            applicationPipelineStatus: true,
+            employee: {
+              include: {
+                user: { select: { name: true, email: true } }
+              }
+            },
+            interviewData: true,
+            onlineAssessment: true
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
+    });
+  }
+
+  async findAllAnalysisByCandidate(candidateId: string) {
+    return this.prisma.candidateApplication.findMany({
+      where: { candidateId }, // Fetch all including recommendations (isTalentPool: true)
       orderBy: { createdAt: 'desc' },
       include: {
         candidate: {
