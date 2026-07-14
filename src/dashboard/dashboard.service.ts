@@ -266,6 +266,7 @@ export class DashboardService {
 
       rawData = await this.prisma.candidateApplication.findMany({
         where: {
+          isTalentPool: false,
           applicationPipeline: {
             applicationPipeline: { in: stageNames },
           },
@@ -278,6 +279,14 @@ export class DashboardService {
             },
           },
           candidate: true,
+          candidateApplicationPipelines: {
+            include: {
+              applicationPipeline: true,
+              applicationPipelineStatus: true,
+              onlineAssessment: true,
+              interviewData: true,
+            },
+          },
         },
         orderBy: { submissionDate: "desc" },
       });
@@ -301,6 +310,12 @@ export class DashboardService {
         // Application Item
         const app = item;
         const v = app.jobVacancy;
+        const sortedPipelines = app.candidateApplicationPipelines
+          ? [...app.candidateApplicationPipelines].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          : [];
+        const activePipeline = sortedPipelines.find(
+          (p: any) => p.applicationPipelineId === app.applicationPipelineId
+        );
         return {
           id: app.id,
           candidateId: app.candidateId,
@@ -311,6 +326,35 @@ export class DashboardService {
           task: taskName,
           date: formatDate(app.submissionDate),
           actionIcon: "/action_icon.svg",
+          activePipeline: activePipeline ? {
+            id: activePipeline.id,
+            stage: activePipeline.applicationPipeline?.applicationPipeline || "",
+            status: activePipeline.applicationPipelineStatus?.applicationPipelineStatus || "",
+            notes: activePipeline.notes || "",
+            interviewData: activePipeline.interviewData ? {
+              id: activePipeline.interviewData.id,
+              scheduledDate: activePipeline.interviewData.scheduledDate,
+              scheduledStartTime: activePipeline.interviewData.scheduledStartTime,
+              scheduledEndTime: activePipeline.interviewData.scheduledEndTime,
+              interviewLink: activePipeline.interviewData.interviewLink,
+              interviewMethod: activePipeline.interviewData.interviewMethod,
+              interviewLocation: activePipeline.interviewData.interviewLocation,
+              interviewerName: activePipeline.interviewData.interviewerName,
+              interviewerEmail: activePipeline.interviewData.interviewerEmail,
+              hrInterviewScore: activePipeline.interviewData.hrInterviewScore ? Number(activePipeline.interviewData.hrInterviewScore) : null,
+              userInterviewScore: activePipeline.interviewData.userInterviewScore ? Number(activePipeline.interviewData.userInterviewScore) : null,
+            } : null,
+            onlineAssessment: activePipeline.onlineAssessment ? {
+              id: activePipeline.onlineAssessment.id,
+              assessmentLink: activePipeline.onlineAssessment.assessmentLink,
+              startDate: activePipeline.onlineAssessment.startDate,
+              endDate: activePipeline.onlineAssessment.endDate,
+              vendorResultFileUrl: activePipeline.onlineAssessment.vendorResultFileUrl,
+              vendorResultFileName: activePipeline.onlineAssessment.vendorResultFileName,
+              parsedResultSummary: activePipeline.onlineAssessment.parsedResultSummary,
+              notes: activePipeline.onlineAssessment.notes,
+            } : null,
+          } : null,
         };
       }
     });
@@ -329,6 +373,7 @@ export class DashboardService {
     const getGrowth = async (currentCount: number, whereClause: any) => {
       const yesterdayCount = await this.prisma.candidateApplication.count({
         where: {
+          isTalentPool: false,
           ...whereClause,
           submissionDate: {
             lt: startOfToday,
@@ -340,6 +385,7 @@ export class DashboardService {
       // Let's calculate tasks created today.
       const createdToday = await this.prisma.candidateApplication.count({
         where: {
+          isTalentPool: false,
           ...whereClause,
           submissionDate: {
             gte: startOfToday,
@@ -374,12 +420,14 @@ export class DashboardService {
     ];
     const schedulingNeededCount = await this.prisma.candidateApplication.count({
       where: {
+        isTalentPool: false,
         applicationPipeline: { applicationPipeline: { in: interviewStages } },
       },
     });
     const schedulingNeededGrowth = await this.prisma.candidateApplication.count(
       {
         where: {
+          isTalentPool: false,
           applicationPipeline: { applicationPipeline: { in: interviewStages } },
           submissionDate: { gte: startOfToday },
         },
@@ -391,11 +439,13 @@ export class DashboardService {
     const feedbackStages = ["Online Assessment", "Ai Screening", "AI SCREENING", "Offering", "Offer Letter"];
     const waitingFeedbackCount = await this.prisma.candidateApplication.count({
       where: {
+        isTalentPool: false,
         applicationPipeline: { applicationPipeline: { in: feedbackStages } },
       },
     });
     const waitingFeedbackGrowth = await this.prisma.candidateApplication.count({
       where: {
+        isTalentPool: false,
         applicationPipeline: { applicationPipeline: { in: feedbackStages } },
         submissionDate: { gte: startOfToday },
       },
@@ -405,11 +455,13 @@ export class DashboardService {
     const onboardingStages = ["Onboarding", "MCU", "Hired"];
     const onboardingCount = await this.prisma.candidateApplication.count({
       where: {
+        isTalentPool: false,
         applicationPipeline: { applicationPipeline: { in: onboardingStages } },
       },
     });
     const onboardingGrowth = await this.prisma.candidateApplication.count({
       where: {
+        isTalentPool: false,
         applicationPipeline: { applicationPipeline: { in: onboardingStages } },
         submissionDate: { gte: startOfToday },
       },

@@ -891,7 +891,7 @@ export class TalentPoolService {
    */
   async convertToActivePipeline(
     candidateId: string,
-    targetPipelineStage: 'HR Interview' | 'User Interview' | 'Online Assessment',
+    targetPipelineStage: 'HR Interview' | 'User Interview 1' | 'User Interview 2' | 'User Interview 3' | 'Online Assessment',
     targetApplicationIds?: string[],
   ): Promise<{
     success: boolean;
@@ -933,6 +933,19 @@ export class TalentPoolService {
     if (!onProgressStatus) {
       throw new NotFoundException('Pipeline status "On Progress" not found');
     }
+
+    // Get "Qualified" status for the pipeline
+    const qualifiedStatus = await this.prisma.applicationPipelineStatus.findFirst({
+      where: { applicationPipelineStatus: { equals: 'Qualified', mode: 'insensitive' } },
+    });
+
+    if (!qualifiedStatus) {
+      throw new NotFoundException('Pipeline status "Qualified" not found');
+    }
+
+    const precedingStages = targetPipelineStage.toLowerCase() === 'ai screening'
+      ? []
+      : ['Ai Screening'];
 
     // Generate password reset token (24 hours validity)
     const resetToken = crypto.randomBytes(32).toString('hex');
@@ -980,15 +993,65 @@ export class TalentPoolService {
           },
         });
 
-        // Add pipeline history record
-        await tx.candidateApplicationPipeline.create({
-          data: {
+        // Resolve and create/update preceding stages as "Qualified"
+        for (const stageName of precedingStages) {
+          const stageObj = await tx.applicationPipeline.findFirst({
+            where: { applicationPipeline: { equals: stageName, mode: 'insensitive' } },
+          });
+          if (!stageObj) continue;
+
+          const existingStageRecord = await tx.candidateApplicationPipeline.findFirst({
+            where: {
+              candidateApplicationId: application.id,
+              applicationPipelineId: stageObj.id,
+            },
+          });
+
+          if (existingStageRecord) {
+            await tx.candidateApplicationPipeline.update({
+              where: { id: existingStageRecord.id },
+              data: {
+                applicationPipelineStatusId: qualifiedStatus.id,
+              },
+            });
+          } else {
+            await tx.candidateApplicationPipeline.create({
+              data: {
+                candidateApplicationId: application.id,
+                applicationPipelineId: stageObj.id,
+                applicationPipelineStatusId: qualifiedStatus.id,
+                notes: `Auto-qualified during conversion to ${targetPipelineStage}`,
+              },
+            });
+          }
+        }
+
+        // Add or update target pipeline history record (set to On Progress)
+        const existingTargetRecord = await tx.candidateApplicationPipeline.findFirst({
+          where: {
             candidateApplicationId: application.id,
             applicationPipelineId: targetPipeline.id,
-            applicationPipelineStatusId: onProgressStatus.id,
-            notes: `Converted from Talent Pool to ${targetPipelineStage}`,
           },
         });
+
+        if (existingTargetRecord) {
+          await tx.candidateApplicationPipeline.update({
+            where: { id: existingTargetRecord.id },
+            data: {
+              applicationPipelineStatusId: onProgressStatus.id,
+              notes: `Converted from Talent Pool to ${targetPipelineStage}`,
+            },
+          });
+        } else {
+          await tx.candidateApplicationPipeline.create({
+            data: {
+              candidateApplicationId: application.id,
+              applicationPipelineId: targetPipeline.id,
+              applicationPipelineStatusId: onProgressStatus.id,
+              notes: `Converted from Talent Pool to ${targetPipelineStage}`,
+            },
+          });
+        }
       }
     });
 

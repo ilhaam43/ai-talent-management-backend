@@ -13,6 +13,8 @@ const STAGE_ORDER = [
     'User Interview 2',
     'User Interview 3',
     'Offering',
+    'MCU',
+    'Onboarding',
 ];
 
 @Injectable()
