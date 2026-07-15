@@ -3,6 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
 import { CreateJobVacancyDto } from './dto/create-job-vacancy.dto';
 import { UpdateJobVacancyDto } from './dto/update-job-vacancy.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+
 
 @Injectable()
 export class JobVacanciesService {
@@ -23,9 +25,12 @@ export class JobVacanciesService {
     jobVacancySkills: { include: { skill: true } },
   };
 
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) { }
 
-  async create(createJobVacancyDto: CreateJobVacancyDto) {
+  async create(createJobVacancyDto: CreateJobVacancyDto, createdByUserId: string) {
     const { skills, ...data } = createJobVacancyDto;
 
     // Default status to 'OPEN' if not provided
@@ -49,7 +54,7 @@ export class JobVacanciesService {
       skillResolutions = foundSkills.map((s: any) => ({ skillId: s.id }));
     }
 
-    return this.prisma.jobVacancy.create({
+    const newJobVacancy = await this.prisma.jobVacancy.create({
       data: {
         ...data,
         jobVacancySkills: {
@@ -58,6 +63,14 @@ export class JobVacanciesService {
       } as any,
       include: this.standardIncludes
     });
+
+    await this.notificationsService.notifyJobVacancyCreated(
+      (newJobVacancy as any).jobRole?.jobRoleName || 'Position',
+      newJobVacancy.id,
+      createdByUserId,
+    );
+
+    return newJobVacancy;
   }
 
   async findAll() {
@@ -76,7 +89,7 @@ export class JobVacanciesService {
     return job;
   }
 
-  async update(id: string, updateJobVacancyDto: UpdateJobVacancyDto) {
+  async update(id: string, updateJobVacancyDto: UpdateJobVacancyDto, updatedByUserId: string) {
     const { skills, ...data } = updateJobVacancyDto;
 
     // Check if exists
@@ -131,6 +144,14 @@ export class JobVacanciesService {
         }
       });
     });
+
+    if (updated) {
+      await this.notificationsService.notifyJobVacancyUpdated(
+        (updated as any).jobRole?.jobRoleName || 'Position',
+        updated.id,
+        updatedByUserId,
+      );
+    }
 
     return updated;
   }

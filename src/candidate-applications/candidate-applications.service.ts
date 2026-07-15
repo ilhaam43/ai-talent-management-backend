@@ -7,6 +7,8 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
 import { DashboardSummaryDto } from './dto/application-response.dto';
 import { AiMatchStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+
 
 @Injectable()
 export class CandidateApplicationsService {
@@ -17,6 +19,7 @@ export class CandidateApplicationsService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_WEBHOOK_URL') || '';
   }
@@ -488,7 +491,7 @@ export class CandidateApplicationsService {
     // 2. Validate job exists and is open
     const jobVacancy = await this.prisma.jobVacancy.findUnique({
       where: { id: dto.jobVacancyId },
-      include: { jobVacancyStatus: true },
+      include: { jobVacancyStatus: true, jobRole: true },
     });
 
     if (!jobVacancy) {
@@ -597,6 +600,28 @@ export class CandidateApplicationsService {
           },
         ],
       });
+
+      // SENT NOTIFICATION TO HR
+      const candidateData = await this.prisma.candidate.findUnique({
+        where: { id: candidateId },
+        select: {
+          candidateFullname: true,
+          user: { select: { name: true } },
+        },
+      });
+
+      const candidateName =
+        candidateData?.candidateFullname ||
+        candidateData?.user?.name ||
+        'Candidate';
+
+      await this.notificationsService.notifyApplicantQualified(
+        candidateName,
+        jobVacancy.jobRole?.jobRoleName || 'Position',
+        application.id,
+        dto.jobVacancyId,
+      );
+
     } else {
       // Create one entry: Applied (Not Qualified)
       await this.prisma.candidateApplicationPipeline.create({

@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { NotificationsRepository } from './notifications.repository';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class NotificationsService {
@@ -13,7 +13,9 @@ export class NotificationsService {
   // ============================================
 
   async getMyNotifications(userId: string, skip = 0, take = 50) {
-    return this.repository.findByUserId(userId, { skip, take });
+    const safeSkip = Math.max(skip, 0);
+    const safeTake = Math.min(Math.max(take, 1), 100);
+    return this.repository.findByUserId(userId, { skip: safeSkip, take: safeTake });
   }
 
   async getUnreadCount(userId: string): Promise<{ count: number }> {
@@ -21,8 +23,16 @@ export class NotificationsService {
     return { count };
   }
 
-  async markAsRead(id: string) {
-    return this.repository.markAsRead(id);
+  async markAsRead(id: string, userId: string) {
+    try {
+      const notification = await this.repository.markAsRead(id, userId);
+      return notification;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025'){
+        throw new NotFoundException('Notification not found');
+      }
+      throw error;
+    }
   }
 
   async markAllAsRead(userId: string) {
@@ -122,7 +132,7 @@ export class NotificationsService {
     uploadedByUserId: string,
   ) {
     const displayName = batchName || `Batch ${batchId.substring(0, 8)}`;
-    const successRate = Math.round((processedFiles / totalFiles) * 100);
+    const successRate = totalFiles === 0 ? 0 : Math.round((processedFiles / totalFiles) * 100);
 
     await this.repository.createNotification({
       userId: uploadedByUserId,
