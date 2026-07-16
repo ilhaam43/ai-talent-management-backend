@@ -30,7 +30,35 @@ export class CandidateApplicationsService {
    */
   async triggerAiAnalysisByCandidate(candidateId: string, selectedTracks: string[]) {
     this.logger.log(`Triggering AI Analysis for candidate: ${candidateId}`);
-    this.logger.log(`Selected tracks: ${selectedTracks.join(', ')}`);
+
+    let tracks = selectedTracks || [];
+    if (tracks.length === 0) {
+      this.logger.log('No selected tracks passed, fetching from existing candidate applications...');
+      const existingApps = await this.prisma.candidateApplication.findMany({
+        where: { candidateId },
+        include: {
+          jobVacancy: {
+            include: {
+              division: true,
+            },
+          },
+        },
+      });
+
+      const divisionNames = existingApps
+        .map((app: any) => app.jobVacancy?.division?.divisionName)
+        .filter((name: string) => !!name);
+
+      tracks = Array.from(new Set(divisionNames));
+
+      if (tracks.length === 0) {
+        this.logger.log('No existing applications found, defaulting to all active divisions...');
+        const activeDivisions = await this.prisma.division.findMany();
+        tracks = activeDivisions.map((div: any) => div.divisionName).filter((name: string) => !!name);
+      }
+    }
+
+    this.logger.log(`Using tracks for matching: ${tracks.join(', ')}`);
 
     // 1. Fetch full candidate data
     const candidate = await this.prisma.candidate.findUnique({
@@ -93,7 +121,7 @@ export class CandidateApplicationsService {
     const payload = {
       candidate_id: candidateId,
       candidate: candidateProfile,
-      selectedTracks: selectedTracks,
+      selectedTracks: tracks,
     };
 
     // Detailed logging to verify data is being sent
@@ -415,6 +443,37 @@ export class CandidateApplicationsService {
    * - Auto-qualification based on AI match status
    */
   async createApplication(candidateId: string, dto: CreateApplicationDto) {
+    // Fetch pipeline stages and statuses at the very beginning
+    const appliedStage = await this.prisma.applicationPipeline.findFirst({
+      where: { applicationPipeline: 'Applied' },
+    });
+    const screeningStage = await this.prisma.applicationPipeline.findFirst({
+      where: { applicationPipeline: 'Screening' },
+    });
+    const onlineAssessmentStage = await this.prisma.applicationPipeline.findFirst({
+      where: { applicationPipeline: 'Online Assessment' },
+    });
+    const qualifiedStatus = await this.prisma.applicationLastStatus.findFirst({
+      where: { applicationLastStatus: 'Qualified' },
+    });
+    const notQualifiedStatus = await this.prisma.applicationLastStatus.findFirst({
+      where: { applicationLastStatus: 'Not Qualified' },
+    });
+    const qualifiedPipelineStatus = await this.prisma.applicationPipelineStatus.findFirst({
+      where: { applicationPipelineStatus: 'Qualified' },
+    });
+    const notQualifiedPipelineStatus = await this.prisma.applicationPipelineStatus.findFirst({
+      where: { applicationPipelineStatus: 'Not Qualified' },
+    });
+    const onProgressPipelineStatus = await this.prisma.applicationPipelineStatus.findFirst({
+      where: { applicationPipelineStatus: 'On Progress' },
+    });
+
+    if (!appliedStage || !screeningStage || !onlineAssessmentStage || !qualifiedStatus || !notQualifiedStatus ||
+      !qualifiedPipelineStatus || !notQualifiedPipelineStatus || !onProgressPipelineStatus) {
+      throw new Error('Required pipeline stages or statuses not found. Please run seed scripts.');
+    }
+
     // 1. Check for existing application for this SAME job
     const existingApplicationForJob = await this.prisma.candidateApplication.findFirst({
       where: {
@@ -454,14 +513,133 @@ export class CandidateApplicationsService {
       // Convert from talent pool to active candidate when applying
       if (existingApplicationForJob.isTalentPool) {
         this.logger.log(`Converting application ${existingApplicationForJob.id} from talent pool (isTalentPool: true -> false)`);
-        await this.prisma.candidateApplication.update({
-          where: { id: existingApplicationForJob.id },
-          data: { isTalentPool: false },
+
+        const fitScoreValue = existingApplicationForJob.fitScore 
+          ? parseFloat(existingApplicationForJob.fitScore.toString()) 
+          : 0;
+
+        const isScoreQualified = fitScoreValue >= 65;
+
+        // Clear any existing pipeline records to avoid duplicates
+        await this.prisma.candidateApplicationPipeline.deleteMany({
+          where: { candidateApplicationId: existingApplicationForJob.id }
         });
-        existingApplicationForJob.isTalentPool = false;
+
+        if (isScoreQualified) {
+          // Create Applied (Qualified), Screening (Qualified), Online Assessment (On Progress)
+          await this.prisma.candidateApplicationPipeline.createMany({
+            data: [
+              {
+                candidateApplicationId: existingApplicationForJob.id,
+                applicationPipelineId: appliedStage.id,
+                applicationPipelineStatusId: qualifiedPipelineStatus.id,
+                notes: 'Automatically qualified based on AI screening',
+              },
+              {
+                candidateApplicationId: existingApplicationForJob.id,
+                applicationPipelineId: screeningStage.id,
+                applicationPipelineStatusId: qualifiedPipelineStatus.id,
+                notes: 'Automatically qualified based on AI screening',
+              },
+              {
+                candidateApplicationId: existingApplicationForJob.id,
+                applicationPipelineId: onlineAssessmentStage.id,
+                applicationPipelineStatusId: onProgressPipelineStatus.id,
+                notes: 'Pending online assessment',
+              }
+            ]
+          });
+
+          await this.prisma.candidateApplication.update({
+            where: { id: existingApplicationForJob.id },
+            data: {
+              isTalentPool: false,
+              applicationLatestStatusId: qualifiedStatus.id,
+              applicationPipelineId: onlineAssessmentStage.id,
+            }
+          });
+
+          // SENT NOTIFICATION TO HR
+          const candidateData = await this.prisma.candidate.findUnique({
+            where: { id: candidateId },
+            select: {
+              candidateFullname: true,
+              user: { select: { name: true } },
+            },
+          });
+
+          const candidateName =
+            candidateData?.candidateFullname ||
+            candidateData?.user?.name ||
+            'Candidate';
+
+          await this.notificationsService.notifyApplicantQualified(
+            candidateName,
+            existingApplicationForJob.jobVacancy.jobRole?.jobRoleName || 'Position',
+            existingApplicationForJob.id,
+            dto.jobVacancyId,
+          );
+
+        } else {
+          // Create Applied (Qualified), Screening (Not Qualified)
+          await this.prisma.candidateApplicationPipeline.createMany({
+            data: [
+              {
+                candidateApplicationId: existingApplicationForJob.id,
+                applicationPipelineId: appliedStage.id,
+                applicationPipelineStatusId: qualifiedPipelineStatus.id,
+                notes: 'Applied successfully',
+              },
+              {
+                candidateApplicationId: existingApplicationForJob.id,
+                applicationPipelineId: screeningStage.id,
+                applicationPipelineStatusId: notQualifiedPipelineStatus.id,
+                notes: `Fit score (${fitScoreValue}) is below qualification threshold (65)`,
+              }
+            ]
+          });
+
+          await this.prisma.candidateApplication.update({
+            where: { id: existingApplicationForJob.id },
+            data: {
+              isTalentPool: false,
+              applicationLatestStatusId: notQualifiedStatus.id,
+              applicationPipelineId: screeningStage.id,
+            }
+          });
+        }
       }
+
       this.logger.log(`Returning existing application ${existingApplicationForJob.id} with AI data`);
-      return existingApplicationForJob;
+      return this.prisma.candidateApplication.findUnique({
+        where: { id: existingApplicationForJob.id },
+        include: {
+          jobVacancy: {
+            include: {
+              jobRole: true,
+              employeePosition: true,
+              division: true,
+              department: true,
+            },
+          },
+          applicationPipeline: true,
+          applicationLastStatus: true,
+          candidateApplicationPipelines: {
+            include: {
+              applicationPipeline: true,
+              applicationPipelineStatus: true,
+              employee: {
+                include: {
+                  user: { select: { name: true, email: true } },
+                },
+              },
+              interviewData: true,
+              onlineAssessment: true,
+            },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
     }
 
     // 2. Check 6-month cooldown for any job (only for rejected applications)
@@ -503,10 +681,6 @@ export class CandidateApplicationsService {
       throw new BadRequestException('This job vacancy is no longer open for applications');
     }
 
-    // 3. Check AI analysis exists for this candidate and job
-    // Note: AI analysis should have been done beforehand via triggerAiAnalysisByCandidate
-    // We'll create the application anyway, but it should have fitScore and aiMatchStatus
-
     // 4. Get candidate salary
     let candidateSalary = await this.prisma.candidateSalary.findFirst({
       where: { candidateId },
@@ -516,31 +690,6 @@ export class CandidateApplicationsService {
       candidateSalary = await this.prisma.candidateSalary.create({
         data: { candidateId, currentSalary: null, expectationSalary: null },
       });
-    }
-
-    // 5. Get pipeline stages and statuses
-    const appliedStage = await this.prisma.applicationPipeline.findFirst({
-      where: { applicationPipeline: 'Applied' },
-    });
-    const screeningStage = await this.prisma.applicationPipeline.findFirst({
-      where: { applicationPipeline: 'Screening' },
-    });
-    const qualifiedStatus = await this.prisma.applicationLastStatus.findFirst({
-      where: { applicationLastStatus: 'Qualified' },
-    });
-    const notQualifiedStatus = await this.prisma.applicationLastStatus.findFirst({
-      where: { applicationLastStatus: 'Not Qualified' },
-    });
-    const qualifiedPipelineStatus = await this.prisma.applicationPipelineStatus.findFirst({
-      where: { applicationPipelineStatus: 'Qualified' },
-    });
-    const notQualifiedPipelineStatus = await this.prisma.applicationPipelineStatus.findFirst({
-      where: { applicationPipelineStatus: 'Not Qualified' },
-    });
-
-    if (!appliedStage || !screeningStage || !qualifiedStatus || !notQualifiedStatus ||
-      !qualifiedPipelineStatus || !notQualifiedPipelineStatus) {
-      throw new Error('Required pipeline stages or statuses not found. Please run seed scripts.');
     }
 
     // 6. Determine match status (default to NOT_MATCH if not analyzed yet)
@@ -563,7 +712,8 @@ export class CandidateApplicationsService {
       aiInsight = existingAnalysis.aiInsight;
     }
 
-    const isQualified = aiMatchStatus === 'STRONG_MATCH' || aiMatchStatus === 'MATCH';
+    const fitScoreValue = fitScore !== null ? fitScore : 0;
+    const isQualified = fitScoreValue >= 65;
 
     // 7. Create application (explicitly set isTalentPool=false since candidate is actively applying)
     const application = await this.prisma.candidateApplication.create({
@@ -572,7 +722,7 @@ export class CandidateApplicationsService {
         jobVacancyId: dto.jobVacancyId,
         candidateSalaryId: candidateSalary.id,
         applicationLatestStatusId: isQualified ? qualifiedStatus.id : notQualifiedStatus.id,
-        applicationPipelineId: isQualified ? screeningStage.id : appliedStage.id,
+        applicationPipelineId: isQualified ? onlineAssessmentStage.id : screeningStage.id,
         fitScore: fitScore,
         aiInsight: aiInsight,
         aiMatchStatus: aiMatchStatus as any,
@@ -583,7 +733,7 @@ export class CandidateApplicationsService {
 
     // 8. Create pipeline entries based on match status
     if (isQualified) {
-      // Create two entries: Applied (Qualified) and Screening (Qualified)
+      // Create three entries: Applied (Qualified), Screening (Qualified), Online Assessment (On Progress)
       await this.prisma.candidateApplicationPipeline.createMany({
         data: [
           {
@@ -597,6 +747,12 @@ export class CandidateApplicationsService {
             applicationPipelineId: screeningStage.id,
             applicationPipelineStatusId: qualifiedPipelineStatus.id,
             notes: 'Automatically qualified based on AI screening',
+          },
+          {
+            candidateApplicationId: application.id,
+            applicationPipelineId: onlineAssessmentStage.id,
+            applicationPipelineStatusId: onProgressPipelineStatus.id,
+            notes: 'Pending online assessment',
           },
         ],
       });
@@ -623,14 +779,22 @@ export class CandidateApplicationsService {
       );
 
     } else {
-      // Create one entry: Applied (Not Qualified)
-      await this.prisma.candidateApplicationPipeline.create({
-        data: {
-          candidateApplicationId: application.id,
-          applicationPipelineId: appliedStage.id,
-          applicationPipelineStatusId: notQualifiedPipelineStatus.id,
-          notes: 'Did not meet qualification criteria',
-        },
+      // Create two entries: Applied (Qualified) and Screening (Not Qualified)
+      await this.prisma.candidateApplicationPipeline.createMany({
+        data: [
+          {
+            candidateApplicationId: application.id,
+            applicationPipelineId: appliedStage.id,
+            applicationPipelineStatusId: qualifiedPipelineStatus.id,
+            notes: 'Applied successfully',
+          },
+          {
+            candidateApplicationId: application.id,
+            applicationPipelineId: screeningStage.id,
+            applicationPipelineStatusId: notQualifiedPipelineStatus.id,
+            notes: `Fit score (${fitScoreValue}) is below qualification threshold (65)`,
+          },
+        ],
       });
     }
 

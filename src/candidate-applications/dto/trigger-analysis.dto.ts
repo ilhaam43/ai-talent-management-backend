@@ -1,14 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsString, ArrayNotEmpty } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsArray, IsString, IsOptional } from 'class-validator';
 
 export class TriggerAnalysisDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Selected career tracks from localStorage',
     example: ['Cloud', 'Finance'],
     type: [String],
   })
   @IsArray()
-  @ArrayNotEmpty()
+  @IsOptional()
   @IsString({ each: true })
-  selectedTracks!: string[];
+  selectedTracks?: string[];
 }

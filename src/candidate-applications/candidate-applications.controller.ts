@@ -89,7 +89,7 @@ export class CandidateApplicationsController {
     console.log('[DEBUG] CandidateApplicationsController received selectedTracks:', dto.selectedTracks);
     return this.candidateApplicationsService.triggerAiAnalysisByCandidate(
       candidateId,
-      dto.selectedTracks,
+      dto.selectedTracks || [],
     );
   }
 
