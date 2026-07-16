@@ -7,6 +7,8 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
 import { DashboardSummaryDto } from './dto/application-response.dto';
 import { AiMatchStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+
 
 @Injectable()
 export class CandidateApplicationsService {
@@ -17,6 +19,7 @@ export class CandidateApplicationsService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_WEBHOOK_URL') || '';
   }
@@ -236,7 +239,10 @@ export class CandidateApplicationsService {
         if (application) {
           await this.prisma.candidateApplication.update({
             where: { id: application.id },
-            data: updateData as any,
+            data: {
+              ...updateData,
+              isTalentPool: true, // Keep as recommendation only, user will apply manually
+            } as any,
           });
         } else {
           // Get or create required records for new application
@@ -286,9 +292,28 @@ export class CandidateApplicationsService {
               applicationLatestStatusId: appLastStatus.id,
               applicationPipelineId: appPipeline.id,
               submissionDate: new Date(),
+              isTalentPool: true, // Keep as recommendation only, user will apply manually
               ...updateData,
             } as any,
           });
+
+          // Create initial pipeline stage record
+          let pendingStatus = await this.prisma.applicationPipelineStatus.findFirst({
+            where: { applicationPipelineStatus: 'Pending' },
+          });
+          if (!pendingStatus) {
+            pendingStatus = await this.prisma.applicationPipelineStatus.findFirst();
+          }
+          if (pendingStatus) {
+            await this.prisma.candidateApplicationPipeline.create({
+              data: {
+                candidateApplicationId: application.id,
+                applicationPipelineId: appPipeline.id,
+                applicationPipelineStatusId: pendingStatus.id,
+                notes: 'Automatically generated during parser import',
+              },
+            });
+          }
         }
 
         // --- SKILL MATCHING LOGIC ---
@@ -466,7 +491,7 @@ export class CandidateApplicationsService {
     // 2. Validate job exists and is open
     const jobVacancy = await this.prisma.jobVacancy.findUnique({
       where: { id: dto.jobVacancyId },
-      include: { jobVacancyStatus: true },
+      include: { jobVacancyStatus: true, jobRole: true },
     });
 
     if (!jobVacancy) {
@@ -575,6 +600,28 @@ export class CandidateApplicationsService {
           },
         ],
       });
+
+      // SENT NOTIFICATION TO HR
+      const candidateData = await this.prisma.candidate.findUnique({
+        where: { id: candidateId },
+        select: {
+          candidateFullname: true,
+          user: { select: { name: true } },
+        },
+      });
+
+      const candidateName =
+        candidateData?.candidateFullname ||
+        candidateData?.user?.name ||
+        'Candidate';
+
+      await this.notificationsService.notifyApplicantQualified(
+        candidateName,
+        jobVacancy.jobRole?.jobRoleName || 'Position',
+        application.id,
+        dto.jobVacancyId,
+      );
+
     } else {
       // Create one entry: Applied (Not Qualified)
       await this.prisma.candidateApplicationPipeline.create({
@@ -810,6 +857,45 @@ export class CandidateApplicationsService {
   async findAllApplicationsByCandidate(candidateId: string) {
     return this.prisma.candidateApplication.findMany({
       where: { candidateId, isTalentPool: false },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        candidate: {
+          include: {
+            user: { select: { name: true, email: true } },
+          },
+        },
+        jobVacancy: {
+          include: {
+            jobRole: true,
+            directorate: true,
+            division: true,
+            department: true,
+          }
+        },
+        applicationPipeline: true,
+        candidateApplicationPipelines: {
+          include: {
+            applicationPipeline: true,
+            applicationPipelineStatus: true,
+            employee: {
+              include: {
+                user: { select: { name: true, email: true } }
+              }
+            },
+            interviewData: true,
+            onlineAssessment: true
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
+    });
+  }
+
+  async findAllAnalysisByCandidate(candidateId: string) {
+    return this.prisma.candidateApplication.findMany({
+      where: { candidateId }, // Fetch all including recommendations (isTalentPool: true)
       orderBy: { createdAt: 'desc' },
       include: {
         candidate: {

@@ -8,6 +8,7 @@ import {
   UseGuards,
   Request,
   ParseUUIDPipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
@@ -26,8 +27,8 @@ export class NotificationsController {
   @ApiQuery({ name: 'take', required: false, type: Number })
   async getMyNotifications(
     @Request() req: any,
-    @Query('skip') skip?: number,
-    @Query('take') take?: number,
+    @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
+    @Query('take', new ParseIntPipe({ optional: true })) take?: number,
   ) {
     return this.service.getMyNotifications(req.user.userId, skip || 0, take || 50);
   }
@@ -41,8 +42,8 @@ export class NotificationsController {
   @Patch(':id/read')
   @ApiOperation({ summary: 'Mark notification as read' })
   @ApiParam({ name: 'id', description: 'Notification ID' })
-  async markAsRead(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.markAsRead(id);
+  async markAsRead(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return this.service.markAsRead(id, req.user.userId);
   }
 
   @Post('mark-all-read')
