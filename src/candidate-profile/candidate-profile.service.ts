@@ -605,7 +605,7 @@ export class CandidateProfileService {
    */
   async storeSkills(
     candidateId: string,
-    skills: string[],
+    skills: (string | { skill?: string; skillName?: string; rating?: string | number })[],
     tx?: any,
   ): Promise<any[]> {
     const prisma = tx || this.prisma;
@@ -621,15 +621,37 @@ export class CandidateProfileService {
 
     const results = [];
 
-    for (const skill of skills) {
-      if (!skill || !skill.trim()) continue;
+    // Delete existing skills first to prevent duplicate entries
+    await prisma.candidateSkill.deleteMany({
+      where: { candidateId },
+    });
 
-      // Use enum value 'THREE' as default - this corresponds to @map("3") in schema
+    for (const skillItem of skills) {
+      let skillName = "";
+      let candidateRating = "THREE";
+
+      if (typeof skillItem === "string") {
+        skillName = skillItem.trim();
+      } else if (skillItem && typeof skillItem === "object") {
+        skillName = (skillItem.skill || skillItem.skillName || "").trim();
+        const rating = skillItem.rating;
+        if (rating !== undefined && rating !== null) {
+          const ratingStr = rating.toString().toUpperCase();
+          const ratingMap: Record<string, string> = {
+            "1": "ONE", "2": "TWO", "3": "THREE", "4": "FOUR", "5": "FIVE",
+            "ONE": "ONE", "TWO": "TWO", "THREE": "THREE", "FOUR": "FOUR", "FIVE": "FIVE"
+          };
+          candidateRating = ratingMap[ratingStr] || "THREE";
+        }
+      }
+
+      if (!skillName) continue;
+
       const created = await prisma.candidateSkill.create({
         data: {
           candidateId,
-          candidateSkill: skill.trim(),
-          candidateRating: "THREE", // Default rating (1-5 scale, THREE = 3)
+          candidateSkill: skillName,
+          candidateRating: candidateRating as any,
         },
       });
 
