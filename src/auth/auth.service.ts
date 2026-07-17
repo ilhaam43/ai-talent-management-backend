@@ -247,4 +247,32 @@ export class AuthService {
 
     return { message: 'Password changed successfully' }
   }
+
+  async setPasswordFromToken(token: string, newPassword: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetToken: token,
+        passwordResetExpiry: { gt: new Date() },
+      },
+    })
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired token')
+    }
+
+    const saltRounds = 10
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds)
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        passwordSetRequired: false,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+      },
+    })
+
+    return { message: 'Password set successfully' }
+  }
 }
