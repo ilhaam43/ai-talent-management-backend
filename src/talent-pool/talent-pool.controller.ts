@@ -18,11 +18,11 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { TalentPoolService } from './talent-pool.service';
-import { UploadTalentPoolDto } from './dto/upload.dto';
+import { UploadTalentPoolDto, UploadLinkDto } from './dto/upload.dto';
 import { N8nCallbackDto } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
 import { ConvertCandidateDto } from './dto/convert-candidate.dto';
@@ -103,6 +103,35 @@ export class TalentPoolController {
     }));
 
     return this.service.createBatchUpload(employee.id, dto, fileInfos);
+  }
+
+  @Post('upload-link')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('HUMAN RESOURCES', 'ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Submit a Google Drive link for bulk CV screening',
+    description:
+      'Accepts a Google Drive folder or file URL. A batch record is created and the n8n workflow is triggered to crawl, download, and process all CV PDFs found at the link.',
+  })
+  @ApiBody({ type: UploadLinkDto })
+  async uploadLink(
+    @Body() dto: UploadLinkDto,
+    @Request() req: any,
+  ) {
+    const userId = req.user?.userId || req.user?.id;
+
+    if (!userId) {
+      throw new BadRequestException('User ID not found in token.');
+    }
+
+    const employee = await this.service.getEmployeeByUserId(userId);
+
+    if (!employee) {
+      throw new BadRequestException('Employee profile not found. Only HR employees can submit links.');
+    }
+
+    return this.service.createBatchUploadFromLink(employee.id, dto);
   }
 
   // ============================================
