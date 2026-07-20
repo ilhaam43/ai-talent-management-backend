@@ -14,6 +14,8 @@ const STAGE_ORDER = [
     'User Interview 2',
     'User Interview 3',
     'Offering',
+    'MCU',
+    'Onboarding',
 ];
 
 @Injectable()
@@ -30,7 +32,7 @@ export class PipelineActionsService {
      * Get pipeline record with full relations
      */
     private async getPipeline(pipelineId: string) {
-        const pipeline = await this.prisma.candidateApplicationPipeline.findUnique({
+        let pipeline = await this.prisma.candidateApplicationPipeline.findUnique({
             where: { id: pipelineId },
             include: {
                 applicationPipeline: true,
@@ -47,6 +49,52 @@ export class PipelineActionsService {
         });
 
         if (!pipeline) {
+            // Self-healing fallback: Check if the ID belongs to a CandidateApplication
+            const app = await this.prisma.candidateApplication.findUnique({
+                where: { id: pipelineId },
+                include: {
+                    applicationPipeline: true,
+                    applicationLastStatus: true,
+                }
+            });
+            if (app) {
+                this.logger.log(`Healing missing CandidateApplicationPipeline for application ${app.id}`);
+                let status = await this.prisma.applicationPipelineStatus.findFirst({
+                    where: { applicationPipelineStatus: 'On Progress' }
+                });
+                if (!status) {
+                    status = await this.prisma.applicationPipelineStatus.findFirst({
+                        where: { applicationPipelineStatus: 'Pending' }
+                    });
+                }
+                if (!status) {
+                    status = await this.prisma.applicationPipelineStatus.findFirst();
+                }
+                
+                if (status) {
+                    pipeline = await this.prisma.candidateApplicationPipeline.create({
+                        data: {
+                            candidateApplicationId: app.id,
+                            applicationPipelineId: app.applicationPipelineId,
+                            applicationPipelineStatusId: status.id,
+                            notes: 'Automatically generated during self-healing',
+                        },
+                        include: {
+                            applicationPipeline: true,
+                            applicationPipelineStatus: true,
+                            candidateApplication: {
+                                include: {
+                                    candidate: true,
+                                    jobVacancy: { include: { jobRole: true } },
+                                },
+                            },
+                            interviewData: true,
+                            onlineAssessment: true,
+                        }
+                    });
+                    return pipeline;
+                }
+            }
             throw new NotFoundException(`Pipeline stage not found: ${pipelineId}`);
         }
 
@@ -140,6 +188,14 @@ export class PipelineActionsService {
                         applicationPipeline: true,
                         applicationPipelineStatus: true,
                     },
+                });
+
+                // ✅ Update the pointer on CandidateApplication so Action Center
+                // and other queries that filter by applicationPipelineId reflect
+                // the true current stage, not the initial/conversion stage.
+                await this.prisma.candidateApplication.update({
+                    where: { id: pipeline.candidateApplicationId },
+                    data: { applicationPipelineId: nextPipelineStage.id },
                 });
 
                 this.logger.log(`Created next stage: ${nextStageName}`);
