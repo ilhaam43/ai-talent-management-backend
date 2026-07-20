@@ -4,6 +4,7 @@ import { TextExtractorService } from '../cv-parser/parsers/text-extractor.servic
 import { LLMParserService } from '../cv-parser/parsers/llm-parser.service';
 import { QualifyDto, DisqualifyDto } from './dto/qualify.dto';
 import { CreateOnlineAssessmentDto } from './dto/online-assessment.dto';
+import { stripHtmlTags } from '../common/utils/sanitize.util';
 
 // Stage progression order
 const STAGE_ORDER = [
@@ -333,6 +334,9 @@ export class PipelineActionsService {
         } else if (!summary || summary.length < 100) {
             summary = this.createBasicSummary(extractedText);
         }
+
+        // Sanitize final summary to prevent XSS (since it includes untrusted inputs or LLM outputs)
+        summary = stripHtmlTags(summary);
 
         // 4. Save summary (roleFitScore is in the summary text + returned in response)
         // NOTE: roleFitScore DB column requires a backend restart after prisma generate

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common'
 import { PassportModule } from '@nestjs/passport'
 import { JwtModule } from '@nestjs/jwt'
+import { APP_GUARD } from '@nestjs/core'
+import { ThrottlerGuard } from '@nestjs/throttler'
 import { AuthService } from './auth.service'
 import { LocalStrategy } from './local.strategy'
 import { JwtStrategy } from './jwt.strategy'
@@ -23,7 +25,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config'
     })
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy],
+  providers: [
+    AuthService, 
+    LocalStrategy, 
+    JwtStrategy,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    }
+  ],
   exports: [AuthService]
 })
 export class AuthModule { }
