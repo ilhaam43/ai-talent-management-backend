@@ -47,6 +47,14 @@ export class NotificationsRepository {
     });
   }
 
+  async countByUserId(userId: string): Promise<number> {
+    return this.prisma.notification.count({ where: { userId } });
+  }
+
+  async findOneByIdAndUserId(id: string, userId: string) {
+    return this.prisma.notification.findFirst({ where: { id, userId } });
+  }
+
   async countUnread(userId: string): Promise<number> {
     return this.prisma.notification.count({
       where: { userId, isRead: false },

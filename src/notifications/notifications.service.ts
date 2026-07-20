@@ -15,7 +15,11 @@ export class NotificationsService {
   async getMyNotifications(userId: string, skip = 0, take = 50) {
     const safeSkip = Math.max(skip, 0);
     const safeTake = Math.min(Math.max(take, 1), 100);
-    return this.repository.findByUserId(userId, { skip: safeSkip, take: safeTake });
+    const [data, total] = await Promise.all([
+      this.repository.findByUserId(userId, { skip: safeSkip, take: safeTake }),
+      this.repository.countByUserId(userId),
+    ]);
+    return { data, total, skip: safeSkip, take: safeTake };
   }
 
   async getUnreadCount(userId: string): Promise<{ count: number }> {
