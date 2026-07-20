@@ -161,9 +161,10 @@ async function main() {
             }
         });
 
+        let app: any;
         if (existingApp) {
             console.log(`Updating existing application for ${item.name}`);
-            await prisma.candidateApplication.update({
+            app = await prisma.candidateApplication.update({
                 where: { id: existingApp.id },
                 data: {
                     fitScore: item.score,
@@ -181,7 +182,7 @@ async function main() {
             });
         } else {
             console.log(`Creating application for ${item.name}`);
-            await prisma.candidateApplication.create({
+            app = await prisma.candidateApplication.create({
                 data: {
                     candidateId: candidate.id,
                     jobVacancyId: vacancy.id,
@@ -201,6 +202,45 @@ async function main() {
                     resultSummary: `Candidate has good potential for ${item.job}. Recommended for interview.`,
                 }
             });
+        }
+
+        // Seed initial candidateApplicationPipeline
+        const pipelineStatusName = (item.status === 'Passed' || item.status === 'Pass' || item.status === 'PASSED')
+            ? 'Qualified'
+            : (item.status === 'Failed' || item.status === 'Not Pass' || item.status === 'NOT_PASS')
+                ? 'Not Qualified'
+                : 'Pending';
+
+        let pipelineStatus = await prisma.applicationPipelineStatus.findFirst({
+            where: { applicationPipelineStatus: pipelineStatusName }
+        });
+        if (!pipelineStatus) {
+            pipelineStatus = await prisma.applicationPipelineStatus.findFirst({
+                where: { applicationPipelineStatus: 'Pending' }
+            });
+        }
+        if (!pipelineStatus) {
+            pipelineStatus = await prisma.applicationPipelineStatus.findFirst();
+        }
+
+        if (pipelineStatus) {
+            const existingPipelineRecord = await prisma.candidateApplicationPipeline.findFirst({
+                where: {
+                    candidateApplicationId: app.id,
+                    applicationPipelineId: pipeline.id,
+                }
+            });
+
+            if (!existingPipelineRecord) {
+                await prisma.candidateApplicationPipeline.create({
+                    data: {
+                        candidateApplicationId: app.id,
+                        applicationPipelineId: pipeline.id,
+                        applicationPipelineStatusId: pipelineStatus.id,
+                        notes: 'Initial seeded pipeline stage',
+                    }
+                });
+            }
         }
     }
 

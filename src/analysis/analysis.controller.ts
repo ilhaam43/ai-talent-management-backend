@@ -12,7 +12,7 @@ export class AnalysisController {
     @ApiResponse({ status: 200, description: 'Return application details including AI analysis' })
     @ApiResponse({ status: 404, description: 'Application not found' })
     async getAnalysis(@Param('id') id: string) {
-        // Map ID to candidateId search (finding all applications)
-        return this.candidateApplicationsService.findAllApplicationsByCandidate(id);
+        // Map ID to candidateId search (finding all applications including talent pool)
+        return this.candidateApplicationsService.findAllAnalysisByCandidate(id);
     }
 }

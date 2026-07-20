@@ -3,7 +3,9 @@ import { IsEnum, IsArray, IsString, IsOptional } from 'class-validator';
 
 export enum ConvertPipelineStageEnum {
   HR_INTERVIEW = 'HR Interview',
-  USER_INTERVIEW = 'User Interview',
+  USER_INTERVIEW_1 = 'User Interview 1',
+  USER_INTERVIEW_2 = 'User Interview 2',
+  USER_INTERVIEW_3 = 'User Interview 3',
   ONLINE_ASSESSMENT = 'Online Assessment'
 }
 
