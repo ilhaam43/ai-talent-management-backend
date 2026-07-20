@@ -8,6 +8,7 @@ import {
   UseGuards,
   Request,
   ParseUUIDPipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -56,15 +57,13 @@ export class NotificationsController {
   @ApiResponse({ status: 401, description: 'Unauthorized – JWT token missing or invalid.' })
   async getMyNotifications(
     @Request() req: any,
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
+    @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
+    @Query('take', new ParseIntPipe({ optional: true })) take?: number,
   ) {
-    const skipNum = skip !== undefined ? parseInt(skip, 10) : 0;
-    const takeNum = take !== undefined ? parseInt(take, 10) : 50;
     return this.service.getMyNotifications(
       req.user.userId,
-      isNaN(skipNum) ? 0 : skipNum,
-      isNaN(takeNum) ? 50 : takeNum,
+      skip,
+      take,
     );
   }
 
@@ -96,10 +95,7 @@ export class NotificationsController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized – JWT token missing or invalid.' })
   @ApiResponse({ status: 404, description: 'Notification not found or does not belong to this user.' })
-  async markAsRead(
-    @Request() req: any,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  async markAsRead(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     return this.service.markAsRead(id, req.user.userId);
   }
 

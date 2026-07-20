@@ -219,11 +219,9 @@ export class CandidateProfileController {
   async storeSkills(@Req() req: any, @Body() dto: StoreSkillsDto) {
     const userId = req.user.id;
     const candidateId = await this.getCandidateIdFromUserId(userId);
-    // Convert to string array
-    const skills = dto.skills.map((s) => s.skill);
     const results = await this.candidateProfileService.storeSkills(
       candidateId,
-      skills,
+      dto.skills,
     );
     return {
       success: true,

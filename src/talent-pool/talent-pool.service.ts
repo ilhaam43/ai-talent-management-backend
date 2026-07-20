@@ -939,7 +939,7 @@ export class TalentPoolService {
    */
   async convertToActivePipeline(
     candidateId: string,
-    targetPipelineStage: 'HR Interview' | 'User Interview' | 'Online Assessment',
+    targetPipelineStage: 'HR Interview' | 'User Interview 1' | 'User Interview 2' | 'User Interview 3' | 'Online Assessment',
     targetApplicationIds?: string[],
   ): Promise<{
     success: boolean;
@@ -981,6 +981,19 @@ export class TalentPoolService {
     if (!onProgressStatus) {
       throw new NotFoundException('Pipeline status "On Progress" not found');
     }
+
+    // Get "Qualified" status for the pipeline
+    const qualifiedStatus = await this.prisma.applicationPipelineStatus.findFirst({
+      where: { applicationPipelineStatus: { equals: 'Qualified', mode: 'insensitive' } },
+    });
+
+    if (!qualifiedStatus) {
+      throw new NotFoundException('Pipeline status "Qualified" not found');
+    }
+
+    const precedingStages = targetPipelineStage.toLowerCase() === 'ai screening'
+      ? []
+      : ['Ai Screening'];
 
     // Generate password reset token (24 hours validity)
     const resetToken = crypto.randomBytes(32).toString('hex');
@@ -1028,15 +1041,65 @@ export class TalentPoolService {
           },
         });
 
-        // Add pipeline history record
-        await tx.candidateApplicationPipeline.create({
-          data: {
+        // Resolve and create/update preceding stages as "Qualified"
+        for (const stageName of precedingStages) {
+          const stageObj = await tx.applicationPipeline.findFirst({
+            where: { applicationPipeline: { equals: stageName, mode: 'insensitive' } },
+          });
+          if (!stageObj) continue;
+
+          const existingStageRecord = await tx.candidateApplicationPipeline.findFirst({
+            where: {
+              candidateApplicationId: application.id,
+              applicationPipelineId: stageObj.id,
+            },
+          });
+
+          if (existingStageRecord) {
+            await tx.candidateApplicationPipeline.update({
+              where: { id: existingStageRecord.id },
+              data: {
+                applicationPipelineStatusId: qualifiedStatus.id,
+              },
+            });
+          } else {
+            await tx.candidateApplicationPipeline.create({
+              data: {
+                candidateApplicationId: application.id,
+                applicationPipelineId: stageObj.id,
+                applicationPipelineStatusId: qualifiedStatus.id,
+                notes: `Auto-qualified during conversion to ${targetPipelineStage}`,
+              },
+            });
+          }
+        }
+
+        // Add or update target pipeline history record (set to On Progress)
+        const existingTargetRecord = await tx.candidateApplicationPipeline.findFirst({
+          where: {
             candidateApplicationId: application.id,
             applicationPipelineId: targetPipeline.id,
-            applicationPipelineStatusId: onProgressStatus.id,
-            notes: `Converted from Talent Pool to ${targetPipelineStage}`,
           },
         });
+
+        if (existingTargetRecord) {
+          await tx.candidateApplicationPipeline.update({
+            where: { id: existingTargetRecord.id },
+            data: {
+              applicationPipelineStatusId: onProgressStatus.id,
+              notes: `Converted from Talent Pool to ${targetPipelineStage}`,
+            },
+          });
+        } else {
+          await tx.candidateApplicationPipeline.create({
+            data: {
+              candidateApplicationId: application.id,
+              applicationPipelineId: targetPipeline.id,
+              applicationPipelineStatusId: onProgressStatus.id,
+              notes: `Converted from Talent Pool to ${targetPipelineStage}`,
+            },
+          });
+        }
       }
     });
 
@@ -1130,8 +1193,9 @@ export class TalentPoolService {
     skip?: number;
     take?: number;
     batchId?: string;
+    search?: string;
   }): Promise<{ candidates: any[]; total: number }> {
-    const { skip = 0, take = 20, batchId } = params;
+    const { skip = 0, take = 20, batchId, search } = params;
 
     // Query applications that are in talent pool
     const whereClause: any = {
@@ -1142,6 +1206,39 @@ export class TalentPoolService {
       whereClause.candidate = {
         talentPoolBatchId: batchId,
       };
+    }
+
+    if (search) {
+      whereClause.OR = [
+        {
+          candidate: {
+            candidateFullname: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          candidate: {
+            user: {
+              name: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+        {
+          jobVacancy: {
+            jobRole: {
+              jobRoleName: {
+                contains: search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+      ];
     }
 
     // Get ALL applications first (Flattened Rows) to determine matches and total
