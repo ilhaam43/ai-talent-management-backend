@@ -43,6 +43,20 @@ export class CalendarService {
             throw new BadRequestException(`Interview data already exists for this pipeline. Use PUT to update.`);
         }
 
+        // Update pipeline stage status to "On Progress"
+        const onProgressStatus = await this.prisma.applicationPipelineStatus.findFirst({
+            where: { applicationPipelineStatus: 'On Progress' },
+        });
+
+        if (onProgressStatus) {
+            await this.prisma.candidateApplicationPipeline.update({
+                where: { id: dto.candidateApplicationPipelineId },
+                data: {
+                    applicationPipelineStatusId: onProgressStatus.id,
+                },
+            });
+        }
+
         // Create the interview data
         const interviewData = await this.prisma.candidateInterviewData.create({
             data: {

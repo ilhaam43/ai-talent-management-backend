@@ -1,9 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { JobVacanciesService } from './job-vacancies.service';
 import { CreateJobVacancyDto } from './dto/create-job-vacancy.dto';
 import { UpdateJobVacancyDto } from './dto/update-job-vacancy.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
 import { MatchJobsCriteriaDto, MatchedJobDto } from './dto/match-jobs.dto';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('job-vacancies')
 @Controller('job-vacancies')
@@ -11,11 +14,14 @@ export class JobVacanciesController {
   constructor(private readonly jobVacanciesService: JobVacanciesService) { }
 
   @Post()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('HUMAN RESOURCES')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new job vacancy' })
   @ApiBody({ type: CreateJobVacancyDto })
   @ApiResponse({ status: 201, description: 'Job vacancy created successfully' })
-  create(@Body() createJobVacancyDto: CreateJobVacancyDto) {
-    return this.jobVacanciesService.create(createJobVacancyDto);
+  create(@Body() createJobVacancyDto: CreateJobVacancyDto, @Req() req: any) {
+    return this.jobVacanciesService.create(createJobVacancyDto, req.user.userId);
   }
 
   @Get()
@@ -35,15 +41,25 @@ export class JobVacanciesController {
   }
 
   @Patch(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('HUMAN RESOURCES')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a job vacancy' })
   @ApiParam({ name: 'id', description: 'Job Vacancy ID' })
   @ApiBody({ type: UpdateJobVacancyDto })
   @ApiResponse({ status: 200, description: 'Job vacancy updated successfully' })
-  update(@Param('id') id: string, @Body() updateJobVacancyDto: UpdateJobVacancyDto) {
-    return this.jobVacanciesService.update(id, updateJobVacancyDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateJobVacancyDto: UpdateJobVacancyDto,
+    @Req() req: any,
+  ) {
+    return this.jobVacanciesService.update(id, updateJobVacancyDto, req.user.userId);
   }
 
   @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('HUMAN RESOURCES')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a job vacancy' })
   @ApiParam({ name: 'id', description: 'Job Vacancy ID' })
   @ApiResponse({ status: 200, description: 'Job vacancy deleted successfully' })

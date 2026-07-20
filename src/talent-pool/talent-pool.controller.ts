@@ -230,10 +230,12 @@ export class TalentPoolController {
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
   @ApiQuery({ name: 'batchId', required: false, type: String })
+  @ApiQuery({ name: 'search', required: false, type: String })
   async getUnifiedCandidates(
     @Query('skip') skip?: any,
     @Query('take') take?: any,
     @Query('batchId') batchId?: string,
+    @Query('search') search?: string,
   ) {
     const skipNum = skip ? parseInt(skip.toString()) : 0;
     const takeNum = take ? parseInt(take.toString()) : 20;
@@ -242,6 +244,7 @@ export class TalentPoolController {
       skip: skipNum,
       take: takeNum,
       batchId,
+      search,
     });
   }
 
