@@ -351,6 +351,7 @@ export class CandidateProfileService {
         candidateNickname: personalInfo.nickname || undefined,
         // Only update email if it matches the current one (prevents unique constraint errors)
         candidateEmail: shouldUpdateEmail ? personalInfo.email : undefined,
+        phoneNumber: personalInfo.phone || undefined,
         dateOfBirth: parseDate(personalInfo.dateOfBirth) || undefined,
         placeOfBirth: personalInfo.placeOfBirth || undefined,
         idCardNumber: personalInfo.idCardNumber || undefined,

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DocumentsService } from '../documents/documents.service';
+import { StorageService } from '../storage/storage.service';
 import { TextExtractorService } from './parsers/text-extractor.service';
 import { DataExtractorService } from './parsers/data-extractor.service';
 import { LLMParserService } from './parsers/llm-parser.service';
@@ -9,6 +10,7 @@ import { ParsedCandidateData } from './dto/parsed-candidate-data.dto';
 export class CVParserService {
   constructor(
     private documentsService: DocumentsService,
+    private storageService: StorageService,
     private textExtractor: TextExtractorService,
     private dataExtractor: DataExtractorService,
     private llmParser: LLMParserService,
@@ -27,27 +29,37 @@ export class CVParserService {
       candidateId,
     );
 
-    // Check if file exists
-    const fileExists = await this.documentsService.fileExists(document.filePath);
+    // Check if file exists (checks filesystem or MinIO depending on storageType)
+    const fileExists = await this.documentsService.fileExists(
+      document.filePath,
+      document.storageType,
+      document.objectKey,
+    );
     if (!fileExists) {
-      throw new NotFoundException('Document file not found on server');
+      throw new NotFoundException('Document file not found in storage');
     }
 
     // Derive mimeType from file extension since schema no longer has mimeType field
-    const ext = document.filePath.split('.').pop()?.toLowerCase() || '';
+    const ext = (document.objectKey || document.filePath).split('.').pop()?.toLowerCase() || '';
     const mimeTypeMap: Record<string, string> = {
       'pdf': 'application/pdf',
       'doc': 'application/msword',
       'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'txt': 'text/plain',
     };
-    const derivedMimeType = mimeTypeMap[ext] || 'application/octet-stream';
+    const derivedMimeType = document.mimeType || mimeTypeMap[ext] || 'application/octet-stream';
 
-    // Extract text from document
-    const extractedText = await this.textExtractor.extractText(
-      document.filePath,
-      derivedMimeType,
-    );
+    // Extract text from document (MinIO buffer or local file path)
+    let extractedText: string;
+    if (document.storageType === 'MINIO' && document.objectKey) {
+      const buffer = await this.storageService.downloadToBuffer(document.objectKey);
+      extractedText = await this.textExtractor.extractTextFromBuffer(buffer, derivedMimeType);
+    } else {
+      extractedText = await this.textExtractor.extractText(
+        document.filePath,
+        derivedMimeType,
+      );
+    }
 
     // Save extracted text to database for future reference
     await this.documentsService.updateExtractedText(documentId, extractedText);
@@ -60,6 +72,7 @@ export class CVParserService {
       parsedData,
     };
   }
+
 
   /**
    * Parse uploaded file directly (without storing document record)

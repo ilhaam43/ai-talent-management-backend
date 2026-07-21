@@ -83,8 +83,19 @@ async function main() {
         }
 
         // C. Reference Data: Pipeline & Status
-        const pipeline = await prisma.applicationPipeline.findFirst({ where: { applicationPipeline: item.stage } });
-        if (!pipeline) throw new Error(`Pipeline ${item.stage} not found. Run seed-application-pipelines.ts first.`);
+        let stageName = item.stage;
+        if (stageName === 'INTERVIEW USER 1') stageName = 'User Interview 1';
+        if (stageName === 'INTERVIEW USER 2') stageName = 'User Interview 2';
+        if (stageName === 'INTERVIEW USER 3') stageName = 'User Interview 3';
+        if (stageName === 'AI SCREENING') stageName = 'Ai Screening';
+
+        const pipeline = await prisma.applicationPipeline.findFirst({ 
+            where: { 
+                applicationPipeline: stageName
+            } 
+        });
+        if (!pipeline) throw new Error(`Pipeline ${stageName} (originally ${item.stage}) not found. Run seed-application-pipelines.ts first.`);
+
 
         const status = await prisma.applicationLastStatus.findFirst({ where: { applicationLastStatus: item.status } });
         if (!status) throw new Error(`Status ${item.status} not found. Run seed-application-last-statuses.ts first.`);

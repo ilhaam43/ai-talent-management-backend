@@ -107,13 +107,14 @@ export class TalentPoolRepository {
 
   async createQueueItems(
     batchId: string,
-    files: { fileUrl: string; fileName: string }[],
+    files: { fileUrl: string; fileName: string; objectKey?: string }[],
   ): Promise<{ count: number }> {
     return this.prisma.talentPoolQueue.createMany({
       data: files.map((file) => ({
         batchId,
         fileUrl: file.fileUrl,
         fileName: file.fileName,
+        objectKey: file.objectKey || null,
         status: 'PENDING' as any,
       })),
     });

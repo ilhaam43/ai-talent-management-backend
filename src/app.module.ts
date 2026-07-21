@@ -1,4 +1,5 @@
 import { UsersModule } from './users/users.module'
+import { StorageModule } from './storage/storage.module'
 import { Module } from '@nestjs/common'
 import { DatabaseModule } from './database/database.module'
 import { ConfigModule } from '@nestjs/config'
@@ -27,6 +28,7 @@ import { PipelineActionsModule } from './pipeline-actions/pipeline-actions.modul
 @Module({
   imports: [
     ConfigModule.forRoot(),
+    StorageModule,
     ScheduleModule.forRoot(),
     DatabaseModule,
     UsersModule,

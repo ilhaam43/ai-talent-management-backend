@@ -18,6 +18,7 @@ import { diskStorage } from "multer";
 import { extname } from "path";
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
+import { StorageService } from "../storage/storage.service";
 import {
   ApiTags,
   ApiBearerAuth,
@@ -47,6 +48,7 @@ export class CandidateProfileController {
   constructor(
     private readonly candidateProfileService: CandidateProfileService,
     private readonly prisma: PrismaService,
+    private readonly storageService: StorageService,
   ) {}
 
   /**
@@ -315,19 +317,30 @@ export class CandidateProfileController {
     const userId = req.user.id;
     const candidateId = await this.getCandidateIdFromUserId(userId);
 
-    // Build the relative path for serving
-    const photoUrl = `uploads/documents/photos/${file.filename}`;
+    // Upload to MinIO public avatars bucket
+    let publicUrl = "";
+    try {
+      const buffer = fs.readFileSync(file.path);
+      const key = this.storageService.buildAvatarKey(candidateId, file.originalname);
+      await this.storageService.uploadBuffer(key, buffer, file.mimetype, this.storageService.getAvatarsBucket());
+      publicUrl = this.storageService.getAvatarPublicUrl(key);
+    } catch (err: any) {
+      throw new BadRequestException(`Failed to upload avatar to MinIO: ${err.message}`);
+    }
 
-    // Update the candidate's profilePhotoUrl
+    // Build the relative path for local serving (fallback)
+    const localPhotoUrl = `uploads/documents/photos/${file.filename}`;
+
+    // Update the candidate's profilePhotoUrl with the public MinIO S3 URL
     await this.prisma.candidate.update({
       where: { id: candidateId },
-      data: { profilePhotoUrl: photoUrl },
+      data: { profilePhotoUrl: publicUrl || localPhotoUrl },
     });
 
     return {
       success: true,
       message: "Profile photo uploaded successfully",
-      data: { profilePhotoUrl: photoUrl },
+      data: { profilePhotoUrl: publicUrl || localPhotoUrl },
     };
   }
 

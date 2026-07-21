@@ -8,9 +8,12 @@ import { EmailService } from '../email/email.service';
 import { UploadTalentPoolDto, UploadLinkDto } from './dto/upload.dto';
 import { N8nCallbackDto, AiMatchStatusValue } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
+import { StorageService } from '../storage/storage.service';
+import * as fs from 'fs/promises';
 import axios from 'axios';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+
 
 @Injectable()
 export class TalentPoolService {
@@ -23,6 +26,7 @@ export class TalentPoolService {
     private configService: ConfigService,
     private notificationsService: NotificationsService,
     private emailService: EmailService,
+    private storageService: StorageService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_TALENT_POOL_WEBHOOK_URL') || '';
   }
@@ -53,8 +57,32 @@ export class TalentPoolService {
       totalFiles: files.length,
     });
 
+    // Upload files to MinIO and add S3 keys
+    const filesWithKeys = [];
+    for (const file of files) {
+      try {
+        const localPath = `.${file.fileUrl}`;
+        const buffer = await fs.readFile(localPath);
+        
+        // Generate S3 key
+        const objectKey = this.storageService.buildKey('talent-pool', batch.id, file.fileName);
+        
+        // Upload to S3
+        await this.storageService.uploadBuffer(objectKey, buffer, 'application/pdf');
+        
+        filesWithKeys.push({
+          ...file,
+          objectKey,
+        });
+      } catch (err: any) {
+        this.logger.error(`Failed to upload file ${file.fileName} to MinIO S3: ${err.message}`);
+        // Fallback to queueing without S3 key (local storage only)
+        filesWithKeys.push(file);
+      }
+    }
+
     // Create queue items for all files
-    await this.repository.createQueueItems(batch.id, files);
+    await this.repository.createQueueItems(batch.id, filesWithKeys);
 
     // Update batch status to QUEUED
     await this.repository.updateBatchStatus(batch.id, 'QUEUED' as any);
@@ -152,12 +180,23 @@ export class TalentPoolService {
     // Send ONLY this 1 CV to n8n
     if (this.n8nWebhookUrl) {
       try {
+        // Generate a presigned download URL if objectKey exists, or construct full legacy URL
+        let downloadUrl = item.fileUrl;
+        if (item.objectKey) {
+          // Use internal client endpoint (http://minio:9000) for n8n in docker compose network
+          downloadUrl = await this.storageService.getPresignedDownloadUrl(item.objectKey, 1200);
+        } else if (item.fileUrl.startsWith('/uploads/')) {
+          const backendHost = this.configService.get<string>('BACKEND_URL') || 'http://app:3000';
+          downloadUrl = `${backendHost}${item.fileUrl}`;
+        }
+
         const payload = {
           queueItems: [{
             queueItemId: item.id,
             batchId: item.batchId,
-            fileUrl: item.fileUrl,
+            fileUrl: downloadUrl,
             fileName: item.fileName,
+            objectKey: item.objectKey,
           }],
         };
 
@@ -253,6 +292,30 @@ export class TalentPoolService {
 
     // Create UNIFIED candidate (User + Candidate + Profile records)
     try {
+      let cvFileUrl = candidateData.cvFileUrl;
+      let cvStorageType: 'LOCAL' | 'MINIO' = 'LOCAL';
+
+      const queueItem = await this.prisma.talentPoolQueue.findUnique({
+        where: { id: queueItemId },
+      });
+
+      if (queueItem?.objectKey) {
+        cvFileUrl = queueItem.objectKey;
+        cvStorageType = 'MINIO';
+      } else if (candidateData.cvFileUrl && candidateData.cvFileUrl.startsWith('/uploads/')) {
+        // If downloaded locally by n8n (e.g. Google Drive crawl), upload it to MinIO
+        try {
+          const localPath = `.${candidateData.cvFileUrl}`;
+          const buffer = await fs.readFile(localPath);
+          const objectKey = this.storageService.buildKey('talent-pool', batchId, candidateData.cvFileName);
+          await this.storageService.uploadBuffer(objectKey, buffer, 'application/pdf');
+          cvFileUrl = objectKey;
+          cvStorageType = 'MINIO';
+        } catch (err: any) {
+          this.logger.error(`Failed to upload callback file to MinIO: ${err.message}`);
+        }
+      }
+
       const result = await this.createUnifiedTalentPoolCandidate(batchId, {
         fullName: candidateData.fullName,
         email: candidateData.email,
@@ -264,8 +327,9 @@ export class TalentPoolService {
         skills: candidateData.skills,
         certifications: candidateData.certifications,
         organizationExperience: candidateData.organizationExperience,
-        cvFileUrl: candidateData.cvFileUrl,
+        cvFileUrl,
         cvFileName: candidateData.cvFileName,
+        cvStorageType,
       });
 
       candidateId = result.candidateId;
@@ -567,6 +631,7 @@ export class TalentPoolService {
       organizationExperience?: any[];
       cvFileUrl: string;
       cvFileName: string;
+      cvStorageType?: 'LOCAL' | 'MINIO';
     },
   ): Promise<{ userId: string; candidateId: string }> {
     // Generate random password (user will set their own via email link)
@@ -600,6 +665,7 @@ export class TalentPoolService {
           linkedInUrl: candidateData.linkedin || null,
           cvFileUrl: candidateData.cvFileUrl,
           cvFileName: candidateData.cvFileName,
+          cvStorageType: candidateData.cvStorageType || 'LOCAL',
         },
       });
 
