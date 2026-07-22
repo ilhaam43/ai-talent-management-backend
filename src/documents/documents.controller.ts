@@ -177,9 +177,11 @@ export class DocumentsController {
     @Req() req: any,
   ) {
     const candidateId = req.user.candidateId;
+    const isHrOrAdmin = req.user.role === 'HUMAN RESOURCES' || req.user.role === 'ADMIN';
     const document = await this.documentsService.getDocumentById(
       documentId,
-      candidateId,
+      candidateId || '',
+      isHrOrAdmin,
     );
 
     return {
@@ -205,9 +207,11 @@ export class DocumentsController {
     @Res() res: Response,
   ) {
     const candidateId = req.user.candidateId;
+    const isHrOrAdmin = req.user.role === 'HUMAN RESOURCES' || req.user.role === 'ADMIN';
     const document = await this.documentsService.getDocumentById(
       documentId,
-      candidateId,
+      candidateId || '',
+      isHrOrAdmin,
     );
 
     // Check if file exists
@@ -309,10 +313,11 @@ export class DocumentsController {
     @Req() req: any,
   ): Promise<PresignedDownloadResponseDto> {
     const candidateId = req.user.candidateId;
-    if (!candidateId) {
+    const isHrOrAdmin = req.user.role === 'HUMAN RESOURCES' || req.user.role === 'ADMIN';
+    if (!isHrOrAdmin && !candidateId) {
       throw new BadRequestException('User does not have a candidate profile');
     }
-    return this.documentsService.getPresignedDownloadUrl(documentId, candidateId);
+    return this.documentsService.getPresignedDownloadUrl(documentId, candidateId || '', isHrOrAdmin);
   }
 }
 

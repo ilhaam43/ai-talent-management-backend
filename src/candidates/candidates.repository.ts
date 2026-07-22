@@ -27,7 +27,7 @@ export class CandidatesRepository {
   }
 
   async findDetailById(id: string) {
-    return this.prisma.candidate.findUnique({
+    const candidate = await this.prisma.candidate.findUnique({
       where: { id },
       include: {
         user: true,
@@ -72,6 +72,71 @@ export class CandidatesRepository {
         matchSkills: true,
       },
     });
+
+    if (candidate && candidate.cvFileUrl) {
+      try {
+        const cvDocType = await this.prisma.documentType.findFirst({
+          where: {
+            documentType: {
+              contains: 'cv',
+              mode: 'insensitive',
+            },
+          },
+        });
+        if (cvDocType) {
+          const cvDocs = await this.prisma.candidateDocument.findMany({
+            where: {
+              candidateId: candidate.id,
+              documentTypeId: cvDocType.id,
+            },
+            orderBy: {
+              createdAt: 'asc',
+            },
+          });
+
+          if (cvDocs.length === 0) {
+            const newDoc = await this.prisma.candidateDocument.create({
+              data: {
+                candidateId: candidate.id,
+                documentTypeId: cvDocType.id,
+                filePath: candidate.cvStorageType === 'MINIO' ? `./uploads/documents/cv/${candidate.cvFileName || 'cv.pdf'}` : `.${candidate.cvFileUrl}`,
+                objectKey: candidate.cvStorageType === 'MINIO' ? candidate.cvFileUrl : null,
+                bucket: process.env.MINIO_BUCKET_NAME || 'ai-talent-documents',
+                storageType: candidate.cvStorageType || 'LOCAL',
+                mimeType: 'application/pdf',
+                sizeBytes: 0,
+                originalName: candidate.cvFileName || 'cv.pdf',
+                uploadStatus: 'CONFIRMED',
+              },
+              include: {
+                documentType: true,
+              },
+            });
+            if (!(candidate as any).documents) (candidate as any).documents = [];
+            (candidate as any).documents.push(newDoc);
+          } else {
+            if (cvDocs.length > 1) {
+              const idsToDelete = cvDocs.slice(1).map(d => d.id);
+              await this.prisma.candidateDocument.deleteMany({
+                where: {
+                  id: { in: idsToDelete },
+                },
+              });
+            }
+            const firstCv = cvDocs[0];
+            (firstCv as any).documentType = cvDocType;
+            const otherDocs = (candidate as any).documents?.filter(
+              (d: any) => d.documentTypeId !== cvDocType.id
+            ) || [];
+            (candidate as any).documents = [...otherDocs, firstCv];
+          }
+        }
+      } catch (err) {
+        console.error('Failed to manage CV document in repository:', err);
+      }
+    }
+
+    return candidate;
   }
 
   async findAll() {

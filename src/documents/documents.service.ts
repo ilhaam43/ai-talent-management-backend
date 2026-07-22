@@ -40,6 +40,20 @@ export class DocumentsService {
         throw new NotFoundException('Document type not found');
       }
 
+      // Clean up existing documents of this type for this candidate to prevent duplicates
+      const existingDoc = await this.prisma.candidateDocument.findFirst({
+        where: { candidateId, documentTypeId },
+      });
+      if (existingDoc) {
+        if (existingDoc.objectKey) {
+          await this.storageService.deleteObject(existingDoc.objectKey).catch(() => {});
+        }
+        if (existingDoc.filePath) {
+          await this.deleteFile(existingDoc.filePath).catch(() => {});
+        }
+        await this.prisma.candidateDocument.delete({ where: { id: existingDoc.id } }).catch(() => {});
+      }
+
       // Read file to buffer and upload to MinIO
       const buffer = await fs.readFile(file.path);
       const folder = getFolderFromDocumentType(documentType.documentType);
@@ -117,6 +131,20 @@ export class DocumentsService {
     const folderKey = moduleName || folder;
     const objectKey = this.storageService.buildKey(folderKey, candidateId, filename);
 
+    // Clean up existing documents of this type for this candidate to prevent duplicates
+    const existingDoc = await this.prisma.candidateDocument.findFirst({
+      where: { candidateId, documentTypeId },
+    });
+    if (existingDoc) {
+      if (existingDoc.objectKey) {
+        await this.storageService.deleteObject(existingDoc.objectKey).catch(() => {});
+      }
+      if (existingDoc.filePath) {
+        await this.deleteFile(existingDoc.filePath).catch(() => {});
+      }
+      await this.prisma.candidateDocument.delete({ where: { id: existingDoc.id } }).catch(() => {});
+    }
+
     // 3. Create document record as PENDING
     const dummyPath = `./uploads/documents/${folder}/${path.basename(objectKey)}`;
     const document = await this.prisma.candidateDocument.create({
@@ -185,8 +213,8 @@ export class DocumentsService {
   /**
    * Get presigned download URL
    */
-  async getPresignedDownloadUrl(documentId: string, candidateId: string) {
-    const document = await this.getDocumentById(documentId, candidateId);
+  async getPresignedDownloadUrl(documentId: string, candidateId: string, isHrOrAdmin = false) {
+    const document = await this.getDocumentById(documentId, candidateId, isHrOrAdmin);
 
     if (document.storageType === 'MINIO' && document.objectKey) {
       const url = await this.storageService.getPresignedDownloadUrl(document.objectKey, 300); // 5 min
@@ -229,6 +257,7 @@ export class DocumentsService {
   async getDocumentById(
     documentId: string,
     candidateId: string,
+    isHrOrAdmin = false,
   ): Promise<CandidateDocumentEntity> {
     const document = await this.prisma.candidateDocument.findUnique({
       where: { id: documentId },
@@ -242,7 +271,7 @@ export class DocumentsService {
     }
 
     // Authorization check
-    if (document.candidateId !== candidateId) {
+    if (!isHrOrAdmin && document.candidateId !== candidateId) {
       throw new ForbiddenException(
         'You do not have permission to access this document',
       );

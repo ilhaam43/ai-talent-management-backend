@@ -269,7 +269,7 @@ export class CandidateApplicationsService {
             where: { id: application.id },
             data: {
               ...updateData,
-              isTalentPool: true, // Keep as recommendation only, user will apply manually
+              isTalentPool: application.isTalentPool, // Keep existing status (preserve if user already applied)
             } as any,
           });
         } else {

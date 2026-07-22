@@ -128,17 +128,21 @@ export class StorageService implements OnModuleInit {
    * Generate a presigned GET URL for browser download.
    * @param key Object key in MinIO
    * @param expiresIn Seconds until URL expires (default 300 = 5 min)
+   * @param bucket Optional bucket name overrides default documents bucket
+   * @param useInternal If true, uses the internal S3 client for Docker network resolution
    */
   async getPresignedDownloadUrl(
     key: string,
     expiresIn = 300,
     bucket?: string,
+    useInternal = false,
   ): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: bucket || this.documentsBucket,
       Key: key,
     });
-    return getSignedUrl(this.externalClient, command, { expiresIn });
+    const client = useInternal ? this.internalClient : this.externalClient;
+    return getSignedUrl(client, command, { expiresIn });
   }
 
   // ============================================

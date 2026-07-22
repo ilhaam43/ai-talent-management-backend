@@ -430,6 +430,11 @@ export class CandidateProfileService {
   ): Promise<any[]> {
     const prisma = tx || this.prisma;
 
+    // Clear old education history first to prevent duplicates
+    await prisma.candidateEducation.deleteMany({
+      where: { candidateId },
+    });
+
     // Verify candidate exists
     const candidate = await prisma.candidate.findUnique({
       where: { id: candidateId },
@@ -473,7 +478,7 @@ export class CandidateProfileService {
         candidateMajor: edu.major || null,
         candidateGpa: gpaValue,
         candidateMaxGpa: gpaMaxValue,
-        candidateCountry: edu.country || null,
+        candidateCountry: edu.city ? `${edu.city}, ${edu.country || ""}`.trim() : (edu.country || null),
         candidateStartedYearStudy: startDate || null,
         candidateEndedYearStudy: endDate || null,
       };
@@ -497,6 +502,11 @@ export class CandidateProfileService {
     tx?: any,
   ): Promise<any[]> {
     const prisma = tx || this.prisma;
+
+    // Clear old work experience first to prevent duplicates
+    await prisma.candidateWorkExperience.deleteMany({
+      where: { candidateId },
+    });
 
     // Verify candidate exists
     const candidate = await prisma.candidate.findUnique({
@@ -561,6 +571,11 @@ export class CandidateProfileService {
     tx?: any,
   ): Promise<any[]> {
     const prisma = tx || this.prisma;
+
+    // Clear old organization experience first to prevent duplicates
+    await prisma.candidateOrganizationExperience.deleteMany({
+      where: { candidateId },
+    });
 
     // Verify candidate exists
     const candidate = await prisma.candidate.findUnique({
@@ -671,6 +686,11 @@ export class CandidateProfileService {
     tx?: any,
   ): Promise<any[]> {
     const prisma = tx || this.prisma;
+
+    // Clear old certifications first to prevent duplicates
+    await prisma.candidateCertification.deleteMany({
+      where: { candidateId },
+    });
 
     // Verify candidate exists
     const candidate = await prisma.candidate.findUnique({
