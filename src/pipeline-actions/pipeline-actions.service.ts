@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../database/prisma.service';
 import { TextExtractorService } from '../cv-parser/parsers/text-extractor.service';
 import { LLMParserService } from '../cv-parser/parsers/llm-parser.service';
+import { StorageService } from '../storage/storage.service';
 import { QualifyDto, DisqualifyDto } from './dto/qualify.dto';
 import { CreateOnlineAssessmentDto } from './dto/online-assessment.dto';
 
@@ -25,6 +26,7 @@ export class PipelineActionsService {
         private readonly prisma: PrismaService,
         private readonly textExtractor: TextExtractorService,
         private readonly llmParser: LLMParserService,
+        private readonly storageService: StorageService,
     ) { }
 
     /**
@@ -278,10 +280,19 @@ export class PipelineActionsService {
             throw new BadRequestException('No online assessment found for this stage. Create assessment first.');
         }
 
+        const candidateId = pipeline.candidateApplication?.candidate?.id || 'unknown';
+        const docId = pipeline.onlineAssessment.id;
+        
+        // Save as assessment-results/[candidateID]/[documentID].pdf
+        const objectKey = `assessment-results/${candidateId}/${docId}.pdf`;
+        
+        // Upload to MinIO
+        await this.storageService.uploadBuffer(objectKey, file.buffer, 'application/pdf');
+
         const assessment = await this.prisma.candidateOnlineAssessment.update({
             where: { id: pipeline.onlineAssessment.id },
             data: {
-                vendorResultFileUrl: file.path,
+                vendorResultFileUrl: objectKey,
                 vendorResultFileName: file.originalname,
             },
         });
@@ -309,11 +320,19 @@ export class PipelineActionsService {
             throw new BadRequestException('No vendor result file uploaded yet.');
         }
 
-        // Extract text from PDF
-        const extractedText = await this.textExtractor.extractText(
-            pipeline.onlineAssessment.vendorResultFileUrl,
-            'application/pdf',
-        );
+        let extractedText = '';
+        
+        // If it's a MinIO key (doesn't start with 'uploads/' or 'C:'), download it as a buffer
+        if (!pipeline.onlineAssessment.vendorResultFileUrl.startsWith('uploads/') && !pipeline.onlineAssessment.vendorResultFileUrl.includes(':')) {
+            const buffer = await this.storageService.downloadToBuffer(pipeline.onlineAssessment.vendorResultFileUrl);
+            extractedText = await this.textExtractor.extractTextFromBuffer(buffer, 'application/pdf');
+        } else {
+            // Backward compatibility for existing local files
+            extractedText = await this.textExtractor.extractText(
+                pipeline.onlineAssessment.vendorResultFileUrl,
+                'application/pdf',
+            );
+        }
 
         // 1. Try to extract Role Fit score directly from PDF text
         const roleFitScore = this.extractRoleFitScore(extractedText);

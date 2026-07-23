@@ -12,7 +12,6 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -76,13 +75,6 @@ export class PipelineActionsController {
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(
         FileInterceptor('file', {
-            storage: diskStorage({
-                destination: './uploads/assessment-results',
-                filename: (_req, file, cb) => {
-                    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-                    cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
-                },
-            }),
             fileFilter: (_req, file, cb) => {
                 if (file.mimetype === 'application/pdf') {
                     cb(null, true);

@@ -1,4 +1,4 @@
-import { diskStorage, Options } from 'multer';
+import { memoryStorage, Options } from 'multer';
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { BadRequestException } from '@nestjs/common';
@@ -15,8 +15,10 @@ const DOCUMENT_TYPE_FOLDERS: Record<string, string> = {
   'ktp': 'ktp',
   'transcript': 'transcript',
   'academic transcript': 'transcript',
-  'portfolio': 'other',
-  'additional': 'other',
+  'certificate': 'certificate',
+  'certification': 'certificate',
+  'portfolio': 'portfolio',
+  'additional': 'additional',
   'other': 'other',
 };
 
@@ -26,6 +28,9 @@ const FOLDER_ALLOWED_EXTENSIONS: Record<string, string[]> = {
   'ijazah': ['.pdf'],
   'ktp': ['.pdf', '.jpg', '.jpeg', '.png'],
   'transcript': ['.pdf'],
+  'certificate': ['.pdf', '.jpg', '.jpeg', '.png'],
+  'portfolio': ['.pdf', '.jpg', '.jpeg', '.png'],
+  'additional': ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'],
   'other': ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'],
 };
 
@@ -38,6 +43,15 @@ const FOLDER_ALLOWED_MIMES: Record<string, string[]> = {
   'ijazah': ['application/pdf'],
   'ktp': ['application/pdf', 'image/jpeg', 'image/png'],
   'transcript': ['application/pdf'],
+  'certificate': ['application/pdf', 'image/jpeg', 'image/png'],
+  'portfolio': ['application/pdf', 'image/jpeg', 'image/png'],
+  'additional': [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword'
+  ],
   'other': [
     'application/pdf',
     'image/jpeg',
@@ -57,25 +71,7 @@ export function getFolderFromDocumentType(documentType: string): string {
 }
 
 export const multerConfig: MulterOptions = {
-  storage: diskStorage({
-    destination: (req, file, callback) => {
-      // Get document type from body (set by frontend or lookup in controller)
-      const documentTypeName = (req as any).documentTypeName || 'other';
-      const folder = getFolderFromDocumentType(documentTypeName);
-      const destPath = `./uploads/documents/${folder}`;
-
-      // Create directory if not exists
-      if (!fs.existsSync(destPath)) {
-        fs.mkdirSync(destPath, { recursive: true });
-      }
-
-      callback(null, destPath);
-    },
-    filename: (req, file, callback) => {
-      const uniqueFilename = `${uuidv4()}${extname(file.originalname)}`;
-      callback(null, uniqueFilename);
-    },
-  }),
+  storage: memoryStorage(),
   fileFilter: (req, file, callback) => {
     const ext = extname(file.originalname).toLowerCase();
     const documentTypeName = (req as any).documentTypeName || 'other';

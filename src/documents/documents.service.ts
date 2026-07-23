@@ -35,8 +35,6 @@ export class DocumentsService {
       });
 
       if (!documentType) {
-        // Delete uploaded file if document type is invalid
-        await this.deleteFile(file.path);
         throw new NotFoundException('Document type not found');
       }
 
@@ -54,18 +52,17 @@ export class DocumentsService {
         await this.prisma.candidateDocument.delete({ where: { id: existingDoc.id } }).catch(() => {});
       }
 
-      // Read file to buffer and upload to MinIO
-      const buffer = await fs.readFile(file.path);
+      // Upload directly from memory buffer to MinIO
       const folder = getFolderFromDocumentType(documentType.documentType);
       uploadedKey = this.storageService.buildKey(folder, candidateId, file.originalname);
-      await this.storageService.uploadBuffer(uploadedKey, buffer, file.mimetype);
+      await this.storageService.uploadBuffer(uploadedKey, file.buffer, file.mimetype);
 
       // Create document record with MinIO metadata
       const document = await this.prisma.candidateDocument.create({
         data: {
           candidateId,
           documentTypeId,
-          filePath: file.path,
+          filePath: uploadedKey, // Fallback database column to objectKey
           objectKey: uploadedKey,
           bucket: this.storageService.getDocumentsBucket(),
           storageType: 'MINIO',
@@ -89,10 +86,6 @@ export class DocumentsService {
 
       return document;
     } catch (error) {
-      // Clean up local file if database/storage operation fails
-      if (file?.path) {
-        await this.deleteFile(file.path).catch(() => {});
-      }
       // Clean up MinIO file if database operation fails after upload
       if (uploadedKey) {
         await this.storageService.deleteObject(uploadedKey).catch(() => {});

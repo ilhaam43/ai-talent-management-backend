@@ -38,7 +38,7 @@ export class TalentPoolService {
   async createBatchUpload(
     uploadedById: string,
     dto: UploadTalentPoolDto,
-    files: { fileUrl: string; fileName: string }[],
+    files: Express.Multer.File[],
   ): Promise<{ batch: any; message: string }> {
     if (files.length === 0) {
       throw new BadRequestException('No files provided');
@@ -57,27 +57,28 @@ export class TalentPoolService {
       totalFiles: files.length,
     });
 
-    // Upload files to MinIO and add S3 keys
+    // Upload files to MinIO directly from memory
     const filesWithKeys = [];
     for (const file of files) {
       try {
-        const localPath = `.${file.fileUrl}`;
-        const buffer = await fs.readFile(localPath);
-        
         // Generate S3 key
-        const objectKey = this.storageService.buildKey('talent-pool', batch.id, file.fileName);
+        const objectKey = this.storageService.buildKey('talent-pool', batch.id, file.originalname);
         
-        // Upload to S3
-        await this.storageService.uploadBuffer(objectKey, buffer, 'application/pdf');
+        // Upload to S3 straight from RAM buffer
+        await this.storageService.uploadBuffer(objectKey, file.buffer, 'application/pdf');
         
         filesWithKeys.push({
-          ...file,
+          fileUrl: "", // We don't have local file URLs anymore, backend will use S3 presigned URLs via objectKey
+          fileName: file.originalname,
           objectKey,
         });
       } catch (err: any) {
-        this.logger.error(`Failed to upload file ${file.fileName} to MinIO S3: ${err.message}`);
-        // Fallback to queueing without S3 key (local storage only)
-        filesWithKeys.push(file);
+        this.logger.error(`Failed to upload file ${file.originalname} to MinIO S3: ${err.message}`);
+        // Fallback to queueing without S3 key (which will likely fail later without local file, but tracks the attempt)
+        filesWithKeys.push({
+          fileUrl: "",
+          fileName: file.originalname,
+        });
       }
     }
 
@@ -248,6 +249,14 @@ export class TalentPoolService {
     }
 
     let candidateId: string | undefined;
+
+    // Fetch queueItem and batch for promotion logic later
+    const queueItem = await this.prisma.talentPoolQueue.findUnique({
+      where: { id: queueItemId },
+    });
+    const batch = await this.prisma.talentPoolBatch.findUnique({
+      where: { id: batchId },
+    });
     
     // Check for duplicate in UNIFIED Candidate table by email
     if (candidateData.email) {
@@ -291,10 +300,6 @@ export class TalentPoolService {
     try {
       let cvFileUrl = candidateData.cvFileUrl;
       let cvStorageType: 'LOCAL' | 'MINIO' = 'LOCAL';
-
-      const queueItem = await this.prisma.talentPoolQueue.findUnique({
-        where: { id: queueItemId },
-      });
 
       if (queueItem?.objectKey) {
         cvFileUrl = queueItem.objectKey;
@@ -348,6 +353,42 @@ export class TalentPoolService {
       });
       
       return { success: false };
+    }
+
+    // ==========================================
+    // STAGING PROMOTION & TAGGING LOGIC
+    // ==========================================
+    if (queueItem?.objectKey && candidateId) {
+      try {
+        const batchNameStr = batch?.batchName || 'Unknown Batch';
+        const newKey = this.storageService.buildKey('cv', candidateId, queueItem.fileName);
+        
+        await this.storageService.moveObjectWithTags(
+          queueItem.objectKey, 
+          newKey, 
+          {
+            batchId: batchId,
+            batchName: batchNameStr,
+            source: 'talent-pool'
+          }
+        );
+        
+        // Update database with new promoted key
+        await this.prisma.candidate.update({
+          where: { id: candidateId },
+          data: { cvFileUrl: newKey },
+        });
+        
+        // If there's a document record, update it too
+        await this.prisma.candidateDocument.updateMany({
+          where: { candidateId, objectKey: queueItem.objectKey },
+          data: { objectKey: newKey, filePath: newKey },
+        });
+
+      } catch (err: any) {
+        this.logger.error(`Failed to promote CV object in MinIO: ${err.message}`);
+        // We don't fail the candidate creation if MinIO promotion fails, it's just a storage organization issue.
+      }
     }
 
     // Update queue item status

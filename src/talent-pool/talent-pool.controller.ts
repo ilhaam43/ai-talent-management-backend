@@ -26,8 +26,7 @@ import { UploadTalentPoolDto, UploadLinkDto } from './dto/upload.dto';
 import { N8nCallbackDto } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
 import { ConvertCandidateDto } from './dto/convert-candidate.dto';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 
 // HR Status enum for API docs (matches Prisma)
@@ -39,15 +38,7 @@ enum TalentPoolHRStatusEnum {
   REJECTED = 'REJECTED',
 }
 
-// Configure local storage for uploaded files
-const storage = diskStorage({
-  destination: './uploads/talent-pool',
-  filename: (req, file, callback) => {
-    const uniqueSuffix = uuidv4();
-    const ext = extname(file.originalname);
-    callback(null, `${uniqueSuffix}${ext}`);
-  },
-});
+// We now use memoryStorage() directly in the interceptor
 
 @ApiTags('Talent Pool')
 @Controller('talent-pool')
@@ -68,7 +59,7 @@ export class TalentPoolController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FilesInterceptor('files', 50, {
-      storage,
+      storage: memoryStorage(),
       fileFilter: (req, file, callback) => {
         if (file.mimetype !== 'application/pdf') {
           return callback(new Error('Only PDF files are allowed'), false);
@@ -96,13 +87,8 @@ export class TalentPoolController {
       throw new BadRequestException('Employee profile not found. Only HR employees can upload.');
     }
 
-    // Convert uploaded files to file info
-    const fileInfos = files.map((file) => ({
-      fileUrl: `/uploads/talent-pool/${file.filename}`,
-      fileName: file.originalname,
-    }));
-
-    return this.service.createBatchUpload(employee.id, dto, fileInfos);
+    // We pass the raw memory files directly to the service now
+    return this.service.createBatchUpload(employee.id, dto, files);
   }
 
   @Post('upload-link')

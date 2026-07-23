@@ -6,6 +6,8 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  CopyObjectCommand,
+  PutObjectTaggingCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
@@ -19,6 +21,10 @@ const ALLOWED_EXTENSIONS: Record<string, string[]> = {
   transcript: ['.pdf'],
   photos: ['.jpg', '.jpeg', '.png', '.webp'],
   'talent-pool': ['.pdf'],
+  'assessment-results': ['.pdf'],
+  certificate: ['.pdf', '.jpg', '.jpeg', '.png'],
+  portfolio: ['.pdf', '.jpg', '.jpeg', '.png'],
+  additional: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'],
   other: ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'],
 };
 
@@ -277,5 +283,51 @@ export class StorageService implements OnModuleInit {
     const ext = this.sanitizeExtension(filename);
     const allowed = ALLOWED_EXTENSIONS[folder] || ALLOWED_EXTENSIONS['other'];
     return allowed.includes(ext);
+  }
+
+  // ============================================
+  // Object Promotion and Tagging
+  // ============================================
+
+  /**
+   * Copy an object to a new location, apply tags, and delete the original object.
+   * Used for promoting Talent Pool staging files to permanent CV files.
+   */
+  async moveObjectWithTags(
+    sourceKey: string,
+    destKey: string,
+    tags: Record<string, string>,
+    bucket?: string,
+  ): Promise<void> {
+    const targetBucket = bucket || this.documentsBucket;
+
+    // 1. Copy the object
+    await this.internalClient.send(
+      new CopyObjectCommand({
+        Bucket: targetBucket,
+        CopySource: `${targetBucket}/${sourceKey}`, // Format must be bucket/key
+        Key: destKey,
+      }),
+    );
+    this.logger.log(`Copied ${sourceKey} to ${destKey}`);
+
+    // 2. Apply tags to the new object
+    if (Object.keys(tags).length > 0) {
+      const tagging = Object.entries(tags).map(([Key, Value]) => ({ Key, Value }));
+      await this.internalClient.send(
+        new PutObjectTaggingCommand({
+          Bucket: targetBucket,
+          Key: destKey,
+          Tagging: {
+            TagSet: tagging,
+          },
+        }),
+      );
+      this.logger.log(`Applied tags to ${destKey}`);
+    }
+
+    // 3. Delete the original staging object
+    await this.deleteObject(sourceKey, targetBucket);
+    this.logger.log(`Deleted original staging object ${sourceKey}`);
   }
 }
