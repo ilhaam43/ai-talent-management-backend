@@ -5,6 +5,7 @@ import { LLMParserService } from '../cv-parser/parsers/llm-parser.service';
 import { StorageService } from '../storage/storage.service';
 import { QualifyDto, DisqualifyDto } from './dto/qualify.dto';
 import { CreateOnlineAssessmentDto } from './dto/online-assessment.dto';
+import { stripHtmlTags } from '../common/utils/sanitize.util';
 
 // Stage progression order
 const STAGE_ORDER = [
@@ -369,6 +370,9 @@ export class PipelineActionsService {
         if (roleFitScore !== null) {
             summary = `**Role Fit Score: ${roleFitScore}%**\n\n${summary}`;
         }
+
+        // Sanitize final summary to prevent XSS
+        summary = stripHtmlTags(summary);
 
         // 5. Save both parsedResultSummary and roleFitScore to DB
         const assessment = await this.prisma.candidateOnlineAssessment.update({

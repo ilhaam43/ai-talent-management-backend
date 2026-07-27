@@ -1,4 +1,5 @@
 import { Controller, Post, UseGuards, Req, Get, Body, Res, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { AuthGuard } from '@nestjs/passport'
 import { ApiBody, ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger'
 import { Response } from 'express'
@@ -12,6 +13,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
   @Post('signup')
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new candidate account' })
   @ApiResponse({ status: 201, description: 'Account created successfully' })
@@ -44,6 +46,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
   @UseGuards(AuthGuard('local'))
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login and get access token + refresh token' })
@@ -159,6 +162,7 @@ export class AuthController {
   }
 
   @Post('set-password')
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Set password using reset token (e.g. for converted candidates)' })
   @ApiResponse({ status: 200, description: 'Password set successfully' })

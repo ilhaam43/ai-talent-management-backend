@@ -1,9 +1,10 @@
-import { UsersModule } from './users/users.module'
-import { StorageModule } from './storage/storage.module'
+import { UsersModule } from './users/users.module';
+import { StorageModule } from './storage/storage.module';
 import { Module } from '@nestjs/common'
 import { DatabaseModule } from './database/database.module'
 import { ConfigModule } from '@nestjs/config'
 import { ScheduleModule } from '@nestjs/schedule'
+import { ThrottlerModule } from '@nestjs/throttler'
 import { AuthModule } from './auth/auth.module'
 import { DocumentsModule } from './documents/documents.module'
 import { CVParserModule } from './cv-parser/cv-parser.module'
@@ -30,6 +31,10 @@ import { PipelineActionsModule } from './pipeline-actions/pipeline-actions.modul
     ConfigModule.forRoot(),
     StorageModule,
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 100,
+    }]),
     DatabaseModule,
     UsersModule,
     AuthModule,

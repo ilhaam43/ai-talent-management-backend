@@ -36,7 +36,7 @@ export class TextExtractorService {
         return await this.extractFromDOCXBuffer(buffer);
       } else {
         throw new BadRequestException(
-          'Unsupported file type. Only PDF and DOCX are supported.',
+          'Unsupported file type. Only PDF, DOC, and DOCX are supported.',
         );
       }
     } catch (error: any) {

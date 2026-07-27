@@ -38,7 +38,7 @@ enum TalentPoolHRStatusEnum {
   REJECTED = 'REJECTED',
 }
 
-// We now use memoryStorage() directly in the interceptor
+import { getMulterPdfConfig } from '../common/config/multer-pdf.config';
 
 @ApiTags('Talent Pool')
 @Controller('talent-pool')
@@ -58,16 +58,7 @@ export class TalentPoolController {
   @ApiOperation({ summary: 'Upload CVs for bulk screening' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FilesInterceptor('files', 50, {
-      storage: memoryStorage(),
-      fileFilter: (req, file, callback) => {
-        if (file.mimetype !== 'application/pdf') {
-          return callback(new Error('Only PDF files are allowed'), false);
-        }
-        callback(null, true);
-      },
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
-    }),
+    FilesInterceptor('files', 50, getMulterPdfConfig('talent-pool')),
   )
   async uploadCVs(
     @UploadedFiles() files: Express.Multer.File[],
