@@ -7,18 +7,31 @@ import * as fs from 'fs';
 
 // Document type to subdirectory mapping (based on documentType names in DB)
 const DOCUMENT_TYPE_FOLDERS: Record<string, string> = {
+  // CV variants
   'cv/resume': 'cv',
   'cv': 'cv',
   'resume': 'cv',
+  // ID Card / KTP variants — DB stores as "ID Card"
+  'id card': 'ktp',
+  'ktp': 'ktp',
+  // Ijazah / Diploma variants
   'ijazah': 'ijazah',
   'diploma': 'ijazah',
-  'ktp': 'ktp',
+  // Transcript variants — DB stores as "Academic Transcript"
   'transcript': 'transcript',
   'academic transcript': 'transcript',
+  // Certificate variants
   'certificate': 'certificate',
   'certification': 'certificate',
+  // Portfolio
   'portfolio': 'portfolio',
+  // Additional / Supporting docs — DB stores as "Supporting Document" or "Additional"
   'additional': 'additional',
+  'supporting document': 'additional',
+  'cover letter': 'additional',
+  'reference letter': 'additional',
+  'work sample': 'additional',
+  // Fallback
   'other': 'other',
 };
 

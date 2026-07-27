@@ -102,6 +102,15 @@ export class PipelineActionsController {
         return this.service.parseResult(pipelineId);
     }
 
+    @Get(':pipelineId/result-download-url')
+    @UseGuards(AuthGuard('jwt'), RolesGuard)
+    @Roles('HUMAN RESOURCES')
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get presigned download URL for vendor assessment result' })
+    async getResultDownloadUrl(@Param('pipelineId') pipelineId: string) {
+        return this.service.getResultDownloadUrl(pipelineId);
+    }
+
     // ─── Query ─────────────────────────────────────────────────────────
 
     @Get('stages/:applicationId')

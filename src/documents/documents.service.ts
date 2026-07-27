@@ -38,18 +38,42 @@ export class DocumentsService {
         throw new NotFoundException('Document type not found');
       }
 
-      // Clean up existing documents of this type for this candidate to prevent duplicates
-      const existingDoc = await this.prisma.candidateDocument.findFirst({
-        where: { candidateId, documentTypeId },
-      });
-      if (existingDoc) {
-        if (existingDoc.objectKey) {
-          await this.storageService.deleteObject(existingDoc.objectKey).catch(() => {});
+      // Clean up existing documents of this type to prevent duplicates
+      const isSingleFileDocType = ['cv', 'cv/resume', 'resume', 'ktp', 'id card', 'ijazah', 'diploma', 'transcript', 'academic transcript']
+        .includes(documentType.documentType.toLowerCase().trim());
+
+      if (isSingleFileDocType) {
+        // Single-file type: replace any existing doc of this type
+        const existingDoc = await this.prisma.candidateDocument.findFirst({
+          where: { candidateId, documentTypeId },
+        });
+        if (existingDoc) {
+          if (existingDoc.objectKey) {
+            await this.storageService.deleteObject(existingDoc.objectKey).catch(() => {});
+          }
+          if (existingDoc.filePath) {
+            await this.deleteFile(existingDoc.filePath).catch(() => {});
+          }
+          await this.prisma.candidateDocument.delete({ where: { id: existingDoc.id } }).catch(() => {});
         }
-        if (existingDoc.filePath) {
-          await this.deleteFile(existingDoc.filePath).catch(() => {});
+      } else {
+        // Multi-file type (e.g. Certificate): replace if exact same original filename exists for this candidate
+        const existingSameNameDoc = await this.prisma.candidateDocument.findFirst({
+          where: {
+            candidateId,
+            documentTypeId,
+            originalName: file.originalname,
+          },
+        });
+        if (existingSameNameDoc) {
+          if (existingSameNameDoc.objectKey) {
+            await this.storageService.deleteObject(existingSameNameDoc.objectKey).catch(() => {});
+          }
+          if (existingSameNameDoc.filePath) {
+            await this.deleteFile(existingSameNameDoc.filePath).catch(() => {});
+          }
+          await this.prisma.candidateDocument.delete({ where: { id: existingSameNameDoc.id } }).catch(() => {});
         }
-        await this.prisma.candidateDocument.delete({ where: { id: existingDoc.id } }).catch(() => {});
       }
 
       // Upload directly from memory buffer to MinIO
@@ -124,18 +148,40 @@ export class DocumentsService {
     const folderKey = moduleName || folder;
     const objectKey = this.storageService.buildKey(folderKey, candidateId, filename);
 
-    // Clean up existing documents of this type for this candidate to prevent duplicates
-    const existingDoc = await this.prisma.candidateDocument.findFirst({
-      where: { candidateId, documentTypeId },
-    });
-    if (existingDoc) {
-      if (existingDoc.objectKey) {
-        await this.storageService.deleteObject(existingDoc.objectKey).catch(() => {});
+    // Clean up existing documents of this type to prevent duplicates
+    const isSingleFileDocType = ['cv', 'cv/resume', 'resume', 'ktp', 'id card', 'ijazah', 'diploma', 'transcript', 'academic transcript']
+      .includes(documentType.documentType.toLowerCase().trim());
+
+    if (isSingleFileDocType) {
+      const existingDoc = await this.prisma.candidateDocument.findFirst({
+        where: { candidateId, documentTypeId },
+      });
+      if (existingDoc) {
+        if (existingDoc.objectKey) {
+          await this.storageService.deleteObject(existingDoc.objectKey).catch(() => {});
+        }
+        if (existingDoc.filePath) {
+          await this.deleteFile(existingDoc.filePath).catch(() => {});
+        }
+        await this.prisma.candidateDocument.delete({ where: { id: existingDoc.id } }).catch(() => {});
       }
-      if (existingDoc.filePath) {
-        await this.deleteFile(existingDoc.filePath).catch(() => {});
+    } else {
+      const existingSameNameDoc = await this.prisma.candidateDocument.findFirst({
+        where: {
+          candidateId,
+          documentTypeId,
+          originalName: filename,
+        },
+      });
+      if (existingSameNameDoc) {
+        if (existingSameNameDoc.objectKey) {
+          await this.storageService.deleteObject(existingSameNameDoc.objectKey).catch(() => {});
+        }
+        if (existingSameNameDoc.filePath) {
+          await this.deleteFile(existingSameNameDoc.filePath).catch(() => {});
+        }
+        await this.prisma.candidateDocument.delete({ where: { id: existingSameNameDoc.id } }).catch(() => {});
       }
-      await this.prisma.candidateDocument.delete({ where: { id: existingDoc.id } }).catch(() => {});
     }
 
     // 3. Create document record as PENDING

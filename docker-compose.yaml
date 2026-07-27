@@ -49,8 +49,8 @@ services:
       - "9000:9000"   # S3 API — reachable by browser for presigned URLs
       - "9001:9001"   # Console — dev only, not exposed in deploy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ./minio_storage:/data
     networks:

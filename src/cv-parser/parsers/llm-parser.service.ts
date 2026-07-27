@@ -147,7 +147,7 @@ export class LLMParserService {
 
 CRITICAL CLASSIFICATION & FORMATTING RULES:
 1. WORK EXPERIENCE vs ORGANIZATION EXPERIENCE:
-   - "workExperience": ONLY include professional company employment, corporate internships, paid jobs, academies/MSIB traineeships.
+   - "workExperience": ONLY include professional company employment, corporate internships, paid jobs, academies traineeships.
    - "organizationExperience": MUST include campus student associations (e.g., HIMA, BEM), event committees (e.g., IT-TODAY committee, Competition Liaison Officer / Committee), student clubs, and volunteer groups. DO NOT put student committees or campus organizations in workExperience.
 2. DATE FORMATTING:
    - Format ALL "startDate" and "endDate" fields in standard ISO "YYYY-MM-DD" or "YYYY-MM" (e.g., "Feb. 2025" -> "2025-02-01", "June 2025" -> "2025-06-01", "Aug. 2024" -> "2024-08-01").
