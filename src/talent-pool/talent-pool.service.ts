@@ -8,10 +8,13 @@ import { EmailService } from '../email/email.service';
 import { UploadTalentPoolDto, UploadLinkDto } from './dto/upload.dto';
 import { N8nCallbackDto, AiMatchStatusValue } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
+import { StorageService } from '../storage/storage.service';
+import * as fs from 'fs/promises';
 import axios from 'axios';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { stripHtmlTags } from '../common/utils/sanitize.util';
+
 
 @Injectable()
 export class TalentPoolService {
@@ -24,6 +27,7 @@ export class TalentPoolService {
     private configService: ConfigService,
     private notificationsService: NotificationsService,
     private emailService: EmailService,
+    private storageService: StorageService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_TALENT_POOL_WEBHOOK_URL') || '';
   }
@@ -35,7 +39,7 @@ export class TalentPoolService {
   async createBatchUpload(
     uploadedById: string,
     dto: UploadTalentPoolDto,
-    files: { fileUrl: string; fileName: string }[],
+    files: Express.Multer.File[],
   ): Promise<{ batch: any; message: string }> {
     if (files.length === 0) {
       throw new BadRequestException('No files provided');
@@ -54,8 +58,33 @@ export class TalentPoolService {
       totalFiles: files.length,
     });
 
+    // Upload files to MinIO directly from memory
+    const filesWithKeys = [];
+    for (const file of files) {
+      try {
+        // Generate S3 key
+        const objectKey = this.storageService.buildKey('talent-pool', batch.id, file.originalname);
+        
+        // Upload to S3 straight from RAM buffer
+        await this.storageService.uploadBuffer(objectKey, file.buffer, 'application/pdf');
+        
+        filesWithKeys.push({
+          fileUrl: "", // We don't have local file URLs anymore, backend will use S3 presigned URLs via objectKey
+          fileName: file.originalname,
+          objectKey,
+        });
+      } catch (err: any) {
+        this.logger.error(`Failed to upload file ${file.originalname} to MinIO S3: ${err.message}`);
+        // Fallback to queueing without S3 key (which will likely fail later without local file, but tracks the attempt)
+        filesWithKeys.push({
+          fileUrl: "",
+          fileName: file.originalname,
+        });
+      }
+    }
+
     // Create queue items for all files
-    await this.repository.createQueueItems(batch.id, files);
+    await this.repository.createQueueItems(batch.id, filesWithKeys);
 
     // Update batch status to QUEUED
     await this.repository.updateBatchStatus(batch.id, 'QUEUED' as any);
@@ -128,8 +157,8 @@ export class TalentPoolService {
    * Sends 1 CV at a time to n8n
    */
   async processNextItemInBatch(batchId: string): Promise<void> {
-    // Get FIRST pending item in this batch
-    const item = await this.repository.findNextPendingInBatch(batchId);
+    // Atomically claim and mark next pending item as PROCESSING
+    const item = await this.repository.claimNextPendingInBatch(batchId);
 
     if (!item) {
       // No more pending items - check if batch is complete
@@ -139,9 +168,6 @@ export class TalentPoolService {
 
     // Update batch status to PROCESSING if not already
     await this.repository.updateBatchStatus(batchId, 'PROCESSING' as any);
-
-    // Mark this single item as PROCESSING
-    await this.repository.updateQueueItemStatus(item.id, 'PROCESSING' as any);
 
     // Get current progress for logging
     const batch = await this.repository.findBatchById(batchId);
@@ -153,12 +179,23 @@ export class TalentPoolService {
     // Send ONLY this 1 CV to n8n
     if (this.n8nWebhookUrl) {
       try {
+        // Generate a presigned download URL if objectKey exists, or construct full legacy URL
+        let downloadUrl = item.fileUrl;
+        if (item.objectKey) {
+          // Use internal client endpoint (http://minio:9000) for n8n in docker compose network
+          downloadUrl = await this.storageService.getPresignedDownloadUrl(item.objectKey, 1200, undefined, true);
+        } else if (item.fileUrl.startsWith('/uploads/')) {
+          const backendHost = this.configService.get<string>('BACKEND_URL') || 'http://app:3000';
+          downloadUrl = `${backendHost}${item.fileUrl}`;
+        }
+
         const payload = {
           queueItems: [{
             queueItemId: item.id,
             batchId: item.batchId,
-            fileUrl: item.fileUrl,
+            fileUrl: downloadUrl,
             fileName: item.fileName,
+            objectKey: item.objectKey,
           }],
         };
 
@@ -213,6 +250,14 @@ export class TalentPoolService {
     }
 
     let candidateId: string | undefined;
+
+    // Fetch queueItem and batch for promotion logic later
+    const queueItem = await this.prisma.talentPoolQueue.findUnique({
+      where: { id: queueItemId },
+    });
+    const batch = await this.prisma.talentPoolBatch.findUnique({
+      where: { id: batchId },
+    });
     
     // Check for duplicate in UNIFIED Candidate table by email
     if (candidateData.email) {
@@ -254,6 +299,26 @@ export class TalentPoolService {
 
     // Create UNIFIED candidate (User + Candidate + Profile records)
     try {
+      let cvFileUrl = candidateData.cvFileUrl;
+      let cvStorageType: 'LOCAL' | 'MINIO' = 'LOCAL';
+
+      if (queueItem?.objectKey) {
+        cvFileUrl = queueItem.objectKey;
+        cvStorageType = 'MINIO';
+      } else if (candidateData.cvFileUrl && candidateData.cvFileUrl.startsWith('/uploads/')) {
+        // If downloaded locally by n8n (e.g. Google Drive crawl), upload it to MinIO
+        try {
+          const localPath = `.${candidateData.cvFileUrl}`;
+          const buffer = await fs.readFile(localPath);
+          const objectKey = this.storageService.buildKey('talent-pool', batchId, candidateData.cvFileName);
+          await this.storageService.uploadBuffer(objectKey, buffer, 'application/pdf');
+          cvFileUrl = objectKey;
+          cvStorageType = 'MINIO';
+        } catch (err: any) {
+          this.logger.error(`Failed to upload callback file to MinIO: ${err.message}`);
+        }
+      }
+
       const result = await this.createUnifiedTalentPoolCandidate(batchId, {
         fullName: candidateData.fullName,
         email: candidateData.email,
@@ -265,8 +330,9 @@ export class TalentPoolService {
         skills: candidateData.skills,
         certifications: candidateData.certifications,
         organizationExperience: candidateData.organizationExperience,
-        cvFileUrl: candidateData.cvFileUrl,
+        cvFileUrl,
         cvFileName: candidateData.cvFileName,
+        cvStorageType,
       });
 
       candidateId = result.candidateId;
@@ -288,6 +354,42 @@ export class TalentPoolService {
       });
       
       return { success: false };
+    }
+
+    // ==========================================
+    // STAGING PROMOTION & TAGGING LOGIC
+    // ==========================================
+    if (queueItem?.objectKey && candidateId) {
+      try {
+        const batchNameStr = batch?.batchName || 'Unknown Batch';
+        const newKey = this.storageService.buildKey('cv', candidateId, queueItem.fileName);
+        
+        await this.storageService.moveObjectWithTags(
+          queueItem.objectKey, 
+          newKey, 
+          {
+            batchId: batchId,
+            batchName: batchNameStr,
+            source: 'talent-pool'
+          }
+        );
+        
+        // Update database with new promoted key
+        await this.prisma.candidate.update({
+          where: { id: candidateId },
+          data: { cvFileUrl: newKey },
+        });
+        
+        // If there's a document record, update it too
+        await this.prisma.candidateDocument.updateMany({
+          where: { candidateId, objectKey: queueItem.objectKey },
+          data: { objectKey: newKey, filePath: newKey },
+        });
+
+      } catch (err: any) {
+        this.logger.error(`Failed to promote CV object in MinIO: ${err.message}`);
+        // We don't fail the candidate creation if MinIO promotion fails, it's just a storage organization issue.
+      }
     }
 
     // Update queue item status
@@ -393,20 +495,6 @@ export class TalentPoolService {
     }
   }
 
-  /**
-   * Check if email exists in Candidate table and create CandidateApplication
-   */
-  private async checkAndCreateCandidateApplications(
-    email: string,
-    screenings: { jobVacancyId: string; fitScore: number; aiMatchStatus: string; aiInsight?: string; aiInterview?: string; aiCoreValue?: string }[],
-  ) {
-    // Find candidate by email
-    const candidate = await this.prisma.candidate.findFirst({
-      where: {
-        user: { email: email },
-      },
-      select: { id: true },
-    });
 
     if (!candidate) {
       this.logger.log(`No registered candidate found for email: ${email}`);
@@ -568,6 +656,7 @@ export class TalentPoolService {
       organizationExperience?: any[];
       cvFileUrl: string;
       cvFileName: string;
+      cvStorageType?: 'LOCAL' | 'MINIO';
     },
   ): Promise<{ userId: string; candidateId: string }> {
     // Generate random password (user will set their own via email link)
@@ -601,8 +690,36 @@ export class TalentPoolService {
           linkedInUrl: candidateData.linkedin || null,
           cvFileUrl: candidateData.cvFileUrl,
           cvFileName: candidateData.cvFileName,
+          cvStorageType: candidateData.cvStorageType || 'LOCAL',
         },
       });
+
+      // 3. Create CandidateDocument for the CV
+      const cvDocType = await tx.documentType.findFirst({
+        where: {
+          documentType: {
+            contains: 'cv',
+            mode: 'insensitive',
+          },
+        },
+      });
+
+      if (cvDocType) {
+        await tx.candidateDocument.create({
+          data: {
+            candidateId: candidate.id,
+            documentTypeId: cvDocType.id,
+            filePath: candidateData.cvStorageType === 'MINIO' ? `./uploads/documents/cv/${candidateData.cvFileName}` : `.${candidateData.cvFileUrl}`,
+            objectKey: candidateData.cvStorageType === 'MINIO' ? candidateData.cvFileUrl : null,
+            bucket: this.storageService.getDocumentsBucket(),
+            storageType: candidateData.cvStorageType || 'LOCAL',
+            mimeType: 'application/pdf',
+            sizeBytes: 0,
+            originalName: candidateData.cvFileName,
+            uploadStatus: 'CONFIRMED',
+          },
+        });
+      }
 
       return { user, candidate };
     });
@@ -682,9 +799,9 @@ export class TalentPoolService {
     }
 
     // Create skill records
-    this.logger.log(`[DEBUG] Creating skills for candidate ${candidateId}, skills count: ${data.skills?.length || 0}`);
+    this.logger.debug(`Creating skills for candidate ${candidateId}, skills count: ${data.skills?.length || 0}`);
     if (data.skills && data.skills.length > 0) {
-      this.logger.log(`[DEBUG] Skills to create: ${JSON.stringify(data.skills)}`);
+      this.logger.debug(`Skills to create: ${JSON.stringify(data.skills)}`);
       for (const skill of data.skills) {
         try {
           const created = await this.prisma.candidateSkill.create({
@@ -694,14 +811,13 @@ export class TalentPoolService {
               candidateRating: 'THREE' as CandidateRating, 
             },
           });
-          this.logger.log(`[DEBUG] Created skill: ${skill} with id ${created.id}`);
+          this.logger.debug(`Created skill: ${skill} with id ${created.id}`);
         } catch (e: any) {
           this.logger.warn(`Failed to create skill record: ${e.message}`);
         }
       }
     } else {
-
-      this.logger.log(`[DEBUG] No skills to create for candidate ${candidateId}`);
+      this.logger.debug(`No skills to create for candidate ${candidateId}`);
     }
 
     // Create certification records
@@ -813,7 +929,7 @@ export class TalentPoolService {
                 candidateLastEducationId: defaultEducationLevel?.id || '',
                 candidateSchool: edu.institution || 'Unknown',
                 candidateMajor: edu.major || edu.degree || 'General',
-                candidateGpa: edu.gpa || 'N/A',
+                candidateGpa: edu.gpa ? parseFloat(edu.gpa) : null,
                 candidateStartedYearStudy: this.safeDate(edu.startYear),
                 candidateEndedYearStudy: this.safeDate(edu.endYear),
                 candidateCountry: 'Indonesia',
@@ -1000,16 +1116,18 @@ export class TalentPoolService {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // Determine applications to update
-    let applicationsToUpdate = candidate.applications;
+    // Determine applications to update - only those currently in the talent pool
+    let applicationsToUpdate = candidate.applications.filter(app => app.isTalentPool);
     
     if (targetApplicationIds && targetApplicationIds.length > 0) {
-      applicationsToUpdate = candidate.applications.filter(app => targetApplicationIds.includes(app.id));
+      applicationsToUpdate = applicationsToUpdate.filter(app => targetApplicationIds.includes(app.id));
     }
 
     if (applicationsToUpdate.length === 0) {
         this.logger.warn(`No applications matched for conversion for candidate ${candidateId}`);
     }
+
+    let wasFirstConversion = false;
 
     // Update in transaction
     await this.prisma.$transaction(async (tx) => {
@@ -1021,8 +1139,10 @@ export class TalentPoolService {
         },
       });
 
+      wasFirstConversion = hasActiveApps === 0;
+
       // 2. If first conversion, set up password reset for the user
-      if (hasActiveApps === 0) {
+      if (wasFirstConversion) {
         await tx.user.update({
             where: { id: candidate.userId },
             data: {
@@ -1112,13 +1232,6 @@ export class TalentPoolService {
 
     // Send talent pool welcome email with profile completion reminder
     // Check if this is first time converting any application for this candidate
-    const wasFirstConversion = await this.prisma.candidateApplication.count({
-      where: {
-        candidateId: candidateId,
-        isTalentPool: false,
-      },
-    }) === applicationsToUpdate.length; // If count equals what we just converted, those are the first
-
     if (wasFirstConversion) {
         try {
         // Get job title from first target application if available
@@ -1242,22 +1355,23 @@ export class TalentPoolService {
       ];
     }
 
-    // Get ALL applications first (Flattened Rows) to determine matches and total
-    const allApplications = await this.prisma.candidateApplication.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'desc' },
-      select: { 
-          id: true, 
-          candidateId: true 
-      }
-    });
+    // Get total matching count and only the paginated application IDs from DB
+    const [total, pagedApps] = await Promise.all([
+      this.prisma.candidateApplication.count({
+        where: whereClause,
+      }),
+      this.prisma.candidateApplication.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        select: {
+          id: true,
+        },
+      }),
+    ]);
 
-    const total = allApplications.length;
-
-    // Identify the IDs for the current page
-    const pagedAppIds = allApplications
-        .slice(skip, skip + take)
-        .map(app => app.id);
+    const pagedAppIds = pagedApps.map(app => app.id);
 
     if (pagedAppIds.length === 0) {
         return { candidates: [], total };
@@ -1292,6 +1406,11 @@ export class TalentPoolService {
             skills: true,
             certifications: true,
             organizationExperiences: true,
+            documents: {
+              include: {
+                documentType: true,
+              },
+            },
           },
         },
         jobVacancy: {
@@ -1304,6 +1423,79 @@ export class TalentPoolService {
         },
       },
     });
+
+    // Ensure all candidates have a CandidateDocument record for their CV if they have cvFileUrl
+    const cvDocType = await this.prisma.documentType.findFirst({
+      where: {
+        documentType: {
+          contains: 'cv',
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    if (cvDocType) {
+      const processedCandidateIds = new Set<string>();
+      for (const app of pagedApplications) {
+        const candidate = app.candidate;
+        if (candidate && candidate.cvFileUrl && !processedCandidateIds.has(candidate.id)) {
+          processedCandidateIds.add(candidate.id);
+
+          const cvDocs = await this.prisma.candidateDocument.findMany({
+            where: {
+              candidateId: candidate.id,
+              documentTypeId: cvDocType.id,
+            },
+            orderBy: {
+              createdAt: 'asc',
+            },
+          });
+
+          if (cvDocs.length === 0) {
+            try {
+              const newDoc = await this.prisma.candidateDocument.create({
+                data: {
+                  candidateId: candidate.id,
+                  documentTypeId: cvDocType.id,
+                  filePath: candidate.cvStorageType === 'MINIO' ? `./uploads/documents/cv/${candidate.cvFileName || 'cv.pdf'}` : `.${candidate.cvFileUrl}`,
+                  objectKey: candidate.cvStorageType === 'MINIO' ? candidate.cvFileUrl : null,
+                  bucket: this.storageService.getDocumentsBucket(),
+                  storageType: candidate.cvStorageType || 'LOCAL',
+                  mimeType: 'application/pdf',
+                  sizeBytes: 0,
+                  originalName: candidate.cvFileName || 'cv.pdf',
+                  uploadStatus: 'CONFIRMED',
+                },
+                include: {
+                  documentType: true,
+                },
+              });
+              if (!(candidate as any).documents) (candidate as any).documents = [];
+              (candidate as any).documents.push(newDoc);
+              this.logger.log(`Created missing CV document record for candidate ${candidate.id}`);
+            } catch (err: any) {
+              this.logger.error(`Failed to create missing CV document record: ${err.message}`);
+            }
+          } else {
+            if (cvDocs.length > 1) {
+              const idsToDelete = cvDocs.slice(1).map(d => d.id);
+              await this.prisma.candidateDocument.deleteMany({
+                where: {
+                  id: { in: idsToDelete },
+                },
+              });
+              this.logger.log(`Cleaned up ${idsToDelete.length} duplicate CV documents for candidate ${candidate.id}`);
+            }
+            const firstCv = cvDocs[0];
+            (firstCv as any).documentType = cvDocType;
+            const otherDocs = (candidate as any).documents?.filter(
+              (d: any) => d.documentTypeId !== cvDocType.id
+            ) || [];
+            (candidate as any).documents = [...otherDocs, firstCv];
+          }
+        }
+      }
+    }
 
     // Group applications by candidate for the response
     const candidateMap = new Map<string, any>();

@@ -7,6 +7,17 @@ datasource db {
   provider = "postgresql"
 }
 
+// MinIO storage enums
+enum StorageType {
+  LOCAL
+  MINIO
+}
+
+enum UploadStatus {
+  PENDING
+  CONFIRMED
+}
+
 
 model User {
   id                        String                    @id @default(uuid())
@@ -596,6 +607,7 @@ model Candidate {
   cvFileUrl                 String?                           @map("cv_file_url")
   cvFileName                String?                           @map("cv_file_name")
   profilePhotoUrl           String?                           @map("profile_photo_url")
+  cvStorageType             StorageType                       @default(LOCAL) @map("cv_storage_type")
   applications              CandidateApplication[]
   certifications            CandidateCertification[]
   documents                 CandidateDocument[]
@@ -763,6 +775,13 @@ model CandidateDocument {
   candidateId    String       @map("candidate_id")
   documentTypeId String       @map("document_type_id")
   filePath       String       @map("file_path")
+  objectKey      String?      @map("object_key")
+  bucket         String?
+  storageType    StorageType  @default(LOCAL) @map("storage_type")
+  mimeType       String?      @map("mime_type")
+  sizeBytes      Int?         @map("size_bytes")
+  originalName   String?      @map("original_name")
+  uploadStatus   UploadStatus @default(CONFIRMED) @map("upload_status")
   extractedText  String?      @map("extracted_text")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
@@ -800,6 +819,7 @@ model TalentPoolQueue {
   status      TalentPoolQueueStatus @default(PENDING)
   errorMsg    String?               @map("error_msg")
   processedAt DateTime?             @map("processed_at")
+  objectKey   String?               @map("object_key")
   createdAt   DateTime              @default(now()) @map("created_at")
   batch       TalentPoolBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
 

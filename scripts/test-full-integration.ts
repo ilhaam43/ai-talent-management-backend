@@ -10,7 +10,7 @@ import * as dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 // Test user credentials
 const TEST_USER = {
@@ -384,7 +384,7 @@ async function updateProfile() {
       return {
         companyName: work.company || '',
         jobTitle: work.position || '',
-        jobType: work.jobType || 'FULL_TIME',
+        jobType: ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'FREELANCE', 'INTERNSHIP'].includes(work.jobType?.toUpperCase().replace('-', '_')) ? work.jobType.toUpperCase().replace('-', '_') : 'FULL_TIME',
         fieldOfWork: work.fieldOfWork || '',
         industry: work.industry || '',
         employmentStartedDate: toISODate(work.startDate) || new Date().toISOString(),

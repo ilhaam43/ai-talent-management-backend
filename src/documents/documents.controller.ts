@@ -26,6 +26,11 @@ import {
 } from '@nestjs/swagger';
 import { DocumentsService } from './documents.service';
 import { UploadDocumentDto } from './dto/upload-document.dto';
+import {
+  RequestPresignedUploadDto,
+  PresignedUploadResponseDto,
+  PresignedDownloadResponseDto,
+} from '../storage/dto/presigned-url.dto';
 import { multerConfig, getFolderFromDocumentType } from './config/multer.config';
 import { Response, NextFunction } from 'express';
 import * as fs from 'fs';
@@ -172,9 +177,11 @@ export class DocumentsController {
     @Req() req: any,
   ) {
     const candidateId = req.user.candidateId;
+    const isHrOrAdmin = req.user.role === 'HUMAN RESOURCES' || req.user.role === 'ADMIN';
     const document = await this.documentsService.getDocumentById(
       documentId,
-      candidateId,
+      candidateId || '',
+      isHrOrAdmin,
     );
 
     return {
@@ -200,9 +207,11 @@ export class DocumentsController {
     @Res() res: Response,
   ) {
     const candidateId = req.user.candidateId;
+    const isHrOrAdmin = req.user.role === 'HUMAN RESOURCES' || req.user.role === 'ADMIN';
     const document = await this.documentsService.getDocumentById(
       documentId,
-      candidateId,
+      candidateId || '',
+      isHrOrAdmin,
     );
 
     // Check if file exists
@@ -240,4 +249,75 @@ export class DocumentsController {
     const candidateId = req.user.candidateId;
     return this.documentsService.deleteDocument(documentId, candidateId);
   }
+
+  @Post('presigned-upload')
+  @ApiOperation({
+    summary: 'Request presigned upload URL',
+    description: 'Generates a signed URL to upload a document directly to MinIO. The document status is PENDING until confirmed.'
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Presigned upload URL generated successfully',
+    type: PresignedUploadResponseDto,
+  })
+  async getPresignedUploadUrl(
+    @Body() dto: RequestPresignedUploadDto,
+    @Req() req: any,
+  ): Promise<PresignedUploadResponseDto> {
+    const candidateId = req.user.candidateId;
+    if (!candidateId) {
+      throw new BadRequestException('User does not have a candidate profile');
+    }
+    return this.documentsService.getPresignedUploadUrl(
+      candidateId,
+      dto.documentTypeId,
+      dto.filename,
+      dto.contentType,
+      dto.sizeBytes,
+      dto.module,
+    );
+  }
+
+  @Post(':documentId/confirm-upload')
+  @ApiOperation({
+    summary: 'Confirm presigned upload complete',
+    description: 'Verifies the uploaded file exists in MinIO and marks it as CONFIRMED.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Upload confirmed successfully',
+  })
+  async confirmUpload(
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() req: any,
+  ) {
+    const candidateId = req.user.candidateId;
+    if (!candidateId) {
+      throw new BadRequestException('User does not have a candidate profile');
+    }
+    return this.documentsService.confirmUpload(documentId, candidateId);
+  }
+
+  @Get(':documentId/download-url')
+  @ApiOperation({
+    summary: 'Get presigned download URL',
+    description: 'Generates a signed URL to read/download a private document from MinIO.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Presigned download URL generated successfully',
+    type: PresignedDownloadResponseDto,
+  })
+  async getDownloadUrl(
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() req: any,
+  ): Promise<PresignedDownloadResponseDto> {
+    const candidateId = req.user.candidateId;
+    const isHrOrAdmin = req.user.role === 'HUMAN RESOURCES' || req.user.role === 'ADMIN';
+    if (!isHrOrAdmin && !candidateId) {
+      throw new BadRequestException('User does not have a candidate profile');
+    }
+    return this.documentsService.getPresignedDownloadUrl(documentId, candidateId || '', isHrOrAdmin);
+  }
 }
+

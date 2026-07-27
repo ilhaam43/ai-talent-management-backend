@@ -107,13 +107,14 @@ export class TalentPoolRepository {
 
   async createQueueItems(
     batchId: string,
-    files: { fileUrl: string; fileName: string }[],
+    files: { fileUrl: string; fileName: string; objectKey?: string }[],
   ): Promise<{ count: number }> {
     return this.prisma.talentPoolQueue.createMany({
       data: files.map((file) => ({
         batchId,
         fileUrl: file.fileUrl,
         fileName: file.fileName,
+        objectKey: file.objectKey || null,
         status: 'PENDING' as any,
       })),
     });
@@ -146,6 +147,42 @@ export class TalentPoolRepository {
         batch: true,
       },
     });
+  }
+
+  /**
+   * Atomically claim the next PENDING queue item in a batch and mark it as PROCESSING
+   */
+  async claimNextPendingInBatch(batchId: string): Promise<any | null> {
+    const items = await this.prisma.$queryRaw<any[]>`
+      UPDATE "talent_pool_queue"
+      SET "status" = 'PROCESSING'::"TalentPoolQueueStatus", "processed_at" = NOW()
+      WHERE "id" = (
+        SELECT "id"
+        FROM "talent_pool_queue"
+        WHERE "batch_id" = ${batchId} AND "status" = 'PENDING'::"TalentPoolQueueStatus"
+        ORDER BY "created_at" ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `;
+
+    if (!items || items.length === 0) {
+      return null;
+    }
+
+    const rawItem = items[0];
+    return {
+      id: rawItem.id,
+      batchId: rawItem.batch_id,
+      fileUrl: rawItem.file_url,
+      fileName: rawItem.file_name,
+      status: rawItem.status,
+      errorMsg: rawItem.error_msg,
+      processedAt: rawItem.processed_at,
+      objectKey: rawItem.object_key,
+      createdAt: rawItem.created_at,
+    };
   }
 
   async updateQueueItemStatus(

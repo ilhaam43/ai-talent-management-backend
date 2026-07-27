@@ -435,8 +435,25 @@ async function main() {
         if (vacancy.jobRoleId && vacancy.employeePositionId && vacancy.divisionId) {
             const { skills, ...vacancyData } = vacancy;
             try {
+                // Check if existing vacancy with same role, position, division, and location
+                const existing = await prisma.jobVacancy.findFirst({
+                    where: {
+                        jobRoleId: vacancy.jobRoleId,
+                        employeePositionId: vacancy.employeePositionId,
+                        divisionId: vacancy.divisionId,
+                        cityLocation: vacancyData.cityLocation,
+                    }
+                });
+
+                if (existing) {
+                    createdCount++;
+                    console.log(`✓ Job vacancy for role "${vacancy.jobRoleId}" already exists (${createdCount}/16)`);
+                    continue;
+                }
+
                 // Fetch skill IDs
                 const skillIds: string[] = [];
+
                 if (skills && skills.length > 0) {
                     const skillRecords = await prisma.skill.findMany({
                         where: { skillName: { in: skills } }

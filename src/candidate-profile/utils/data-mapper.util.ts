@@ -59,15 +59,15 @@ export function parseDate(dateString?: string | number | null): Date | null {
  * Map string to JobType string
  */
 export function mapJobType(jobTypeString?: string | null): string {
-  if (!jobTypeString) return 'FULL_TIME';
+  if (!jobTypeString) return 'FULL-TIME';
 
   const normalized = jobTypeString.toUpperCase().replace(/[^A-Z]/g, '_');
   
   if (normalized.includes('FULL_TIME') || normalized.includes('FULLTIME')) {
-    return 'FULL_TIME';
+    return 'FULL-TIME';
   }
   if (normalized.includes('PART_TIME') || normalized.includes('PARTTIME')) {
-    return 'PART_TIME';
+    return 'PART-TIME';
   }
   if (normalized.includes('CONTRACT')) {
     return 'CONTRACT';
@@ -79,7 +79,7 @@ export function mapJobType(jobTypeString?: string | null): string {
     return 'FREELANCE';
   }
 
-  return 'FULL_TIME'; // Default
+  return 'FULL-TIME'; // Default
 }
 
 /**

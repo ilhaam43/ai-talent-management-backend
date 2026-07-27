@@ -12,8 +12,6 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-// import { diskStorage } from 'multer';
-// import { extname } from 'path';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PipelineActionsService } from './pipeline-actions.service';
@@ -93,6 +91,15 @@ export class PipelineActionsController {
     @ApiResponse({ status: 200, description: 'Result parsed and summary saved' })
     async parseResult(@Param('pipelineId') pipelineId: string) {
         return this.service.parseResult(pipelineId);
+    }
+
+    @Get(':pipelineId/result-download-url')
+    @UseGuards(AuthGuard('jwt'), RolesGuard)
+    @Roles('HUMAN RESOURCES')
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get presigned download URL for vendor assessment result' })
+    async getResultDownloadUrl(@Param('pipelineId') pipelineId: string) {
+        return this.service.getResultDownloadUrl(pipelineId);
     }
 
     // ─── Query ─────────────────────────────────────────────────────────

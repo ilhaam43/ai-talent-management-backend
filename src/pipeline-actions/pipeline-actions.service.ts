@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../database/prisma.service';
 import { TextExtractorService } from '../cv-parser/parsers/text-extractor.service';
 import { LLMParserService } from '../cv-parser/parsers/llm-parser.service';
+import { StorageService } from '../storage/storage.service';
 import { QualifyDto, DisqualifyDto } from './dto/qualify.dto';
 import { CreateOnlineAssessmentDto } from './dto/online-assessment.dto';
 import { stripHtmlTags } from '../common/utils/sanitize.util';
@@ -26,6 +27,7 @@ export class PipelineActionsService {
         private readonly prisma: PrismaService,
         private readonly textExtractor: TextExtractorService,
         private readonly llmParser: LLMParserService,
+        private readonly storageService: StorageService,
     ) { }
 
     /**
@@ -279,10 +281,19 @@ export class PipelineActionsService {
             throw new BadRequestException('No online assessment found for this stage. Create assessment first.');
         }
 
+        const candidateId = pipeline.candidateApplication?.candidate?.id || 'unknown';
+        const docId = pipeline.onlineAssessment.id;
+        
+        // Save as assessment-results/[candidateID]/[documentID].pdf
+        const objectKey = `assessment-results/${candidateId}/${docId}.pdf`;
+        
+        // Upload to MinIO
+        await this.storageService.uploadBuffer(objectKey, file.buffer, 'application/pdf');
+
         const assessment = await this.prisma.candidateOnlineAssessment.update({
             where: { id: pipeline.onlineAssessment.id },
             data: {
-                vendorResultFileUrl: file.path,
+                vendorResultFileUrl: objectKey,
                 vendorResultFileName: file.originalname,
             },
         });
@@ -310,21 +321,41 @@ export class PipelineActionsService {
             throw new BadRequestException('No vendor result file uploaded yet.');
         }
 
-        // Extract text from PDF
-        const extractedText = await this.textExtractor.extractText(
-            pipeline.onlineAssessment.vendorResultFileUrl,
-            'application/pdf',
-        );
+        let extractedText = '';
+        
+        try {
+            // If it's a MinIO key (doesn't start with 'uploads/' or 'C:'), download it as a buffer
+            if (!pipeline.onlineAssessment.vendorResultFileUrl.startsWith('uploads/') && !pipeline.onlineAssessment.vendorResultFileUrl.includes(':')) {
+                const buffer = await this.storageService.downloadToBuffer(pipeline.onlineAssessment.vendorResultFileUrl);
+                extractedText = await this.textExtractor.extractTextFromBuffer(buffer, 'application/pdf');
+            } else {
+                // Backward compatibility for existing local files
+                extractedText = await this.textExtractor.extractText(
+                    pipeline.onlineAssessment.vendorResultFileUrl,
+                    'application/pdf',
+                );
+            }
+        } catch (error: any) {
+            this.logger.warn(`Failed to extract text from PDF: ${error.message}. Proceeding with fallback summary.`);
+            extractedText = ''; // proceed with empty text
+        }
 
         // 1. Try to extract Role Fit score directly from PDF text
-        const roleFitScore = this.extractRoleFitScore(extractedText);
-        this.logger.log(`Extracted Role Fit Score: ${roleFitScore ?? 'not found'}`);
+        let roleFitScore = null;
+        let summary = '';
+        
+        if (extractedText.length > 0) {
+            roleFitScore = this.extractRoleFitScore(extractedText);
+            this.logger.log(`Extracted Role Fit Score: ${roleFitScore ?? 'not found'}`);
 
-        // 2. Try to extract structured summary from PDF text
-        let summary = this.extractStructuredSummary(extractedText);
+            // 2. Try to extract structured summary from PDF text
+            summary = this.extractStructuredSummary(extractedText);
+        }
 
-        // 3. If summary extraction failed or is too short, fall back to LLM
-        if ((!summary || summary.length < 100) && this.llmParser.isAvailable()) {
+        // 3. If summary extraction failed or is too short, fall back to LLM or basic summary
+        if (extractedText.length === 0) {
+            summary = "**Assessment Result:**\n\nUnable to extract text automatically (document may be a scanned image or unsupported format). Please click 'View Result' to read the document manually.";
+        } else if ((!summary || summary.length < 100) && this.llmParser.isAvailable()) {
             try {
                 summary = await this.parseSummaryWithLLM(extractedText);
             } catch (error: any) {
@@ -335,14 +366,21 @@ export class PipelineActionsService {
             summary = this.createBasicSummary(extractedText);
         }
 
-        // Sanitize final summary to prevent XSS (since it includes untrusted inputs or LLM outputs)
+        // 4. Prepend "Role Fit Score: XX%" into the summary so frontend can read it
+        if (roleFitScore !== null) {
+            summary = `**Role Fit Score: ${roleFitScore}%**\n\n${summary}`;
+        }
+
+        // Sanitize final summary to prevent XSS
         summary = stripHtmlTags(summary);
 
-        // 4. Save summary (roleFitScore is in the summary text + returned in response)
-        // NOTE: roleFitScore DB column requires a backend restart after prisma generate
+        // 5. Save both parsedResultSummary and roleFitScore to DB
         const assessment = await this.prisma.candidateOnlineAssessment.update({
             where: { id: pipeline.onlineAssessment.id },
-            data: { parsedResultSummary: summary },
+            data: {
+                parsedResultSummary: summary,
+                roleFitScore: roleFitScore ?? undefined,
+            },
         });
 
         return {
@@ -350,6 +388,21 @@ export class PipelineActionsService {
             roleFitScore,
             data: assessment,
         };
+    }
+
+    /**
+     * Get presigned download URL for vendor result PDF
+     */
+    async getResultDownloadUrl(pipelineId: string) {
+        this.logger.log(`Getting download URL for assessment result in pipeline: ${pipelineId}`);
+        const pipeline = await this.getPipeline(pipelineId);
+
+        if (!pipeline.onlineAssessment || !pipeline.onlineAssessment.vendorResultFileUrl) {
+            throw new NotFoundException('Vendor result file not found');
+        }
+
+        const url = await this.storageService.getPresignedDownloadUrl(pipeline.onlineAssessment.vendorResultFileUrl);
+        return { url };
     }
 
     /**
@@ -361,12 +414,10 @@ export class PipelineActionsService {
         const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
         // Strategy 1: Look for a standalone percentage on a line after the header section
-        // Pulsifi format: near the top, there's a bare "54%" followed by "Breakdown"
         for (let i = 0; i < Math.min(lines.length, 80); i++) {
             const line = lines[i];
             const nextLine = lines[i + 1] || '';
 
-            // Match a standalone percentage line like "54%" followed by "Breakdown"
             const standaloneMatch = line.match(/^(\d{1,3})%$/);
             if (standaloneMatch && nextLine.toLowerCase().includes('breakdown')) {
                 const val = parseInt(standaloneMatch[1], 10);
@@ -374,9 +425,16 @@ export class PipelineActionsService {
             }
         }
 
-        // Strategy 2: Look for "Role Fit" followed by a percentage nearby
-        const roleFitIndex = lines.findIndex(l => l.toLowerCase() === 'role fit');
+        // Strategy 2: Look for "Role Fit" anywhere on the line
+        const roleFitIndex = lines.findIndex(l => l.toLowerCase().includes('role fit'));
         if (roleFitIndex !== -1) {
+            // Check the exact same line first
+            const sameLineMatch = lines[roleFitIndex].match(/(\d{1,3})%/);
+            if (sameLineMatch) {
+                const val = parseInt(sameLineMatch[1], 10);
+                if (val >= 1 && val <= 100) return val;
+            }
+            
             for (let i = Math.max(0, roleFitIndex - 5); i < Math.min(lines.length, roleFitIndex + 10); i++) {
                 const match = lines[i].match(/(\d{1,3})%/);
                 if (match) {
@@ -439,7 +497,7 @@ export class PipelineActionsService {
             const items: string[] = [];
             for (let i = idx + 1; i < Math.min(lines.length, idx + 10); i++) {
                 const l = lines[i];
-                if (l.startsWith('What') || l.startsWith('SKILLS') || l.startsWith('Key Highlights') || l.length < 5) break;
+                if (l.startsWith('What') || l.toUpperCase().startsWith('SKILLS') || l.startsWith('Key Highlights') || l.length < 5) break;
                 // Skip page footers
                 if (l.includes('© Pulsifi') || l.match(/^\d+$/)) break;
                 items.push(l);

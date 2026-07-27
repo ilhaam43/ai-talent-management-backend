@@ -140,16 +140,20 @@ export class LLMParserService {
   "socialMedia": {"linkedin":"","instagram":"","github":""},
   "education": [{"university":"","major":"","educationLevel":"","gpa":"","gpaMax":"","startYear":"","endYear":"","city":"","country":""}],
   "workExperience": [{"company":"","position":"","jobType":"","startDate":"","endDate":"","description":""}],
-  "organizationExperience": [{"organization":"","role":"","startDate":"","endDate":""}],
+  "organizationExperience": [{"organization":"","role":"","startDate":"","endDate":"","description":""}],
   "skills": ["skill1","skill2"],
   "certifications": [{"name":"Certification Title 1","issuer":""},{"name":"Certification Title 2","issuer":""}]
 }
 
-CRITICAL RULES:
-1. certifications: Create ONE SEPARATE OBJECT for EACH certificate. DO NOT combine multiple certifications into one entry.
-2. If CV has 18 certifications, output array must have 18 separate objects.
-3. For multi-line certification names in CV, combine into one complete title per object.
-4. skills: Extract individual technical skills only as separate strings.
+CRITICAL CLASSIFICATION & FORMATTING RULES:
+1. WORK EXPERIENCE vs ORGANIZATION EXPERIENCE:
+   - "workExperience": ONLY include professional company employment, corporate internships, paid jobs, academies traineeships.
+   - "organizationExperience": MUST include campus student associations (e.g., HIMA, BEM), event committees (e.g., IT-TODAY committee, Competition Liaison Officer / Committee), student clubs, and volunteer groups. DO NOT put student committees or campus organizations in workExperience.
+2. DATE FORMATTING:
+   - Format ALL "startDate" and "endDate" fields in standard ISO "YYYY-MM-DD" or "YYYY-MM" (e.g., "Feb. 2025" -> "2025-02-01", "June 2025" -> "2025-06-01", "Aug. 2024" -> "2024-08-01").
+   - If ongoing, set endDate to "Present" or null.
+3. CERTIFICATIONS: Create ONE SEPARATE OBJECT for EACH certificate. Combine multi-line certification names into one complete title per object.
+4. SKILLS: Extract individual technical skills as separate strings.
 5. Use null for missing fields.
 
 CV:

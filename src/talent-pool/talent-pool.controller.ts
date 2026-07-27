@@ -26,8 +26,7 @@ import { UploadTalentPoolDto, UploadLinkDto } from './dto/upload.dto';
 import { N8nCallbackDto } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
 import { ConvertCandidateDto } from './dto/convert-candidate.dto';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 
 // HR Status enum for API docs (matches Prisma)
@@ -79,13 +78,8 @@ export class TalentPoolController {
       throw new BadRequestException('Employee profile not found. Only HR employees can upload.');
     }
 
-    // Convert uploaded files to file info
-    const fileInfos = files.map((file) => ({
-      fileUrl: `/uploads/talent-pool/${file.filename}`,
-      fileName: file.originalname,
-    }));
-
-    return this.service.createBatchUpload(employee.id, dto, fileInfos);
+    // We pass the raw memory files directly to the service now
+    return this.service.createBatchUpload(employee.id, dto, files);
   }
 
   @Post('upload-link')

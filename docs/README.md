@@ -25,6 +25,11 @@ Welcome to the documentation for AI Talent Management Backend. This documentatio
 - Walkthrough
 - API Summary
 
+#### Issue #61: E2E Verification of Candidate Onboarding and Screening Flow
+📁 **[issue-61-candidate-flow-verification/](./issue-61-candidate-flow-verification/)** - Verification documentation for candidate onboarding and screening flow.
+- Implementation Plan
+- Walkthrough
+
 #### Future Issues
 - Issue #3: Edit Settings API
 - Issue #4: Edit Candidate Profile API
@@ -47,6 +52,7 @@ Welcome to the documentation for AI Talent Management Backend. This documentatio
 
 ### Implementation Details
 - [Issue #2: CV Upload & Parse](./issue-2-cv-upload-parse/)
+- [Issue #61: Candidate Flow Verification](./issue-61-candidate-flow-verification/)
 
 ## 📖 Documentation Standards
 
@@ -64,5 +70,5 @@ When adding new implementations:
 
 ---
 
-**Last Updated**: December 8, 2025
+**Last Updated**: July 6, 2026
 

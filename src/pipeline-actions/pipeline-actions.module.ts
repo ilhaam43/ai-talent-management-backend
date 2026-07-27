@@ -6,9 +6,10 @@ import { PipelineActionsService } from './pipeline-actions.service';
 import { TextExtractorService } from '../cv-parser/parsers/text-extractor.service';
 import { LLMParserService } from '../cv-parser/parsers/llm-parser.service';
 import { ConfigModule } from '@nestjs/config';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
-    imports: [DatabaseModule, ConfigModule],
+    imports: [DatabaseModule, ConfigModule, StorageModule],
     controllers: [PipelineActionsController],
     providers: [PipelineActionsService, TextExtractorService, LLMParserService],
     exports: [PipelineActionsService],

@@ -14,8 +14,21 @@ const lastEducations = [
     'S1',
     'S2',
     'S3',
+    'D1',
+    'D2',
     'D3',
     'D4',
+    'Bachelor',
+    'Master',
+    'Doctorate',
+    'PhD',
+    'Diploma',
+    'High School',
+    'SMA / SMK Sederajat',
+    'Diploma (D1/D2/D3)',
+    'Sarjana (S1)',
+    'Magister (S2)',
+    'Doktor (S3)',
 ];
 
 async function main() {

@@ -83,8 +83,19 @@ async function main() {
         }
 
         // C. Reference Data: Pipeline & Status
-        const pipeline = await prisma.applicationPipeline.findFirst({ where: { applicationPipeline: item.stage } });
-        if (!pipeline) throw new Error(`Pipeline ${item.stage} not found. Run seed-application-pipelines.ts first.`);
+        let stageName = item.stage;
+        if (stageName === 'INTERVIEW USER 1') stageName = 'User Interview 1';
+        if (stageName === 'INTERVIEW USER 2') stageName = 'User Interview 2';
+        if (stageName === 'INTERVIEW USER 3') stageName = 'User Interview 3';
+        if (stageName === 'AI SCREENING') stageName = 'Ai Screening';
+
+        const pipeline = await prisma.applicationPipeline.findFirst({ 
+            where: { 
+                applicationPipeline: stageName
+            } 
+        });
+        if (!pipeline) throw new Error(`Pipeline ${stageName} (originally ${item.stage}) not found. Run seed-application-pipelines.ts first.`);
+
 
         const status = await prisma.applicationLastStatus.findFirst({ where: { applicationLastStatus: item.status } });
         if (!status) throw new Error(`Status ${item.status} not found. Run seed-application-last-statuses.ts first.`);
@@ -161,9 +172,10 @@ async function main() {
             }
         });
 
+        let app: any;
         if (existingApp) {
             console.log(`Updating existing application for ${item.name}`);
-            await prisma.candidateApplication.update({
+            app = await prisma.candidateApplication.update({
                 where: { id: existingApp.id },
                 data: {
                     fitScore: item.score,
@@ -181,7 +193,7 @@ async function main() {
             });
         } else {
             console.log(`Creating application for ${item.name}`);
-            await prisma.candidateApplication.create({
+            app = await prisma.candidateApplication.create({
                 data: {
                     candidateId: candidate.id,
                     jobVacancyId: vacancy.id,
@@ -201,6 +213,45 @@ async function main() {
                     resultSummary: `Candidate has good potential for ${item.job}. Recommended for interview.`,
                 }
             });
+        }
+
+        // Seed initial candidateApplicationPipeline
+        const pipelineStatusName = (item.status === 'Passed' || item.status === 'Pass' || item.status === 'PASSED')
+            ? 'Qualified'
+            : (item.status === 'Failed' || item.status === 'Not Pass' || item.status === 'NOT_PASS')
+                ? 'Not Qualified'
+                : 'Pending';
+
+        let pipelineStatus = await prisma.applicationPipelineStatus.findFirst({
+            where: { applicationPipelineStatus: pipelineStatusName }
+        });
+        if (!pipelineStatus) {
+            pipelineStatus = await prisma.applicationPipelineStatus.findFirst({
+                where: { applicationPipelineStatus: 'Pending' }
+            });
+        }
+        if (!pipelineStatus) {
+            pipelineStatus = await prisma.applicationPipelineStatus.findFirst();
+        }
+
+        if (pipelineStatus) {
+            const existingPipelineRecord = await prisma.candidateApplicationPipeline.findFirst({
+                where: {
+                    candidateApplicationId: app.id,
+                    applicationPipelineId: pipeline.id,
+                }
+            });
+
+            if (!existingPipelineRecord) {
+                await prisma.candidateApplicationPipeline.create({
+                    data: {
+                        candidateApplicationId: app.id,
+                        applicationPipelineId: pipeline.id,
+                        applicationPipelineStatusId: pipelineStatus.id,
+                        notes: 'Initial seeded pipeline stage',
+                    }
+                });
+            }
         }
     }
 
