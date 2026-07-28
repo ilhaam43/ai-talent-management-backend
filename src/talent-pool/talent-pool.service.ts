@@ -495,102 +495,6 @@ export class TalentPoolService {
     }
   }
 
-
-    if (!candidate) {
-      this.logger.log(`No registered candidate found for email: ${email}`);
-      return;
-    }
-
-    this.logger.log(`Found registered candidate ${candidate.id} for email: ${email}`);
-
-    // Get candidate's salary (or create default)
-    let candidateSalary = await this.prisma.candidateSalary.findFirst({
-      where: { candidateId: candidate.id },
-    });
-
-    if (!candidateSalary) {
-      candidateSalary = await this.prisma.candidateSalary.create({
-        data: { candidateId: candidate.id },
-      });
-    }
-
-    // Get pipeline stages and statuses
-    const screeningStage = await this.prisma.applicationPipeline.findFirst({
-      where: { applicationPipeline: 'Screening' },
-    });
-    const qualifiedStatus = await this.prisma.applicationLastStatus.findFirst({
-      where: { applicationLastStatus: 'Qualified' },
-    });
-    const qualifiedPipelineStatus = await this.prisma.applicationPipelineStatus.findFirst({
-      where: { applicationPipelineStatus: 'Qualified' },
-    });
-    const appliedStage = await this.prisma.applicationPipeline.findFirst({
-      where: { applicationPipeline: 'Applied' },
-    });
-
-    if (!screeningStage || !qualifiedStatus || !qualifiedPipelineStatus || !appliedStage) {
-      this.logger.warn('Required pipeline stages/statuses not found - skipping application creation');
-      return;
-    }
-
-    // Create CandidateApplication for each qualified screening
-    for (const screening of screenings) {
-      if (screening.fitScore < 65 && screening.aiMatchStatus === 'NOT_MATCH') {
-        continue; // Skip unqualified
-      }
-
-      // Check if application already exists
-      const existingApp = await this.prisma.candidateApplication.findFirst({
-        where: {
-          candidateId: candidate.id,
-          jobVacancyId: screening.jobVacancyId,
-        },
-      });
-
-      if (existingApp) {
-        this.logger.log(`Application already exists for job ${screening.jobVacancyId}`);
-        continue;
-      }
-
-      // Create application
-      const application = await this.prisma.candidateApplication.create({
-        data: {
-          candidateId: candidate.id,
-          jobVacancyId: screening.jobVacancyId,
-          candidateSalaryId: candidateSalary.id,
-          applicationLatestStatusId: qualifiedStatus.id,
-          applicationPipelineId: screeningStage.id,
-          fitScore: screening.fitScore,
-          aiInsight: stripHtmlTags(screening.aiInsight),
-          aiInterview: stripHtmlTags(screening.aiInterview),
-          aiCoreValue: stripHtmlTags(screening.aiCoreValue),
-          aiMatchStatus: screening.aiMatchStatus as any,
-          submissionDate: new Date(),
-        },
-      });
-
-      // Create pipeline entries
-      await this.prisma.candidateApplicationPipeline.createMany({
-        data: [
-          {
-            candidateApplicationId: application.id,
-            applicationPipelineId: appliedStage.id,
-            applicationPipelineStatusId: qualifiedPipelineStatus.id,
-            notes: 'Automatically created from Talent Pool screening',
-          },
-          {
-            candidateApplicationId: application.id,
-            applicationPipelineId: screeningStage.id,
-            applicationPipelineStatusId: qualifiedPipelineStatus.id,
-            notes: 'Automatically qualified based on Talent Pool AI screening',
-          },
-        ],
-      });
-
-      this.logger.log(`Created CandidateApplication for job ${screening.jobVacancyId}`);
-    }
-  }
-
   /**
    * Check if batch is complete and notify HR
    */
@@ -1056,7 +960,7 @@ export class TalentPoolService {
    */
   async convertToActivePipeline(
     candidateId: string,
-    targetPipelineStage: 'HR Interview' | 'User Interview 1' | 'User Interview 2' | 'User Interview 3' | 'Online Assessment',
+    targetPipelineStage: string,
     targetApplicationIds?: string[],
   ): Promise<{
     success: boolean;
@@ -1108,9 +1012,8 @@ export class TalentPoolService {
       throw new NotFoundException('Pipeline status "Qualified" not found');
     }
 
-    const precedingStages = targetPipelineStage.toLowerCase() === 'ai screening'
-      ? []
-      : ['Ai Screening'];
+    const isAiScreening = targetPipelineStage.toLowerCase() === 'ai screening';
+    const precedingStages: string[] = isAiScreening ? [] : ['Ai Screening'];
 
     // Generate password reset token (24 hours validity)
     const resetToken = crypto.randomBytes(32).toString('hex');
