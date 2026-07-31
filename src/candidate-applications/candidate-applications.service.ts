@@ -1421,6 +1421,8 @@ export class CandidateApplicationsService {
             certifications: true,
             organizationExperiences: true,
             documents: { include: { documentType: true } },
+            families: true,
+            familiesLintasarta: true,
             religion: true,
             maritalStatus: true,
             gender: true,
@@ -1460,7 +1462,28 @@ export class CandidateApplicationsService {
       throw new NotFoundException(`Application not found: ${id}`);
     }
 
-    return application;
+    let address = null;
+    if (application.candidate?.candidateAddressId) {
+      address = await this.prisma.candidateAddress.findUnique({
+        where: { id: application.candidate.candidateAddressId },
+      });
+    }
+
+    let currentAddress = null;
+    if (application.candidate?.candidateCurrentAddressId) {
+      currentAddress = await this.prisma.candidateCurrentAddress.findUnique({
+        where: { id: application.candidate.candidateCurrentAddressId },
+      });
+    }
+
+    return {
+      ...application,
+      candidate: {
+        ...application.candidate,
+        address,
+        currentAddress,
+      },
+    };
   }
 
 

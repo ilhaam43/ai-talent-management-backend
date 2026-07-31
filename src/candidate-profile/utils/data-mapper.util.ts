@@ -59,15 +59,15 @@ export function parseDate(dateString?: string | number | null): Date | null {
  * Map string to JobType string
  */
 export function mapJobType(jobTypeString?: string | null): string {
-  if (!jobTypeString) return 'FULL-TIME';
+  if (!jobTypeString) return 'FULL_TIME';
 
   const normalized = jobTypeString.toUpperCase().replace(/[^A-Z]/g, '_');
   
   if (normalized.includes('FULL_TIME') || normalized.includes('FULLTIME')) {
-    return 'FULL-TIME';
+    return 'FULL_TIME';
   }
   if (normalized.includes('PART_TIME') || normalized.includes('PARTTIME')) {
-    return 'PART-TIME';
+    return 'PART_TIME';
   }
   if (normalized.includes('CONTRACT')) {
     return 'CONTRACT';
@@ -79,7 +79,7 @@ export function mapJobType(jobTypeString?: string | null): string {
     return 'FREELANCE';
   }
 
-  return 'FULL-TIME'; // Default
+  return 'FULL_TIME'; // Default
 }
 
 /**
@@ -228,27 +228,27 @@ export function mapFamilyStatus(statusString?: string | null): FamilyStatus | nu
  * Map string to CandidateRating string
  */
 export function mapCandidateRating(ratingString?: string | null): string {
-  if (!ratingString) return '3'; // Default
+  if (!ratingString) return 'THREE'; // Default
 
   const normalized = ratingString.toUpperCase();
   
   if (normalized.includes('ONE') || normalized === '1' || normalized.includes('BEGINNER')) {
-    return '1';
+    return 'ONE';
   }
   if (normalized.includes('TWO') || normalized === '2' || normalized.includes('BASIC')) {
-    return '2';
+    return 'TWO';
   }
   if (normalized.includes('THREE') || normalized === '3' || normalized.includes('INTERMEDIATE')) {
-    return '3';
+    return 'THREE';
   }
   if (normalized.includes('FOUR') || normalized === '4' || normalized.includes('ADVANCED')) {
-    return '4';
+    return 'FOUR';
   }
   if (normalized.includes('FIVE') || normalized === '5' || normalized.includes('EXPERT')) {
-    return '5';
+    return 'FIVE';
   }
 
-  return '3'; // Default
+  return 'THREE'; // Default
 }
 
 /**

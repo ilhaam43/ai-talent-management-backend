@@ -147,6 +147,35 @@ async function main() {
 
         // Update Candidate with full details
         console.log(`Enriching profile for ${item.name}`);
+        // Seed Address
+        let address = await prisma.candidateAddress.findFirst({ where: { userId: user.id } });
+        if (!address) {
+            address = await prisma.candidateAddress.create({
+                data: {
+                    userId: user.id,
+                    province: 'DKI Jakarta',
+                    city: 'Jakarta Selatan',
+                    subdistrict: 'Kebayoran Baru',
+                    postalCode: '12110',
+                    candidateAddress: 'Jl. Jend. Sudirman No. 45'
+                }
+            });
+        }
+
+        let currentAddress = await prisma.candidateCurrentAddress.findFirst({ where: { userId: user.id } });
+        if (!currentAddress) {
+            currentAddress = await prisma.candidateCurrentAddress.create({
+                data: {
+                    userId: user.id,
+                    province: 'DKI Jakarta',
+                    city: 'Jakarta Selatan',
+                    subdistrict: 'Kebayoran Baru',
+                    postalCode: '12110',
+                    candidateAddress: 'Jl. Jend. Sudirman No. 45'
+                }
+            });
+        }
+
         await prisma.candidate.update({
             where: { id: candidate.id },
             data: {
@@ -154,6 +183,8 @@ async function main() {
                 religionId: religion.id,
                 maritalStatusId: marital.id,
                 nationalityId: nation.id,
+                candidateAddressId: address.id,
+                candidateCurrentAddressId: currentAddress.id,
                 phoneNumber: '08123456789',
                 placeOfBirth: 'Jakarta',
                 dateOfBirth: new Date('1995-01-01'),
@@ -162,6 +193,40 @@ async function main() {
                 candidateNickname: item.name.split(' ')[0],
             }
         });
+
+        // Seed Family
+        const existingFamily = await prisma.candidateFamily.findFirst({ where: { candidateId: candidate.id } });
+        if (!existingFamily) {
+            await prisma.candidateFamily.createMany({
+                data: [
+                    {
+                        candidateId: candidate.id,
+                        familyStatus: 'FATHER',
+                        familyName: `Bapak ${item.name.split(' ')[0]}`,
+                        familyJob: 'PNS / Swasta'
+                    },
+                    {
+                        candidateId: candidate.id,
+                        familyStatus: 'MOTHER',
+                        familyName: `Ibu ${item.name.split(' ')[0]}`,
+                        familyJob: 'Wiraswasta'
+                    }
+                ]
+            });
+        }
+
+        // Seed Family Lintasarta
+        const existingLintasartaFamily = await prisma.candidateFamilyLintasarta.findFirst({ where: { candidateId: candidate.id } });
+        if (!existingLintasartaFamily) {
+            await prisma.candidateFamilyLintasarta.create({
+                data: {
+                    candidateId: candidate.id,
+                    familyStatus: 'SPOUSE',
+                    familyName: `Kerabat ${item.name.split(' ')[0]}`,
+                    familyPosition: 'Senior Officer'
+                }
+            });
+        }
 
         // F. Application
         // Check uniqueness (Candidate + Job)

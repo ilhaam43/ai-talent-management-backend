@@ -122,11 +122,22 @@ export class AuthService {
         return null
       }
 
-      // Get candidate profile if exists
-      const candidate = user.candidates?.[0] || null
       // Get employee profile/role if exists
-      const employee = user.employees?.[0] || null
-      const role = employee?.userRole?.roleName || (candidate ? 'CANDIDATE' : 'USER')
+      const employee = user.employees?.[0] || null;
+      let candidate = user.candidates?.[0] || null;
+
+      // If not an employee and candidate record doesn't exist yet, auto-create it
+      if (!employee && !candidate) {
+        candidate = await this.prisma.candidate.create({
+          data: {
+            userId: user.id,
+            candidateFullname: user.name,
+            candidateEmail: user.email,
+          },
+        });
+      }
+
+      const role = employee?.userRole?.roleName || 'CANDIDATE';
 
       // Return user with candidate info
       const { password, ...userWithoutPassword } = user
@@ -209,11 +220,12 @@ export class AuthService {
       const candidate = user.candidates?.[0] || null
 
       // Generate new access token
+      const role = user.employees?.[0]?.userRole?.roleName || 'CANDIDATE';
       const newPayload = {
         email: user.email,
         sub: user.id,
         candidateId: candidate?.id || null,
-        role: user.employees?.[0]?.userRole?.roleName || (user.candidates?.length > 0 ? 'CANDIDATE' : 'USER'),
+        role,
         type: 'access',
       }
       const accessToken = this.jwt.sign(newPayload)

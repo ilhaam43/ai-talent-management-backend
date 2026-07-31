@@ -89,6 +89,7 @@ export class CandidateProfileService {
               );
             } catch (error: any) {
               console.error("Error storing ID Card address:", error.message);
+              throw error;
             }
           }
 
@@ -106,6 +107,7 @@ export class CandidateProfileService {
               );
             } catch (error: any) {
               console.error("Error storing Current address:", error.message);
+              throw error;
             }
           }
 
@@ -124,7 +126,7 @@ export class CandidateProfileService {
               );
             } catch (error: any) {
               console.error("Error storing address:", error.message);
-              // Continue with other data
+              throw error;
             }
           }
 
@@ -142,7 +144,7 @@ export class CandidateProfileService {
               );
             } catch (error: any) {
               console.error("Error storing education:", error.message);
-              // Continue with other data
+              throw error;
             }
           }
 
@@ -160,7 +162,7 @@ export class CandidateProfileService {
               );
             } catch (error: any) {
               console.error("Error storing work experience:", error.message);
-              // Continue with other data
+              throw error;
             }
           }
 
@@ -182,7 +184,7 @@ export class CandidateProfileService {
                 "Error storing organization experience:",
                 error.message,
               );
-              // Continue with other data
+              throw error;
             }
           }
 
@@ -200,7 +202,7 @@ export class CandidateProfileService {
               );
             } catch (error: any) {
               console.error("Error storing skills:", error.message);
-              // Continue with other data
+              throw error;
             }
           }
 
@@ -218,7 +220,7 @@ export class CandidateProfileService {
               );
             } catch (error: any) {
               console.error("Error storing certifications:", error.message);
-              // Continue with other data
+              throw error;
             }
           }
 
@@ -235,7 +237,7 @@ export class CandidateProfileService {
               );
             } catch (error: any) {
               console.error("Error storing social media:", error.message);
-              // Continue with other data
+              throw error;
             }
           }
 
@@ -249,6 +251,7 @@ export class CandidateProfileService {
               );
             } catch (e: any) {
               console.error("Error storing family:", e.message);
+              throw e;
             }
           }
 
@@ -265,6 +268,7 @@ export class CandidateProfileService {
               );
             } catch (e: any) {
               console.error("Error storing lintasarta family:", e.message, e);
+              throw e;
             }
           }
 
@@ -428,7 +432,12 @@ export class CandidateProfileService {
     education: Education[],
     tx?: any,
   ): Promise<any[]> {
-    const prisma = tx || this.prisma;
+    if (!tx) {
+      return this.prisma.$transaction((transactionClient: any) =>
+        this.storeEducation(candidateId, education, transactionClient),
+      );
+    }
+    const prisma = tx;
 
     // Clear old education history first to prevent duplicates
     await prisma.candidateEducation.deleteMany({
@@ -501,12 +510,12 @@ export class CandidateProfileService {
     workExperience: WorkExperience[],
     tx?: any,
   ): Promise<any[]> {
-    const prisma = tx || this.prisma;
-
-    // Clear old work experience first to prevent duplicates
-    await prisma.candidateWorkExperience.deleteMany({
-      where: { candidateId },
-    });
+    if (!tx) {
+      return this.prisma.$transaction((transactionClient: any) =>
+        this.storeWorkExperience(candidateId, workExperience, transactionClient),
+      );
+    }
+    const prisma = tx;
 
     // Verify candidate exists
     const candidate = await prisma.candidate.findUnique({
@@ -517,9 +526,22 @@ export class CandidateProfileService {
       throw new NotFoundException(`Candidate with ID ${candidateId} not found`);
     }
 
+    const validWorks = (workExperience || []).filter(
+      (work) => work && work.company && work.company.trim().length >= 2,
+    );
+
+    if (validWorks.length === 0) {
+      return [];
+    }
+
+    // Clear old work experience first to prevent duplicates
+    await prisma.candidateWorkExperience.deleteMany({
+      where: { candidateId },
+    });
+
     const results = [];
 
-    for (const work of workExperience) {
+    for (const work of validWorks) {
       // Parse dates - use fallback if not available
       const startDate = parseDate(work.startDate) || new Date(); // Use today as fallback
       const endDate = parseDate(work.endDate);
@@ -570,7 +592,12 @@ export class CandidateProfileService {
     orgExperience: OrganizationExperience[],
     tx?: any,
   ): Promise<any[]> {
-    const prisma = tx || this.prisma;
+    if (!tx) {
+      return this.prisma.$transaction((transactionClient: any) =>
+        this.storeOrganizationExperience(candidateId, orgExperience, transactionClient),
+      );
+    }
+    const prisma = tx;
 
     // Clear old organization experience first to prevent duplicates
     await prisma.candidateOrganizationExperience.deleteMany({
@@ -624,7 +651,12 @@ export class CandidateProfileService {
     skills: (string | { skill?: string; skillName?: string; rating?: string | number })[],
     tx?: any,
   ): Promise<any[]> {
-    const prisma = tx || this.prisma;
+    if (!tx) {
+      return this.prisma.$transaction((transactionClient: any) =>
+        this.storeSkills(candidateId, skills, transactionClient),
+      );
+    }
+    const prisma = tx;
 
     // Verify candidate exists
     const candidate = await prisma.candidate.findUnique({
@@ -642,6 +674,7 @@ export class CandidateProfileService {
       where: { candidateId },
     });
 
+    const skillObjects = [];
     for (const skillItem of skills) {
       let skillName = "";
       let candidateRating = "THREE";
@@ -663,18 +696,18 @@ export class CandidateProfileService {
 
       if (!skillName) continue;
 
-      const created = await prisma.candidateSkill.create({
-        data: {
-          candidateId,
-          candidateSkill: skillName,
-          candidateRating: candidateRating as any,
-        },
+      skillObjects.push({
+        candidateId,
+        candidateSkill: skillName,
+        candidateRating: candidateRating as any,
       });
-
-      results.push(created);
     }
 
-    return results;
+    if (skillObjects.length > 0) {
+      await prisma.candidateSkill.createMany({ data: skillObjects });
+    }
+
+    return prisma.candidateSkill.findMany({ where: { candidateId } });
   }
 
   /**
@@ -685,7 +718,12 @@ export class CandidateProfileService {
     certifications: Certification[],
     tx?: any,
   ): Promise<any[]> {
-    const prisma = tx || this.prisma;
+    if (!tx) {
+      return this.prisma.$transaction((transactionClient: any) =>
+        this.storeCertifications(candidateId, certifications, transactionClient),
+      );
+    }
+    const prisma = tx;
 
     // Clear old certifications first to prevent duplicates
     await prisma.candidateCertification.deleteMany({
@@ -701,29 +739,28 @@ export class CandidateProfileService {
       throw new NotFoundException(`Candidate with ID ${candidateId} not found`);
     }
 
-    const results = [];
-
+    const certObjects = [];
     for (const cert of certifications) {
-      // Parse dates
+      if (!cert.name || cert.name.trim().length === 0) continue;
       const startDate = parseDate(cert.startDate);
       const endDate = parseDate(cert.endDate);
 
-      const created = await prisma.candidateCertification.create({
-        data: {
-          candidateId,
-          certificationTitle: cert.name,
-          institutionName: cert.issuer || "",
-          location: cert.location || undefined,
-          certificationStartDate: startDate || undefined,
-          certificationEndedDate: endDate || undefined,
-          certificationDescription: cert.description || undefined,
-        },
+      certObjects.push({
+        candidateId,
+        certificationTitle: cert.name.trim(),
+        institutionName: cert.issuer || "",
+        location: cert.location || undefined,
+        certificationStartDate: startDate || undefined,
+        certificationEndedDate: endDate || undefined,
+        certificationDescription: cert.description || undefined,
       });
-
-      results.push(created);
     }
 
-    return results;
+    if (certObjects.length > 0) {
+      await prisma.candidateCertification.createMany({ data: certObjects });
+    }
+
+    return prisma.candidateCertification.findMany({ where: { candidateId } });
   }
 
   /**
@@ -784,7 +821,12 @@ export class CandidateProfileService {
     family: any[],
     tx?: any,
   ): Promise<any[]> {
-    const prisma = tx || this.prisma;
+    if (!tx) {
+      return this.prisma.$transaction((transactionClient: any) =>
+        this.storeFamily(candidateId, family, transactionClient),
+      );
+    }
+    const prisma = tx;
     const results: any[] = [];
 
     // First delete existing family members for this candidate to avoid duplicates/stale data
@@ -817,7 +859,12 @@ export class CandidateProfileService {
     family: any[],
     tx?: any,
   ): Promise<any[]> {
-    const prisma = tx || this.prisma;
+    if (!tx) {
+      return this.prisma.$transaction((transactionClient: any) =>
+        this.storeLintasartaFamily(candidateId, family, transactionClient),
+      );
+    }
+    const prisma = tx;
     const results: any[] = [];
 
     await prisma.candidateFamilyLintasarta.deleteMany({
