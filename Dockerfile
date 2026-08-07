@@ -7,6 +7,7 @@ WORKDIR /usr/src/app
 
 # Install build dependencies for native modules (canvas, etc.)
 RUN apk add --no-cache \
+    openssl \
     python3 \
     make \
     g++ \
@@ -42,6 +43,7 @@ WORKDIR /usr/src/app
 
 # Install build dependencies for native modules (canvas, etc.)
 RUN apk add --no-cache \
+    openssl \
     python3 \
     make \
     g++ \
@@ -61,8 +63,10 @@ RUN npm ci --only=production --legacy-peer-deps
 # Copy Prisma schema
 COPY --from=builder /usr/src/app/prisma ./prisma
 
-# Generate Prisma client
-RUN npm run prisma:generate
+# Reuse the Prisma Client generated in the builder. The Prisma CLI is a
+# development dependency and is intentionally absent from this stage.
+COPY --from=builder /usr/src/app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /usr/src/app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Copy built application
 COPY --from=builder /usr/src/app/dist ./dist
@@ -83,5 +87,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Start application
 CMD ["node", "dist/main.js"]
-
-
