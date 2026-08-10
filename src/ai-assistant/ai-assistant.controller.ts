@@ -8,6 +8,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -39,8 +40,9 @@ export class AiAssistantController {
     type: ChatResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async chat(@Body() dto: ChatRequestDto): Promise<ChatResponseDto> {
-    return this.aiAssistantService.processMessage(dto.message, dto.sessionId);
+  async chat(@Body() dto: ChatRequestDto, @Req() req: any): Promise<ChatResponseDto> {
+    const userId = req.user?.id;
+    return this.aiAssistantService.processMessage(dto.message, dto.sessionId, userId);
   }
 
   @Get('sessions/:sessionId')

@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import * as fs from 'fs/promises';
 import { PrismaService } from '../database/prisma.service';
 import { TextExtractorService } from '../cv-parser/parsers/text-extractor.service';
 import { LLMParserService } from '../cv-parser/parsers/llm-parser.service';
@@ -161,7 +162,7 @@ export class PipelineActionsService {
 
         // Update current stage status to Qualified
         await this.prisma.candidateApplicationPipeline.update({
-            where: { id: pipelineId },
+            where: { id: pipeline.id },
             data: {
                 applicationPipelineStatusId: qualifiedStatus.id,
                 notes: dto.notes || pipeline.notes,
@@ -227,7 +228,7 @@ export class PipelineActionsService {
         const notQualifiedStatus = await this.findOrCreateStatus('Not Qualified');
 
         await this.prisma.candidateApplicationPipeline.update({
-            where: { id: pipelineId },
+            where: { id: pipeline.id },
             data: {
                 applicationPipelineStatusId: notQualifiedStatus.id,
                 notes: dto.feedback || pipeline.notes,
@@ -255,7 +256,7 @@ export class PipelineActionsService {
 
         const assessment = await this.prisma.candidateOnlineAssessment.create({
             data: {
-                candidateApplicationPipelineId: pipelineId,
+                candidateApplicationPipelineId: pipeline.id,
                 assessmentLink: dto.assessmentLink,
                 startDate: new Date(dto.startDate),
                 endDate: new Date(dto.endDate),
@@ -286,9 +287,18 @@ export class PipelineActionsService {
         
         // Save as assessment-results/[candidateID]/[documentID].pdf
         const objectKey = `assessment-results/${candidateId}/${docId}.pdf`;
-        
-        // Upload to MinIO
-        await this.storageService.uploadBuffer(objectKey, file.buffer, 'application/pdf');
+
+        // Upload to MinIO (handle both memoryStorage and diskStorage)
+        let buffer: Buffer;
+        if (file.buffer && Buffer.isBuffer(file.buffer)) {
+            buffer = file.buffer;
+        } else if (file.path) {
+            buffer = await fs.readFile(file.path);
+        } else {
+            throw new BadRequestException('Uploaded file content or file path is missing');
+        }
+
+        await this.storageService.uploadBuffer(objectKey, buffer, 'application/pdf');
 
         const assessment = await this.prisma.candidateOnlineAssessment.update({
             where: { id: pipeline.onlineAssessment.id },
@@ -630,7 +640,7 @@ export class PipelineActionsService {
                     endDate: s.onlineAssessment.endDate,
                     vendorResultFileUrl: s.onlineAssessment.vendorResultFileUrl,
                     vendorResultFileName: s.onlineAssessment.vendorResultFileName,
-                    // roleFitScore: s.onlineAssessment.roleFitScore, // re-enable after backend restart
+                    roleFitScore: s.onlineAssessment.roleFitScore,
                     parsedResultSummary: s.onlineAssessment.parsedResultSummary,
                     notes: s.onlineAssessment.notes,
                 }

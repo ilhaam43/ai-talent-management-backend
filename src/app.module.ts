@@ -12,6 +12,7 @@ import { CandidateProfileModule } from './candidate-profile/candidate-profile.mo
 import { CandidatesModule } from './candidates/candidates.module'
 import { TestRbacController } from './common/test-rbac.controller'
 import { RolesGuard } from './common/guards/roles.guard'
+import { UsageTrackerModule } from './common/usage-tracker.module'
 
 import { JobVacanciesModule } from './job-vacancies/job-vacancies.module';
 import { CandidateApplicationsModule } from './candidate-applications/candidate-applications.module';
@@ -35,6 +36,7 @@ import { PipelineActionsModule } from './pipeline-actions/pipeline-actions.modul
       ttl: 60000,
       limit: 100,
     }]),
+    UsageTrackerModule,
     DatabaseModule,
     UsersModule,
     AuthModule,
