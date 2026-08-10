@@ -9,31 +9,33 @@ import { JwtStrategy } from './jwt.strategy'
 import { AuthController } from './auth.controller'
 import { DatabaseModule } from '../database/database.module'
 import { ConfigModule, ConfigService } from '@nestjs/config'
+import { EmailModule } from '../email/email.module'
 
 @Module({
   imports: [
     DatabaseModule,
     PassportModule,
     ConfigModule,
+    EmailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET') || 'supersecretjwt',
-        signOptions: { expiresIn: '3600s' } // Access token: 1 hour
+        signOptions: { expiresIn: '3600s' }, // Access token: 1 hour
       }),
-      inject: [ConfigService]
-    })
+      inject: [ConfigService],
+    }),
   ],
   controllers: [AuthController],
   providers: [
-    AuthService, 
-    LocalStrategy, 
+    AuthService,
+    LocalStrategy,
     JwtStrategy,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
-    }
+    },
   ],
-  exports: [AuthService]
+  exports: [AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}

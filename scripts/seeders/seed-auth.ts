@@ -22,12 +22,14 @@ async function main() {
         where: { email },
         update: {
             password: hashedPassword,
+            isVerified: true,
         },
         create: {
             email,
             name: 'Test Auth User',
             password: hashedPassword,
             emailVerified: new Date(),
+            isVerified: true,
         },
     });
 

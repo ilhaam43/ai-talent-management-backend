@@ -28,6 +28,9 @@ model User {
   passwordSetRequired       Boolean                   @default(false) @map("password_set_required")
   passwordResetToken        String?                   @map("password_reset_token")
   passwordResetExpiry       DateTime?                 @map("password_reset_expiry")
+  isVerified                Boolean                   @default(false) @map("is_verified")
+  otpCode                   String?                   @map("otp_code")
+  otpExpiry                 DateTime?                 @map("otp_expiry")
   createdAt                 DateTime                  @default(now()) @map("created_at")
   updatedAt                 DateTime                  @updatedAt @map("updated_at")
   candidateAddresses        CandidateAddress[]

@@ -22,11 +22,19 @@ export class EmailService {
       this.logger.log('Using Gmail App Password authentication');
       
       const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false, // Explicit STARTTLS
         auth: {
           user: fromEmail,
           pass: appPassword,
         },
+        tls: {
+          rejectUnauthorized: false,
+        },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 15000,
       });
 
       return transporter;
@@ -579,6 +587,108 @@ export class EmailService {
             </td>
           </tr>
           
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Send OTP verification email to new HR user
+   */
+  async sendOtpEmail(toEmail: string, name: string, otp: string): Promise<void> {
+    try {
+      const transporter = await this.createTransporter();
+      const fromEmail = this.configService.get<string>('GMAIL_FROM_EMAIL');
+      const fromName = this.configService.get<string>('GMAIL_FROM_NAME') || 'AI Talent Management';
+
+      const mailOptions = {
+        from: `"${fromName}" <${fromEmail}>`,
+        to: toEmail,
+        subject: 'Your Verification Code — AI Talent Management',
+        html: this.getOtpTemplate(name, otp),
+      };
+
+      const result = await transporter.sendMail(mailOptions);
+      this.logger.log(`OTP email sent to ${toEmail} (Message ID: ${result.messageId})`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send OTP email to ${toEmail}: ${error.message}`);
+      throw new Error(`Email sending failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * OTP email HTML template
+   */
+  private getOtpTemplate(name: string, otp: string): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Verification</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+  <table cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f4f4; padding: 20px;">
+    <tr>
+      <td align="center">
+        <table cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #1678E6 0%, #0C3C87 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: bold;">HR Account Verification</h1>
+              <p style="margin: 8px 0 0; color: #c8dcf8; font-size: 14px;">AI Talent Management — Lintasarta</p>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <h2 style="margin: 0 0 16px; color: #1a1a2e; font-size: 22px;">Hello, ${name}</h2>
+
+              <p style="margin: 0 0 24px; color: #555; font-size: 16px; line-height: 1.6;">
+                You've requested to create an HR account. Use the verification code below to complete your registration.
+              </p>
+
+              <!-- OTP Box -->
+              <table cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="center" style="padding: 10px 0 30px;">
+                    <div style="display: inline-block; background: linear-gradient(135deg, #1678E6 0%, #0C3C87 100%); border-radius: 12px; padding: 28px 48px;">
+                      <p style="margin: 0 0 6px; color: #c8dcf8; font-size: 13px; letter-spacing: 2px; text-transform: uppercase;">Verification Code</p>
+                      <p style="margin: 0; color: #ffffff; font-size: 42px; font-weight: bold; letter-spacing: 10px;">${otp}</p>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="margin: 0 0 24px; padding: 16px 20px; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                <p style="margin: 0; color: #856404; font-size: 14px; line-height: 1.6;">
+                  <strong>⚠️ This code expires in 10 minutes.</strong> Do not share it with anyone.
+                </p>
+              </div>
+
+              <p style="margin: 0; color: #888; font-size: 13px; line-height: 1.6;">
+                If you did not request this account, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 24px 30px; text-align: center; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; color: #aaa; font-size: 12px;">
+                © 2026 Lintasarta AI Talent Management. All rights reserved.<br>
+                This is an automated email — please do not reply.
+              </p>
+            </td>
+          </tr>
+
         </table>
       </td>
     </tr>

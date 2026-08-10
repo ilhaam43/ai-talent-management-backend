@@ -6,6 +6,8 @@ import { Response } from 'express'
 import { AuthService } from './auth.service'
 import { SignupDto } from './dto/signup.dto'
 import { SetPasswordDto } from './dto/set-password.dto'
+import { HrSignupDto } from './dto/hr-signup.dto'
+import { VerifyOtpDto } from './dto/verify-otp.dto'
 
 @ApiTags('auth')
 @Controller('auth')
@@ -169,5 +171,56 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
   async setPassword(@Body() setPasswordDto: SetPasswordDto) {
     return this.authService.setPasswordFromToken(setPasswordDto.token, setPasswordDto.password)
+  }
+
+  // ─── HR Signup + OTP ───────────────────────────────────────────────────────
+
+  @Post('hr-signup')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new HR user account (sends OTP for verification)' })
+  @ApiResponse({ status: 201, description: 'OTP sent to email' })
+  @ApiResponse({ status: 409, description: 'Email already registered' })
+  async hrSignup(@Body() dto: HrSignupDto) {
+    return this.authService.hrSignup(dto)
+  }
+
+  @Post('verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify OTP and activate HR account' })
+  @ApiResponse({ status: 200, description: 'Account verified, tokens returned' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
+  async verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.verifyOtp(dto)
+
+    const isProduction = process.env.NODE_ENV === 'production'
+    res.cookie('refresh_token', result.refresh_token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    })
+
+    return {
+      access_token: result.access_token,
+      expires_in: 3600,
+      user: result.user,
+    }
+  }
+
+  @Post('resend-otp')
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend OTP to email (3 per minute max)' })
+  @ApiResponse({ status: 200, description: 'OTP resent' })
+  @ApiResponse({ status: 400, description: 'Email already verified' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async resendOtp(@Body() body: { email: string }) {
+    return this.authService.resendOtp(body.email)
   }
 }
