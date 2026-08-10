@@ -3,12 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import * as fs from 'fs/promises';
 import { ParsedCandidateData } from '../dto/parsed-candidate-data.dto';
+import { UsageTrackerService } from '../../common/usage-tracker.service';
 
 @Injectable()
 export class LLMParserService {
   private openai: OpenAI | null = null;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private usageTracker: UsageTrackerService,
+  ) {
     // Check if LLM is disabled via environment variable
     const llmEnabled = this.configService.get<string>('LLM_ENABLED') !== 'false';
     
@@ -35,7 +39,7 @@ export class LLMParserService {
   /**
    * Parse CV text using LLM for better accuracy
    */
-  async parseCVWithLLM(extractedText: string): Promise<ParsedCandidateData['parsedData']> {
+  async parseCVWithLLM(extractedText: string, userId?: string): Promise<ParsedCandidateData['parsedData']> {
     if (!this.openai) {
       throw new BadRequestException('LLM API not configured. Please set LLM_API_KEY in environment variables.');
     }
@@ -45,15 +49,13 @@ export class LLMParserService {
     const model = this.configService.get<string>('LLM_MODEL') || 'qwen/qwen3-coder';
 
     const prompt = this.buildParsingPrompt(extractedText);
+    const startTime = Date.now();
 
     try {
       console.log(`Sending CV text to LLM for parsing...`);
       console.log(`  Base URL: ${baseURL}`);
       console.log(`  Model: ${model}`);
       console.log(`  CV Text length: ${extractedText.length} chars`);
-      
-      // Track timing
-      const startTime = Date.now();
       
       // Optimize for speed: lower temperature, max_tokens limit, timeout
       // Increased timeout to 60s for slower LLM services
@@ -102,8 +104,39 @@ export class LLMParserService {
 
       console.log('LLM parsing completed successfully');
 
+      // Track usage event (fire-and-forget)
+      if (userId) {
+        const usage = response.usage;
+        this.usageTracker.trackEvent({
+          userId,
+          featureName: 'cv_parser',
+          sourceService: 'BACKEND',
+          modelName: model,
+          providerName: baseURL,
+          promptTokens: usage?.prompt_tokens || 0,
+          completionTokens: usage?.completion_tokens || 0,
+          totalTokens: usage?.total_tokens || 0,
+          status: 'SUCCESS',
+          latencyMs: responseTime,
+          metadata: { textLength: extractedText.length },
+        });
+      }
+
       return this.normalizeParsedData(parsedData);
     } catch (error: any) {
+      // Track failed event (fire-and-forget)
+      if (userId) {
+        this.usageTracker.trackEvent({
+          userId,
+          featureName: 'cv_parser',
+          sourceService: 'BACKEND',
+          modelName: model,
+          status: 'FAILED',
+          latencyMs: Date.now() - startTime,
+          metadata: { error: error.message, textLength: extractedText.length },
+        });
+      }
+
       console.error('LLM parsing error details:');
       console.error(`  Error type: ${error.constructor.name}`);
       console.error(`  Error message: ${error.message}`);

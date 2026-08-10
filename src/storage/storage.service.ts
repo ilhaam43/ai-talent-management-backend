@@ -165,6 +165,10 @@ export class StorageService implements OnModuleInit {
     contentType: string,
     bucket?: string,
   ): Promise<void> {
+    if (!buffer || !Buffer.isBuffer(buffer)) {
+      throw new Error(`Invalid buffer provided for MinIO upload to key: ${key}`);
+    }
+
     await this.internalClient.send(
       new PutObjectCommand({
         Bucket: bucket || this.documentsBucket,

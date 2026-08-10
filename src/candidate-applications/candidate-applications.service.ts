@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { EmailService } from '../email/email.service';
 import axios from 'axios';
+import { UsageTrackerService } from '../common/usage-tracker.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
 import { DashboardSummaryDto } from './dto/application-response.dto';
@@ -20,6 +21,7 @@ export class CandidateApplicationsService {
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
+    private readonly usageTracker: UsageTrackerService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_WEBHOOK_URL') || '';
   }
@@ -138,8 +140,20 @@ export class CandidateApplicationsService {
         throw new Error('N8N_WEBHOOK_URL is not defined');
       }
 
+      const startTime = Date.now();
       const response = await axios.post(this.n8nWebhookUrl, payload);
+      const latencyMs = Date.now() - startTime;
       this.logger.log(`n8n Response: ${JSON.stringify(response.data)}`);
+
+      // Track N8N read_data usage (fire-and-forget)
+      this.usageTracker.trackEvent({
+        userId: candidateId,
+        featureName: 'n8n_read_data',
+        sourceService: 'BACKEND',
+        status: 'SUCCESS',
+        latencyMs,
+        metadata: { candidateId, tracksCount: selectedTracks?.length || 0 },
+      });
 
       const data = response.data;
 

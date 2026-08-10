@@ -10,11 +10,12 @@ import { N8nCallbackDto, AiMatchStatusValue } from './dto/callback.dto';
 import { UpdateHRStatusDto, BulkActionDto } from './dto/update-status.dto';
 import { StorageService } from '../storage/storage.service';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import axios from 'axios';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { stripHtmlTags } from '../common/utils/sanitize.util';
-
+import { UsageTrackerService } from '../common/usage-tracker.service';
 
 @Injectable()
 export class TalentPoolService {
@@ -28,6 +29,7 @@ export class TalentPoolService {
     private notificationsService: NotificationsService,
     private emailService: EmailService,
     private storageService: StorageService,
+    private usageTracker: UsageTrackerService,
   ) {
     this.n8nWebhookUrl = this.configService.get<string>('N8N_TALENT_POOL_WEBHOOK_URL') || '';
   }
@@ -58,27 +60,39 @@ export class TalentPoolService {
       totalFiles: files.length,
     });
 
-    // Upload files to MinIO directly from memory
+    // Upload files to MinIO
     const filesWithKeys = [];
     for (const file of files) {
+      const filename = file.originalname;
+      const localUrl = file.path ? `/uploads/talent-pool/${path.basename(file.path)}` : '';
+
       try {
+        // Handle both memoryStorage (file.buffer) and diskStorage (file.path)
+        let buffer: Buffer;
+        if (file.buffer && Buffer.isBuffer(file.buffer)) {
+          buffer = file.buffer;
+        } else if (file.path) {
+          buffer = await fs.readFile(file.path);
+        } else {
+          throw new Error(`File buffer and disk path are both missing for ${filename}`);
+        }
+
         // Generate S3 key
-        const objectKey = this.storageService.buildKey('talent-pool', batch.id, file.originalname);
+        const objectKey = this.storageService.buildKey('talent-pool', batch.id, filename);
         
-        // Upload to S3 straight from RAM buffer
-        await this.storageService.uploadBuffer(objectKey, file.buffer, 'application/pdf');
+        // Upload to S3
+        await this.storageService.uploadBuffer(objectKey, buffer, file.mimetype || 'application/pdf');
         
         filesWithKeys.push({
-          fileUrl: "", // We don't have local file URLs anymore, backend will use S3 presigned URLs via objectKey
-          fileName: file.originalname,
+          fileUrl: localUrl,
+          fileName: filename,
           objectKey,
         });
       } catch (err: any) {
-        this.logger.error(`Failed to upload file ${file.originalname} to MinIO S3: ${err.message}`);
-        // Fallback to queueing without S3 key (which will likely fail later without local file, but tracks the attempt)
+        this.logger.error(`Failed to upload file ${filename} to MinIO S3: ${err.message}`);
         filesWithKeys.push({
-          fileUrl: "",
-          fileName: file.originalname,
+          fileUrl: localUrl,
+          fileName: filename,
         });
       }
     }
@@ -199,9 +213,22 @@ export class TalentPoolService {
           }],
         };
 
+        const startTime = Date.now();
         await axios.post(this.n8nWebhookUrl, payload, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 120000, // 2 min timeout per CV
+        });
+        const latencyMs = Date.now() - startTime;
+
+        // Track N8N talent_pool usage (fire-and-forget)
+        const batch = await this.repository.findBatchById(batchId);
+        this.usageTracker.trackEvent({
+          userId: batch?.uploadedById || 'system',
+          featureName: 'n8n_talent_pool',
+          sourceService: 'BACKEND',
+          status: 'SUCCESS',
+          latencyMs,
+          metadata: { batchId, fileName: item.fileName, queueItemId: item.id },
         });
 
         this.logger.log(`[Batch ${batchId.substring(0, 8)}] Sent to n8n: ${item.fileName}`);
@@ -968,8 +995,8 @@ export class TalentPoolService {
     resetLink: string;
     message: string;
   }> {
-    // Find candidate with isTalentPool=true
-    const candidate = await this.prisma.candidate.findUnique({
+    // Find candidate by ID, or fallback to userId, queueItemId, or talentPoolCandidateId
+    let candidate = await this.prisma.candidate.findUnique({
       where: { id: candidateId },
       include: { 
         user: true,
@@ -978,7 +1005,64 @@ export class TalentPoolService {
     });
 
     if (!candidate) {
-      throw new NotFoundException(`Candidate ${candidateId} not found`);
+      // Fallback 1: Check if candidateId is actually a candidateApplicationId (sent by frontend)
+      const app = await this.prisma.candidateApplication.findUnique({
+        where: { id: candidateId },
+        include: {
+          candidate: {
+            include: { user: true, applications: true },
+          },
+        },
+      });
+      if (app?.candidate) {
+        candidate = app.candidate;
+      }
+    }
+
+    if (!candidate) {
+      // Fallback 2: Check if candidateId is actually a userId
+      candidate = await this.prisma.candidate.findFirst({
+        where: { userId: candidateId },
+        include: { user: true, applications: true },
+      });
+    }
+
+    if (!candidate) {
+      // Fallback 2: Check if candidateId is a queueItemId
+      const queueItem = await this.prisma.talentPoolQueue.findUnique({
+        where: { id: candidateId },
+      });
+      if (queueItem) {
+        candidate = await this.prisma.candidate.findFirst({
+          where: {
+            talentPoolBatchId: queueItem.batchId,
+            cvFileName: queueItem.fileName,
+          },
+          include: { user: true, applications: true },
+        });
+      }
+    }
+
+    if (!candidate) {
+      // Fallback 3: Check if candidateId is a talentPoolCandidateId (legacy table)
+      const tpCandidate = await this.prisma.talentPoolCandidate.findUnique({
+        where: { id: candidateId },
+      });
+      if (tpCandidate) {
+        candidate = await this.prisma.candidate.findFirst({
+          where: {
+            OR: [
+              { candidateEmail: tpCandidate.email || undefined },
+              { candidateFullname: tpCandidate.fullName },
+            ],
+          },
+          include: { user: true, applications: true },
+        });
+      }
+    }
+
+    if (!candidate) {
+      throw new NotFoundException(`Candidate ${candidateId} not found in Talent Pool. CV screening may still be processing via n8n.`);
     }
 
     // Note: No longer checking candidate.isTalentPool since it's now per-application
