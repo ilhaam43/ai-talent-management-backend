@@ -1,0 +1,191 @@
+pipeline {
+    agent { label 'oan-staging-1' }
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+    }
+
+    environment {
+        // Registry Configuration
+        REGISTRY          = "registry.lintasarta.dev"
+        PROJECT           = "aitm"
+        IMAGE_NAME        = "backend"
+        HARBOR_CREDENTIAL = "aitm-lintasarta-credential"
+
+        // Instance Configuration
+        INSTANCE_CONTROLLER = "instance-controller-1"
+        INSTANCE_HOST       = "instance-2"
+        DEPLOY_PATH         = "/opt/aitm/backend"
+
+        // Deployment Configuration
+        MANIFEST_PATH   = "manifest/instance/backend"
+        MANIFEST_BRANCH = "pipeline/staging"
+        CONTAINER_NAME  = "aitm_backend"
+        HEALTHCHECK_URL = "http://127.0.0.1:3101/docs"
+
+        // Replace with the Jenkins Config File ID for the staging backend.
+        ENV_CONFIG_ID = "a60a426c-1820-47a4-b239-cd028a0817e3"
+
+        // Config file path in the checked-out manifest.
+        MANIFEST_CONFIG_PATH = "${MANIFEST_PATH}/.env"
+    }
+
+    stages {
+        stage('🏷️ Get Tag Release') {
+            steps {
+                script {
+                    // Primary: injected by Jenkins when triggered by a tag push.
+                    def gitTag = env.TAG_NAME ?: ""
+
+                    // Fallback: detect an exact tag on the checked-out commit.
+                    if (!gitTag) {
+                        gitTag = sh(
+                            returnStdout: true,
+                            script: 'git tag --points-at HEAD --sort=-creatordate | head -n 1'
+                        ).trim()
+                    }
+
+                    if (!gitTag) {
+                        error('❌ Staging pipeline must be triggered by a Git tag.')
+                    }
+
+                    env.GIT_TAG    = gitTag
+                    env.TAG        = gitTag
+                    env.FULL_IMAGE = "${REGISTRY}/${PROJECT}/${IMAGE_NAME}:${gitTag}"
+
+                    echo "✅ Build triggered by tag: ${env.GIT_TAG}"
+                    echo "ℹ️ Full image: ${env.FULL_IMAGE}"
+                }
+            }
+        }
+
+        stage('📦 Update Submodules') {
+            steps {
+                sshagent(credentials: ['ops-controller']) {
+                    script {
+                        sh 'git submodule sync'
+
+                        def retries = 3
+
+                        for (int i = 1; i <= retries; i++) {
+                            try {
+                                sh '''
+                                    git submodule update --init manifest
+                                    git -C manifest fetch origin "$MANIFEST_BRANCH"
+                                    git -C manifest checkout -B "$MANIFEST_BRANCH" "origin/$MANIFEST_BRANCH"
+                                '''
+                                break
+                            } catch (err) {
+                                if (i == retries) {
+                                    error "Manifest checkout failed after ${retries} attempts: ${err}"
+                                }
+
+                                echo "⚠️ Attempt ${i}/${retries} failed, retrying in 10s..."
+                                sleep(10)
+                            }
+                        }
+
+                        sh 'git -C manifest status'
+                        sh 'git -C manifest log -1 --oneline'
+                    }
+                }
+            }
+        }
+
+        stage('⚙️ Inject Config') {
+            steps {
+                script {
+                    echo 'Injecting staging config...'
+
+                    configFileProvider([
+                        configFile(
+                            fileId: ENV_CONFIG_ID,
+                            targetLocation: MANIFEST_CONFIG_PATH
+                        )
+                    ]) {
+                        echo "✅ Config injected to ${MANIFEST_CONFIG_PATH}"
+                    }
+                }
+            }
+        }
+
+        stage('🐳 Build Docker Image') {
+            steps {
+                script {
+                    echo "Building Docker image: ${FULL_IMAGE}"
+                    sh 'docker build -t "$FULL_IMAGE" .'
+                    echo '✅ Build completed successfully'
+                }
+            }
+        }
+
+        stage('📤 Push Image to Registry') {
+            steps {
+                script {
+                    echo 'Pushing image to registry...'
+                    docker.withRegistry("https://${REGISTRY}", HARBOR_CREDENTIAL) {
+                        sh 'docker push "$FULL_IMAGE"'
+                    }
+                    echo "✅ Image pushed successfully: ${FULL_IMAGE}"
+                }
+            }
+        }
+
+        stage('🚀 Deploy') {
+            steps {
+                script {
+                    echo 'Preparing staging deployment directory...'
+                    sh 'ssh ${INSTANCE_CONTROLLER} "mkdir -p ${DEPLOY_PATH}"'
+
+                    echo 'Copying staging manifest files (including hidden files)...'
+                    sh 'rsync -avz ${MANIFEST_PATH}/ ${INSTANCE_CONTROLLER}:${DEPLOY_PATH}/'
+
+                    echo "Deploying staging backend with tag: ${TAG}"
+                    sh 'ssh ${INSTANCE_CONTROLLER} "cd ${DEPLOY_PATH} && chmod +x deploy.sh && ./deploy.sh --tag ${TAG}"'
+
+                    echo '✅ Deployment completed successfully'
+                }
+            }
+        }
+
+        stage('🔎 Verify') {
+            steps {
+                script {
+                    sleep(15)
+
+                    echo 'Verifying deployed image, container health, and HTTP endpoint...'
+                    sh '''
+                        ssh ${INSTANCE_HOST} "
+                            actual_image=\$(docker inspect --format='{{.Config.Image}}' ${CONTAINER_NAME}) &&
+                            actual_health=\$(docker inspect --format='{{.State.Health.Status}}' ${CONTAINER_NAME}) &&
+                            test \"\$actual_image\" = \"${FULL_IMAGE}\" &&
+                            test \"\$actual_health\" = \"healthy\" &&
+                            curl --fail --silent --show-error ${HEALTHCHECK_URL} >/dev/null
+                        "
+                    '''
+
+                    echo '✅ Staging backend verified successfully'
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo 'Cleaning up local Docker cache...'
+                sh 'docker image prune -f || true'
+            }
+        }
+
+        success {
+            echo '🎉 Staging pipeline completed successfully!'
+        }
+
+        failure {
+            echo '❌ Staging pipeline failed - check logs for details'
+        }
+    }
+}
