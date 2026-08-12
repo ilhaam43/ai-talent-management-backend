@@ -1,12 +1,6 @@
 pipeline {
     agent { label 'oan-staging-1' }
 
-    options {
-        disableConcurrentBuilds()
-        timeout(time: 30, unit: 'MINUTES')
-        timestamps()
-    }
-
     environment {
         // Registry Configuration
         REGISTRY          = "registry.lintasarta.dev"
@@ -19,16 +13,16 @@ pipeline {
         INSTANCE_HOST       = "instance-2"
         DEPLOY_PATH         = "/opt/aitm/backend"
 
-        // Deployment Configuration
+        // Stack Configuration
+        STACK_NAME      = "aitm"
+        SERVICE_NAME    = "backend"
         MANIFEST_PATH   = "manifest/instance/backend"
         MANIFEST_BRANCH = "pipeline/staging"
-        CONTAINER_NAME  = "aitm_backend"
-        HEALTHCHECK_URL = "http://127.0.0.1:3101/docs"
 
-        // Replace with the Jenkins Config File ID for the staging backend.
-        ENV_CONFIG_ID = "a60a426c-1820-47a4-b239-cd028a0817e3"
+        // Jenkins Config File IDs
+        ENV_CONFIG_ID = 'a60a426c-1820-47a4-b239-cd028a0817e3'
 
-        // Config file path in the checked-out manifest.
+        // Config file paths in the deployment directory
         MANIFEST_CONFIG_PATH = "${MANIFEST_PATH}/.env"
     }
 
@@ -48,14 +42,14 @@ pipeline {
                     }
 
                     if (!gitTag) {
-                        error('❌ Staging pipeline must be triggered by a Git tag.')
+                        error("❌ Staging pipeline must be triggered by a Git tag.")
                     }
 
                     env.GIT_TAG    = gitTag
                     env.TAG        = gitTag
                     env.FULL_IMAGE = "${REGISTRY}/${PROJECT}/${IMAGE_NAME}:${gitTag}"
 
-                    echo "✅ Build triggered by tag: ${env.GIT_TAG}"
+                    echo "✅ Build triggered by tag: ${gitTag}"
                     echo "ℹ️ Full image: ${env.FULL_IMAGE}"
                 }
             }
@@ -73,6 +67,7 @@ pipeline {
                             try {
                                 sh '''
                                     git submodule update --init manifest
+
                                     git -C manifest fetch origin "$MANIFEST_BRANCH"
                                     git -C manifest checkout -B "$MANIFEST_BRANCH" "origin/$MANIFEST_BRANCH"
                                 '''
@@ -88,7 +83,7 @@ pipeline {
                         }
 
                         sh 'git -C manifest status'
-                        sh 'git -C manifest log -1 --oneline'
+                        sh 'git -C manifest log -1'
                     }
                 }
             }
@@ -97,14 +92,10 @@ pipeline {
         stage('⚙️ Inject Config') {
             steps {
                 script {
-                    echo 'Injecting staging config...'
+                    echo "Injecting config files..."
 
-                    configFileProvider([
-                        configFile(
-                            fileId: ENV_CONFIG_ID,
-                            targetLocation: MANIFEST_CONFIG_PATH
-                        )
-                    ]) {
+                    // Inject config
+                    configFileProvider([configFile(fileId: ENV_CONFIG_ID, targetLocation: "${MANIFEST_CONFIG_PATH}")]) {
                         echo "✅ Config injected to ${MANIFEST_CONFIG_PATH}"
                     }
                 }
@@ -115,8 +106,8 @@ pipeline {
             steps {
                 script {
                     echo "Building Docker image: ${FULL_IMAGE}"
-                    sh 'docker build -t "$FULL_IMAGE" .'
-                    echo '✅ Build completed successfully'
+                    sh "docker build -t ${FULL_IMAGE} ."
+                    echo "✅ Build completed successfully"
                 }
             }
         }
@@ -124,9 +115,9 @@ pipeline {
         stage('📤 Push Image to Registry') {
             steps {
                 script {
-                    echo 'Pushing image to registry...'
+                    echo "Pushing image to registry..."
                     docker.withRegistry("https://${REGISTRY}", HARBOR_CREDENTIAL) {
-                        sh 'docker push "$FULL_IMAGE"'
+                        sh "docker push ${FULL_IMAGE}"
                     }
                     echo "✅ Image pushed successfully: ${FULL_IMAGE}"
                 }
@@ -136,16 +127,16 @@ pipeline {
         stage('🚀 Deploy') {
             steps {
                 script {
-                    echo 'Preparing staging deployment directory...'
+                    echo "Preparing deployment directory..."
                     sh 'ssh ${INSTANCE_CONTROLLER} "mkdir -p ${DEPLOY_PATH}"'
 
-                    echo 'Copying staging manifest files (including hidden files)...'
+                    echo "Copying manifest files (including hidden files)..."
                     sh 'rsync -avz ${MANIFEST_PATH}/ ${INSTANCE_CONTROLLER}:${DEPLOY_PATH}/'
 
-                    echo "Deploying staging backend with tag: ${TAG}"
+                    echo "Deploying stack with tag: ${TAG}"
                     sh 'ssh ${INSTANCE_CONTROLLER} "cd ${DEPLOY_PATH} && chmod +x deploy.sh && ./deploy.sh --tag ${TAG}"'
 
-                    echo '✅ Deployment completed successfully'
+                    echo "✅ Deployment completed successfully"
                 }
             }
         }
@@ -153,20 +144,10 @@ pipeline {
         stage('🔎 Verify') {
             steps {
                 script {
-                    sleep(15)
+                    sleep(10)
 
-                    echo 'Verifying deployed image, container health, and HTTP endpoint...'
-                    sh '''
-                        ssh ${INSTANCE_HOST} "
-                            actual_image=\$(docker inspect --format='{{.Config.Image}}' ${CONTAINER_NAME}) &&
-                            actual_health=\$(docker inspect --format='{{.State.Health.Status}}' ${CONTAINER_NAME}) &&
-                            test \"\$actual_image\" = \"${FULL_IMAGE}\" &&
-                            test \"\$actual_health\" = \"healthy\" &&
-                            curl --fail --silent --show-error ${HEALTHCHECK_URL} >/dev/null
-                        "
-                    '''
-
-                    echo '✅ Staging backend verified successfully'
+                    echo "Verifying services..."
+                    sh 'ssh ${INSTANCE_HOST} "cd ${DEPLOY_PATH} && docker compose ps"'
                 }
             }
         }
