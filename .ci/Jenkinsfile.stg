@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'oan-dev-1' }
+    agent { label 'oan-staging-1' }
 
     environment {
         // Registry Configuration
@@ -13,24 +13,48 @@ pipeline {
         INSTANCE_HOST       = "instance-2"
         DEPLOY_PATH         = "/opt/aitm/backend"
 
-        // Image Tagging
-        TAG        = "0.0.${BUILD_NUMBER}-dev"
-        FULL_IMAGE = "${REGISTRY}/${PROJECT}/${IMAGE_NAME}:${TAG}"
-
         // Stack Configuration
-        STACK_NAME            = "aitm"
-        SERVICE_NAME          = "backend"
-        MANIFEST_PATH         = "manifest/instance/backend"
-        MANIFEST_BRANCH       = "pipeline/dev"
+        STACK_NAME      = "aitm"
+        SERVICE_NAME    = "backend"
+        MANIFEST_PATH   = "manifest/instance/backend"
+        MANIFEST_BRANCH = "pipeline/staging"
 
         // Jenkins Config File IDs
-        ENV_CONFIG_ID  = '00188c41-f036-478b-ab3e-727e14a6d640'
+        ENV_CONFIG_ID = 'a60a426c-1820-47a4-b239-cd028a0817e3'
 
         // Config file paths in the deployment directory
-        MANIFEST_CONFIG_PATH      = "${MANIFEST_PATH}/.env"
+        MANIFEST_CONFIG_PATH = "${MANIFEST_PATH}/.env"
     }
 
     stages {
+        stage('🏷️ Get Tag Release') {
+            steps {
+                script {
+                    // Primary: injected by Jenkins when triggered by a tag push.
+                    def gitTag = env.TAG_NAME ?: ""
+
+                    // Fallback: detect an exact tag on the checked-out commit.
+                    if (!gitTag) {
+                        gitTag = sh(
+                            returnStdout: true,
+                            script: 'git tag --points-at HEAD --sort=-creatordate | head -n 1'
+                        ).trim()
+                    }
+
+                    if (!gitTag) {
+                        error("❌ Staging pipeline must be triggered by a Git tag.")
+                    }
+
+                    env.GIT_TAG    = gitTag
+                    env.TAG        = gitTag
+                    env.FULL_IMAGE = "${REGISTRY}/${PROJECT}/${IMAGE_NAME}:${gitTag}"
+
+                    echo "✅ Build triggered by tag: ${gitTag}"
+                    echo "ℹ️ Full image: ${env.FULL_IMAGE}"
+                }
+            }
+        }
+
         stage('📦 Update Submodules') {
             steps {
                 sshagent(credentials: ['ops-controller']) {
@@ -138,11 +162,11 @@ pipeline {
         }
 
         success {
-            echo '🎉 Pipeline completed successfully!'
+            echo '🎉 Staging pipeline completed successfully!'
         }
 
         failure {
-            echo '❌ Pipeline failed - check logs for details'
+            echo '❌ Staging pipeline failed - check logs for details'
         }
     }
 }
