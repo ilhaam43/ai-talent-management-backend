@@ -1,0 +1,151 @@
+pipeline {
+    agent { label 'oan-prod-dc-1' }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        // Registry Configuration
+        REGISTRY          = "registry.lintasarta.dev"
+        PROJECT           = "aitm"
+        IMAGE_NAME        = "backend"
+        HARBOR_CREDENTIAL = "aitm-lintasarta-credential"
+
+        // Instance Configuration
+        INSTANCE_CONTROLLER = "instance-controller-1"
+        INSTANCE_HOST       = "instance-2"
+        DEPLOY_PATH         = "/opt/aitm/backend"
+
+        // Stack Configuration
+        STACK_NAME      = "aitm"
+        SERVICE_NAME    = "backend"
+        MANIFEST_PATH   = "manifest/instance/backend"
+        MANIFEST_BRANCH = "pipeline/prod"
+
+        // Replace with the backend production Jenkins Config File ID.
+        ENV_CONFIG_ID = '90791ef3-0162-4237-8329-c8a73e008858'
+
+        MANIFEST_CONFIG_PATH = "${MANIFEST_PATH}/.env"
+    }
+
+    stages {
+        stage('🏷️ Get Tag Release') {
+            steps {
+                script {
+                    def gitTag = env.TAG_NAME ?: ""
+
+                    if (!gitTag) {
+                        gitTag = sh(
+                            returnStdout: true,
+                            script: 'git tag --points-at HEAD --sort=-creatordate | head -n 1'
+                        ).trim()
+                    }
+
+                    if (!gitTag) {
+                        error("❌ Production pipeline must be triggered by a Git tag.")
+                    }
+
+                    env.GIT_TAG    = gitTag
+                    env.TAG        = gitTag
+                    env.FULL_IMAGE = "${REGISTRY}/${PROJECT}/${IMAGE_NAME}:${gitTag}"
+
+                    echo "✅ Build triggered by tag: ${gitTag}"
+                    echo "ℹ️ Full image: ${env.FULL_IMAGE}"
+                }
+            }
+        }
+
+        stage('📦 Update Submodules') {
+            steps {
+                sshagent(credentials: ['ops-controller']) {
+                    script {
+                        sh 'git submodule sync'
+
+                        retry(3) {
+                            sh '''
+                                git submodule update --init manifest
+                                git -C manifest fetch origin "$MANIFEST_BRANCH"
+                                git -C manifest checkout -B "$MANIFEST_BRANCH" "origin/$MANIFEST_BRANCH"
+                            '''
+                        }
+
+                        sh 'git -C manifest status'
+                        sh 'git -C manifest log -1 --oneline'
+                    }
+                }
+            }
+        }
+
+        stage('⚙️ Inject Config') {
+            steps {
+                script {
+                    configFileProvider([
+                        configFile(
+                            fileId: ENV_CONFIG_ID,
+                            targetLocation: MANIFEST_CONFIG_PATH
+                        )
+                    ]) {
+                        echo "✅ Production config injected to ${MANIFEST_CONFIG_PATH}"
+                    }
+                }
+            }
+        }
+
+        stage('🐳 Build Docker Image') {
+            steps {
+                script {
+                    echo "Building Docker image: ${FULL_IMAGE}"
+                    sh 'docker build --pull -t "$FULL_IMAGE" .'
+                    echo "✅ Build completed successfully"
+                }
+            }
+        }
+
+        stage('📤 Push Image to Registry') {
+            steps {
+                script {
+                    docker.withRegistry("https://${REGISTRY}", HARBOR_CREDENTIAL) {
+                        sh 'docker push "$FULL_IMAGE"'
+                    }
+                    echo "✅ Image pushed successfully: ${FULL_IMAGE}"
+                }
+            }
+        }
+
+        stage('⛓️‍💥 Prepare Deployment') {
+            steps {
+                script {
+                    echo "Preparing production deployment directory..."
+                    sh 'ssh ${INSTANCE_CONTROLLER} "mkdir -p ${DEPLOY_PATH}"'
+
+                    echo "Copying manifest files (including hidden files)..."
+                    sh 'rsync -avz ${MANIFEST_PATH}/ ${INSTANCE_CONTROLLER}:${DEPLOY_PATH}/'
+
+                    echo "✅ Manifest copied to ${INSTANCE_CONTROLLER}:${DEPLOY_PATH}"
+                    echo "ℹ️ Image ready: ${FULL_IMAGE}"
+                    echo "ℹ️ Manual deployment: cd ${DEPLOY_PATH} && chmod +x deploy.sh && ./deploy.sh --tag ${TAG}"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo 'Cleaning up local Docker cache...'
+                sh 'docker image prune -f || true'
+            }
+        }
+
+        success {
+            echo '🎉 Backend production artifact and manifest are ready for manual deployment!'
+        }
+
+        failure {
+            echo '❌ Backend production pipeline failed - check logs for details'
+        }
+    }
+}

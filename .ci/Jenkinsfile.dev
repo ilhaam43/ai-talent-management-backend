@@ -1,0 +1,148 @@
+pipeline {
+    agent { label 'oan-dev-1' }
+
+    environment {
+        // Registry Configuration
+        REGISTRY          = "registry.lintasarta.dev"
+        PROJECT           = "aitm"
+        IMAGE_NAME        = "backend"
+        HARBOR_CREDENTIAL = "aitm-lintasarta-credential"
+
+        // Instance Configuration
+        INSTANCE_CONTROLLER = "instance-controller-1"
+        INSTANCE_HOST       = "instance-2"
+        DEPLOY_PATH         = "/opt/aitm/backend"
+
+        // Image Tagging
+        TAG        = "0.0.${BUILD_NUMBER}-dev"
+        FULL_IMAGE = "${REGISTRY}/${PROJECT}/${IMAGE_NAME}:${TAG}"
+
+        // Stack Configuration
+        STACK_NAME            = "aitm"
+        SERVICE_NAME          = "backend"
+        MANIFEST_PATH         = "manifest/instance/backend"
+        MANIFEST_BRANCH       = "pipeline/dev"
+
+        // Jenkins Config File IDs
+        ENV_CONFIG_ID  = '00188c41-f036-478b-ab3e-727e14a6d640'
+
+        // Config file paths in the deployment directory
+        MANIFEST_CONFIG_PATH      = "${MANIFEST_PATH}/.env"
+    }
+
+    stages {
+        stage('📦 Update Submodules') {
+            steps {
+                sshagent(credentials: ['ops-controller']) {
+                    script {
+                        sh 'git submodule sync'
+
+                        def retries = 3
+
+                        for (int i = 1; i <= retries; i++) {
+                            try {
+                                sh '''
+                                    git submodule update --init manifest
+
+                                    git -C manifest fetch origin "$MANIFEST_BRANCH"
+                                    git -C manifest checkout -B "$MANIFEST_BRANCH" "origin/$MANIFEST_BRANCH"
+                                '''
+                                break
+                            } catch (err) {
+                                if (i == retries) {
+                                    error "Manifest checkout failed after ${retries} attempts: ${err}"
+                                }
+
+                                echo "⚠️ Attempt ${i}/${retries} failed, retrying in 10s..."
+                                sleep(10)
+                            }
+                        }
+
+                        sh 'git -C manifest status'
+                        sh 'git -C manifest log -1'
+                    }
+                }
+            }
+        }
+
+        stage('⚙️ Inject Config') {
+            steps {
+                script {
+                    echo "Injecting config files..."
+
+                    // Inject config
+                    configFileProvider([configFile(fileId: ENV_CONFIG_ID, targetLocation: "${MANIFEST_CONFIG_PATH}")]) {
+                        echo "✅ Config injected to ${MANIFEST_CONFIG_PATH}"
+                    }
+                }
+            }
+        }
+
+        stage('🐳 Build Docker Image') {
+            steps {
+                script {
+                    echo "Building Docker image: ${FULL_IMAGE}"
+                    sh "docker build -t ${FULL_IMAGE} ."
+                    echo "✅ Build completed successfully"
+                }
+            }
+        }
+
+        stage('📤 Push Image to Registry') {
+            steps {
+                script {
+                    echo "Pushing image to registry..."
+                    docker.withRegistry("https://${REGISTRY}", HARBOR_CREDENTIAL) {
+                        sh "docker push ${FULL_IMAGE}"
+                    }
+                    echo "✅ Image pushed successfully: ${FULL_IMAGE}"
+                }
+            }
+        }
+
+        stage('🚀 Deploy') {
+            steps {
+                script {
+                    echo "Preparing deployment directory..."
+                    sh 'ssh ${INSTANCE_CONTROLLER} "mkdir -p ${DEPLOY_PATH}"'
+
+                    echo "Copying manifest files (including hidden files)..."
+                    sh 'rsync -avz ${MANIFEST_PATH}/ ${INSTANCE_CONTROLLER}:${DEPLOY_PATH}/'
+
+                    echo "Deploying stack with tag: ${TAG}"
+                    sh 'ssh ${INSTANCE_CONTROLLER} "cd ${DEPLOY_PATH} && chmod +x deploy.sh && ./deploy.sh --tag ${TAG}"'
+
+                    echo "✅ Deployment completed successfully"
+                }
+            }
+        }
+
+        stage('🔎 Verify') {
+            steps {
+                script {
+                    sleep(10)
+
+                    echo "Verifying services..."
+                    sh 'ssh ${INSTANCE_HOST} "cd ${DEPLOY_PATH} && docker compose ps"'
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo 'Cleaning up local Docker cache...'
+                sh 'docker image prune -f || true'
+            }
+        }
+
+        success {
+            echo '🎉 Pipeline completed successfully!'
+        }
+
+        failure {
+            echo '❌ Pipeline failed - check logs for details'
+        }
+    }
+}

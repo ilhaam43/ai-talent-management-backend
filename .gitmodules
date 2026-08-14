@@ -1,0 +1,4 @@
+[submodule "manifest"]
+	path = manifest
+	url = ssh://git@git.lintasarta.dev:2424/devops/aitm-manifest.git
+	branch = pipeline/prod
