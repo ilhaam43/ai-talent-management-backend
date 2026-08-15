@@ -96,7 +96,8 @@ pipeline {
                               -e SONAR_USER_HOME=/tmp/.sonar \
                               sonarsource/sonar-scanner-cli sonar-scanner \
                               -Dsonar.projectKey=dev-aitm-backend \
-                              -Dsonar.sources=. \
+                              -Dsonar.sources=src \
+                              -Dsonar.working.directory=/usr/src/.scannerwork \
                               -Dsonar.host.url=http://10.250.3.73:9000 \
                               -Dsonar.token="$SONAR_AUTH_TOKEN"
                         '''
