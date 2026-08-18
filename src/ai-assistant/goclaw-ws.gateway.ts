@@ -126,37 +126,59 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   /**
-   * Patterns that indicate internal agent/system errors that should not be shown to the user.
+   * Patterns that indicate internal agent/system errors and MCP/tool traces that should not be shown to the user.
    */
   private readonly INTERNAL_ERROR_PATTERNS = [
-    /CRITICAL:.*exec returned identical results/i,
-    /\[System: WARNING.*exec has returned the same result/i,
-    /failed to stat document file:/i,
-    /Document analysis failed: all providers failed/i,
-    /litellm\.BadRequestError/i,
-    /deka-llm:.*"error"/i,
-    /HTTP 400:.*deka-llm/i,
-    /No fallback model group found/i,
-    /\(command completed with no output\)/,
-    /Stopping to prevent runaway loop/i,
+    /<<<EXTERNAL_UNTRUSTED_CONTENT>>>[\s\S]*?<<<END_EXTERNAL_UNTRUSTED_CONTENT>>>/gi,
+    /<<<EXTERNAL_UNTRUSTED_CONTENT>>>/gi,
+    /<<<END_EXTERNAL_UNTRUSTED_CONTENT>>>/gi,
+    /\[REMINDER:\s*Above content is from an EXTERNAL[^\]]*\]/gi,
+    /MCP tool "[^"]*" error:[\s\S]*/gi,
+    /Tool '[^']*' parameter validation failed:[\s\S]*/gi,
+    /Invalid discriminator value[\s\S]*/gi,
+    /Source:\s*MCP Server[^\n]*/gi,
+    /\(command completed with no output\)/gi,
+    /^path is required$/gim,
+    /^Sent file:\s*.+/gim,
+    /CRITICAL:.*exec returned identical results.*/gi,
+    /\[System: WARNING.*exec has returned the same result.*/gi,
+    /failed to stat document file:.*/gi,
+    /Document analysis failed:.*/gi,
+    /litellm\.BadRequestError.*/gi,
+    /deka-llm:.*"error".*/gi,
+    /HTTP 400:.*deka-llm.*/gi,
+    /No fallback model group found.*/gi,
+    /Stopping to prevent runaway loop.*/gi,
   ];
 
   private readonly FRIENDLY_ERROR = '⚠️ Maaf, saya mengalami kendala teknis saat memproses permintaan Anda. Silakan coba lagi atau ajukan pertanyaan lain.';
 
   /**
-   * Check if text contains internal error patterns that should be hidden from the user.
+   * Check if text contains internal error patterns.
    */
   private containsInternalError(text: string): boolean {
     return this.INTERNAL_ERROR_PATTERNS.some((pattern) => pattern.test(text));
   }
 
   /**
-   * Clean streaming chunks: remove lines that contain internal error patterns.
+   * Clean message content by stripping out MCP tool logs, system wrappers, and trace outputs.
+   */
+  public cleanMessageContent(text: string): string {
+    if (!text || typeof text !== 'string') return '';
+    let cleaned = text;
+    for (const pattern of this.INTERNAL_ERROR_PATTERNS) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+    // Clean up excessive blank lines
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    return cleaned.trim();
+  }
+
+  /**
+   * Clean streaming chunks: remove internal error/trace patterns.
    */
   private sanitizeChunk(chunk: string): string {
-    const lines = chunk.split('\n');
-    const cleaned = lines.filter((line) => !this.containsInternalError(line));
-    return cleaned.join('\n');
+    return this.cleanMessageContent(chunk);
   }
 
   private handleGoClawFrame(client: AuthenticatedSocket, frame: GoclawFrame) {
@@ -190,15 +212,14 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
     } else if (frame.type === 'res') {
       if (frame.ok && frame.payload?.content) {
-        let content = frame.payload.content;
-        // Replace entire response if it contains internal error messages
-        if (this.containsInternalError(content)) {
+        let content = this.cleanMessageContent(frame.payload.content);
+        if (!content && this.containsInternalError(frame.payload.content)) {
           this.logger.warn(`Filtered internal error from agent response for user ${client.email}`);
           content = this.FRIENDLY_ERROR;
         } else if (client.userId) {
           // Check for generated files in user's workspace
           try {
-            const recentFiles = this.aiAssistantService.getRecentGeneratedFiles(client.userId);
+            const recentFiles = this.aiAssistantService.getRecentGeneratedFiles(client.userId, 7 * 24 * 3600 * 1000);
             for (const file of recentFiles) {
               const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file)}`;
               if (!content.includes(`/ai-assistant/download/${encodeURIComponent(file)}`)) {
@@ -209,6 +230,11 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
             this.logger.warn(`Failed to check recent generated files: ${err.message}`);
           }
         }
+
+        if (!content.trim()) {
+          content = 'Siap, permintaan telah selesai diproses.';
+        }
+
         client.send(
           JSON.stringify({
             type: 'agent_finish',
@@ -308,14 +334,62 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: { sessionKey: string },
   ) {
-    if (!client.goclawUserId) return;
+    if (!client.goclawUserId || !client.userId) return;
     try {
-      const messages = await this.goclawService.getChatHistory(client.goclawUserId, data.sessionKey);
+      const rawMessages = await this.goclawService.getChatHistory(client.goclawUserId, data.sessionKey);
+      const userFiles = this.aiAssistantService.getRecentGeneratedFiles(client.userId, 7 * 24 * 3600 * 1000);
+
+      const cleanedMessages: Array<{ role: string; content: string }> = [];
+
+      if (Array.isArray(rawMessages)) {
+        for (const m of rawMessages) {
+          // Strictly keep only user and assistant messages (filter out tool, function, system)
+          if (m.role !== 'user' && m.role !== 'assistant') continue;
+
+          let content = m.content || m.text || '';
+          if (typeof content !== 'string') continue;
+
+          content = this.cleanMessageContent(content);
+          if (!content.trim()) continue;
+
+          if (m.role === 'assistant') {
+            // Check if any files were generated that match or belong to this chat
+            for (const file of userFiles) {
+              const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file)}`;
+              if (
+                content.toLowerCase().includes(file.toLowerCase()) &&
+                !content.includes(`/ai-assistant/download/${encodeURIComponent(file)}`)
+              ) {
+                content += `\n\n📥 **Download File:** [${file}](${downloadUrl})`;
+              }
+            }
+          }
+
+          cleanedMessages.push({
+            role: m.role,
+            content,
+          });
+        }
+
+        // If there are user files and none of the assistant messages have download links, attach to the last assistant message
+        if (userFiles.length > 0) {
+          const lastAssistant = [...cleanedMessages].reverse().find((m) => m.role === 'assistant');
+          if (lastAssistant) {
+            for (const file of userFiles) {
+              const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file)}`;
+              if (!lastAssistant.content.includes(`/ai-assistant/download/${encodeURIComponent(file)}`)) {
+                lastAssistant.content += `\n\n📥 **Download File:** [${file}](${downloadUrl})`;
+              }
+            }
+          }
+        }
+      }
+
       client.send(
         JSON.stringify({
           type: 'chat_history',
           sessionKey: data.sessionKey,
-          payload: { messages },
+          payload: { messages: cleanedMessages },
         }),
       );
     } catch (err: any) {
