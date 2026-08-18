@@ -134,6 +134,7 @@ services:
       - .:/usr/src/app
       - /usr/src/app/node_modules
       - uploads:/usr/src/app/uploads
+      - /root/.goclaw/workspace/a-l-i-c-e-solo:/root/.goclaw/workspace/a-l-i-c-e-solo
     ports:
       - "3000:3000"
     command: sh -c "rm -rf /var/lib/apt/lists/* && apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 make g++ libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev libpixman-1-dev openssl wget && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npm run start:dev"
