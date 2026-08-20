@@ -181,6 +181,31 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     return this.cleanMessageContent(chunk);
   }
 
+  /**
+   * Check if a message is a transient tool announcement rather than a final assistant response.
+   */
+  private isToolAnnouncement(text: string): boolean {
+    if (!text) return false;
+    const trimmed = text.trim();
+    if (trimmed.length < 200) {
+      const lower = trimmed.toLowerCase();
+      if (
+        lower.startsWith('siap,') ||
+        lower.startsWith('oke,') ||
+        lower.startsWith('mohon tunggu') ||
+        lower.includes('mohon tunggu') ||
+        lower.includes('saya cari di database') ||
+        lower.includes('saya cari di linkedin') ||
+        lower.includes('searching cv database') ||
+        lower.includes('searching linkedin') ||
+        lower.includes('🔄')
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private handleGoClawFrame(client: AuthenticatedSocket, frame: GoclawFrame) {
     if (client.readyState !== WebSocket.OPEN) return;
 
@@ -192,13 +217,26 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           let chunk = payload.chunk || payload.delta || '';
           chunk = this.sanitizeChunk(chunk);
           if (chunk.trim()) {
-            client.send(
-              JSON.stringify({
-                type: 'chunk',
-                chunk,
-                sessionKey: client.activeSessionKey,
-              }),
-            );
+            if (this.isToolAnnouncement(chunk)) {
+              client.send(
+                JSON.stringify({
+                  type: 'agent',
+                  payload: {
+                    status: 'announcement',
+                    announcement: chunk.trim(),
+                  },
+                  sessionKey: client.activeSessionKey,
+                }),
+              );
+            } else {
+              client.send(
+                JSON.stringify({
+                  type: 'chunk',
+                  chunk,
+                  sessionKey: client.activeSessionKey,
+                }),
+              );
+            }
           }
         }
       } else if (frame.event === 'agent') {
@@ -209,10 +247,37 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           let chunk = innerPayload.content || innerPayload.delta || '';
           chunk = this.sanitizeChunk(chunk);
           if (chunk) {
+            if (this.isToolAnnouncement(chunk)) {
+              client.send(
+                JSON.stringify({
+                  type: 'agent',
+                  payload: {
+                    status: 'announcement',
+                    announcement: chunk.trim(),
+                  },
+                  sessionKey: client.activeSessionKey,
+                }),
+              );
+            } else {
+              client.send(
+                JSON.stringify({
+                  type: 'chunk',
+                  chunk,
+                  sessionKey: client.activeSessionKey,
+                }),
+              );
+            }
+          }
+        } else if (subType === 'block.reply') {
+          const content = innerPayload.content || '';
+          if (innerPayload.source === 'tool_announcement' || this.isToolAnnouncement(content)) {
             client.send(
               JSON.stringify({
-                type: 'chunk',
-                chunk,
+                type: 'agent',
+                payload: {
+                  status: 'announcement',
+                  announcement: content.trim(),
+                },
                 sessionKey: client.activeSessionKey,
               }),
             );
@@ -454,6 +519,11 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
 
           content = this.cleanMessageContent(content);
           if (!content.trim()) continue;
+
+          // Filter out transient tool announcements so history contains only clean Q&A
+          if (m.role === 'assistant' && (m.source === 'tool_announcement' || this.isToolAnnouncement(content))) {
+            continue;
+          }
 
           if (m.role === 'assistant') {
             // Check if any files were generated that match or belong to this chat
