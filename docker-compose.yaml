@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: ai_talent_db
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -35,7 +35,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "rm -rf /var/lib/apt/lists/* && apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npx prisma db push && npx tsx scripts/seed/seed-all.ts"
+    command: sh -c "which openssl > /dev/null || (apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/*); npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npx prisma db push && npx tsx scripts/seed/seed-all.ts"
     restart: "no"
     networks:
       - ai-talent-network
@@ -72,17 +72,21 @@ services:
     networks:
       - ai-talent-network
     environment:
+      MINIO_ENDPOINT: ${MINIO_INTERNAL_ENDPOINT:-http://minio:9000}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-ai-talent-documents}
       MINIO_AVATARS_BUCKET: ${MINIO_AVATARS_BUCKET:-ai-talent-avatars}
+      MINIO_COMPANY_LOGO_BUCKET: ${MINIO_COMPANY_LOGO_BUCKET:-aitm-company-logo}
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc alias set local $${MINIO_ENDPOINT} $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
       mc mb --ignore-existing local/$${MINIO_BUCKET_NAME};
       mc anonymous set none local/$${MINIO_BUCKET_NAME};
       mc mb --ignore-existing local/$${MINIO_AVATARS_BUCKET};
       mc anonymous set download local/$${MINIO_AVATARS_BUCKET};
+      mc mb --ignore-existing local/$${MINIO_COMPANY_LOGO_BUCKET};
+      mc anonymous set download local/$${MINIO_COMPANY_LOGO_BUCKET};
       echo 'Buckets ready';
       "
 
@@ -124,12 +128,13 @@ services:
       - GMAIL_FROM_NAME=${GMAIL_FROM_NAME}
       - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD}
       # MinIO Object Storage
-      - MINIO_INTERNAL_ENDPOINT=http://minio:9000
+      - MINIO_INTERNAL_ENDPOINT=${MINIO_INTERNAL_ENDPOINT:-http://minio:9000}
       - MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT:-http://localhost:9000}
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME:-ai-talent-documents}
       - MINIO_AVATARS_BUCKET=${MINIO_AVATARS_BUCKET:-ai-talent-avatars}
+      - MINIO_COMPANY_LOGO_BUCKET=${MINIO_COMPANY_LOGO_BUCKET:-aitm-company-logo}
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
@@ -137,7 +142,7 @@ services:
       - /root/.goclaw/workspace/a-l-i-c-e-solo:/root/.goclaw/workspace/a-l-i-c-e-solo
     ports:
       - "3000:3000"
-    command: sh -c "rm -rf /var/lib/apt/lists/* && apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 make g++ libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev libpixman-1-dev openssl wget && rm -rf /var/lib/apt/lists/* && npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npm run start:dev"
+    command: sh -c "which openssl > /dev/null || (apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 make g++ libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev libpixman-1-dev openssl wget && rm -rf /var/lib/apt/lists/*); npm install --include=dev --legacy-peer-deps --ignore-scripts && npx prisma generate && npm run start:dev"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/master/document-types || exit 1"]
       interval: 30s

@@ -40,11 +40,13 @@ export class StorageService implements OnModuleInit {
 
   private readonly documentsBucket: string;
   private readonly avatarsBucket: string;
+  private readonly companyLogoBucket: string;
   private readonly externalEndpoint: string;
 
   constructor(private configService: ConfigService) {
     this.documentsBucket = this.configService.get<string>('MINIO_BUCKET_NAME') || 'ai-talent-documents';
     this.avatarsBucket = this.configService.get<string>('MINIO_AVATARS_BUCKET') || 'ai-talent-avatars';
+    this.companyLogoBucket = this.configService.get<string>('MINIO_COMPANY_LOGO_BUCKET') || 'aitm-company-logo';
     this.externalEndpoint = this.configService.get<string>('MINIO_EXTERNAL_ENDPOINT') || 'http://localhost:9000';
   }
 
@@ -53,8 +55,14 @@ export class StorageService implements OnModuleInit {
     const externalEndpoint = this.externalEndpoint;
 
     const credentials = {
-      accessKeyId: this.configService.get<string>('MINIO_ACCESS_KEY') || 'minioadmin',
-      secretAccessKey: this.configService.get<string>('MINIO_SECRET_KEY') || 'minioadmin',
+      accessKeyId:
+        this.configService.get<string>('MINIO_ACCESS_KEY') ||
+        this.configService.get<string>('MINIO_ROOT_USER') ||
+        'minioadmin',
+      secretAccessKey:
+        this.configService.get<string>('MINIO_SECRET_KEY') ||
+        this.configService.get<string>('MINIO_ROOT_PASSWORD') ||
+        'minioadmin',
     };
 
     const commonConfig = {
@@ -74,7 +82,7 @@ export class StorageService implements OnModuleInit {
     });
 
     this.logger.log(`StorageService initialized — internal: ${internalEndpoint}, external: ${externalEndpoint}`);
-    this.logger.log(`Buckets — documents: ${this.documentsBucket}, avatars: ${this.avatarsBucket}`);
+    this.logger.log(`Buckets — documents: ${this.documentsBucket}, avatars: ${this.avatarsBucket}, companyLogo: ${this.companyLogoBucket}`);
   }
 
   // ============================================
@@ -104,6 +112,27 @@ export class StorageService implements OnModuleInit {
    */
   getAvatarPublicUrl(key: string): string {
     return `${this.externalEndpoint}/${this.avatarsBucket}/${key}`;
+  }
+
+  /**
+   * Build key for company logos.
+   * Example: "company-uuid.png"
+   */
+  buildCompanyLogoKey(companyId: string, filename: string): string {
+    const ext = this.sanitizeExtension(filename) || '.png';
+    return `${companyId}-${randomUUID().slice(0, 8)}${ext}`;
+  }
+
+  /**
+   * Get public URL for a company logo.
+   */
+  getCompanyLogoPublicUrl(key: string): string {
+    return `${this.externalEndpoint}/${this.companyLogoBucket}/${key}`;
+  }
+
+  /** Get company logo bucket name */
+  getCompanyLogoBucket(): string {
+    return this.companyLogoBucket;
   }
 
   // ============================================

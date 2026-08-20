@@ -19,26 +19,34 @@ async function bootstrap() {
     process.env.FRONTEND_URL,
     'http://localhost:3000',
     'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
     'https://backend-ai-recruitment.lintasarta.dev',
     'https://ai-recruitment.lintasarta.dev',
     'https://workflow-ai-recruitment.lintasarta.dev',
-  ].filter(Boolean) // Remove undefined values
+  ].filter(Boolean) as string[];
 
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, Postman, or curl)
-      if (!origin) return callback(null, true)
+      if (!origin) return callback(null, true);
 
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true)
+      const sanitizedOrigin = origin.replace(/\/$/, '');
+      const isAllowed =
+        allowedOrigins.includes(sanitizedOrigin) ||
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(sanitizedOrigin) ||
+        /\.lintasarta\.dev$/.test(sanitizedOrigin);
+
+      if (isAllowed) {
+        callback(null, true);
       } else {
-        console.warn(`CORS blocked origin: ${origin}`)
-        callback(null, false)
+        console.warn(`CORS blocked origin: ${origin}`);
+        callback(null, false);
       }
     },
     credentials: true, // Allow cookies to be sent
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
     exposedHeaders: ['Set-Cookie'],
     preflightContinue: false,
     optionsSuccessStatus: 204,
