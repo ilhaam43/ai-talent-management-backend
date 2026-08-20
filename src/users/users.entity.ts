@@ -7,5 +7,6 @@ export class User {
     public password: string,
     public createdAt: Date,
     public updatedAt: Date,
+    public guideDismissed: boolean = false,
   ) {}
 }

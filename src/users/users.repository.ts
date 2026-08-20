@@ -19,7 +19,8 @@ export class UsersRepository implements Repository<User> {
       row.emailVerified,
       row.password,
       row.createdAt,
-      row.updatedAt
+      row.updatedAt,
+      row.guideDismissed
     );
   }
   async findAll() {
@@ -33,7 +34,8 @@ export class UsersRepository implements Repository<User> {
           r.emailVerified,
           r.password,
           r.createdAt,
-          r.updatedAt
+          r.updatedAt,
+          r.guideDismissed
         )
     );
   }
@@ -55,7 +57,8 @@ export class UsersRepository implements Repository<User> {
       row.emailVerified,
       row.password,
       row.createdAt,
-      row.updatedAt
+      row.updatedAt,
+      row.guideDismissed
     );
   }
 
@@ -69,7 +72,8 @@ export class UsersRepository implements Repository<User> {
       row.emailVerified,
       row.password,
       row.createdAt,
-      row.updatedAt
+      row.updatedAt,
+      row.guideDismissed
     );
   }
 
@@ -77,6 +81,7 @@ export class UsersRepository implements Repository<User> {
     name?: string;
     email?: string;
     password?: string;
+    guideDismissed?: boolean;
   }) {
     if (data.password) {
       const hashedPassword = await bcrypt.hash(data.password, await bcrypt.genSalt());
@@ -87,5 +92,22 @@ export class UsersRepository implements Repository<User> {
       data,
     });
     return row;
+  }
+
+  async getGuideStatus(id: string): Promise<boolean> {
+    const row = await this.prisma.user.findUnique({
+      where: { id },
+      select: { guideDismissed: true },
+    });
+    return row?.guideDismissed ?? false;
+  }
+
+  async updateGuideStatus(id: string, guideDismissed: boolean): Promise<boolean> {
+    const row = await this.prisma.user.update({
+      where: { id },
+      data: { guideDismissed },
+      select: { guideDismissed: true },
+    });
+    return row.guideDismissed;
   }
 }

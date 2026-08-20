@@ -33,4 +33,14 @@ export class UsersService {
     if (!item) throw new NotFoundException("User not found");
     return this.repo.update(data.id, data);
   }
+
+  async getGuideStatus(userId: string) {
+    const guideDismissed = await this.repo.getGuideStatus(userId);
+    return { guideDismissed };
+  }
+
+  async updateGuideStatus(userId: string, guideDismissed: boolean) {
+    const result = await this.repo.updateGuideStatus(userId, guideDismissed);
+    return { guideDismissed: result };
+  }
 }

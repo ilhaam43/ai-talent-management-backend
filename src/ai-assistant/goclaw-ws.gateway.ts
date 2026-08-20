@@ -7,7 +7,7 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Server, WebSocket } from 'ws';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -202,10 +202,113 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           }
         }
       } else if (frame.event === 'agent') {
+        const subType = frame.payload?.type;
+        const innerPayload = frame.payload?.payload || {};
+
+        if (subType === 'chunk') {
+          let chunk = innerPayload.content || innerPayload.delta || '';
+          chunk = this.sanitizeChunk(chunk);
+          if (chunk) {
+            client.send(
+              JSON.stringify({
+                type: 'chunk',
+                chunk,
+                sessionKey: client.activeSessionKey,
+              }),
+            );
+          }
+        } else if (subType === 'thinking') {
+          const thought = innerPayload.content || innerPayload.text || innerPayload.thinking || '';
+          this.logger.log(`[WS Event -> Frontend] thinking: ${thought.slice(0, 60)}... (user: ${client.email})`);
+          client.send(
+            JSON.stringify({
+              type: 'agent',
+              payload: {
+                status: 'thinking',
+                thought,
+                phase: 'thinking',
+              },
+              sessionKey: client.activeSessionKey,
+            }),
+          );
+        } else if (subType === 'tool.call') {
+          const tool = innerPayload.name || innerPayload.tool || '';
+          const args = innerPayload.arguments || innerPayload.args || innerPayload.input;
+          this.logger.log(`[WS Event -> Frontend] tool.call: ${tool} (user: ${client.email})`);
+          client.send(
+            JSON.stringify({
+              type: 'agent',
+              payload: {
+                status: 'tool_call',
+                tool,
+                args,
+                input: args,
+              },
+              sessionKey: client.activeSessionKey,
+            }),
+          );
+        } else if (subType === 'tool.result') {
+          const tool = innerPayload.name || innerPayload.tool || '';
+          this.logger.log(`[WS Event -> Frontend] tool.result: ${tool} (user: ${client.email})`);
+          client.send(
+            JSON.stringify({
+              type: 'agent',
+              payload: {
+                status: 'tool_result',
+                tool,
+                output: innerPayload.result,
+              },
+              sessionKey: client.activeSessionKey,
+            }),
+          );
+        } else {
+          this.logger.log(`[WS Event -> Frontend] agent: ${JSON.stringify(frame.payload)} (user: ${client.email})`);
+          client.send(
+            JSON.stringify({
+              type: 'agent',
+              payload: frame.payload,
+              sessionKey: client.activeSessionKey,
+            }),
+          );
+        }
+      } else if (frame.event === 'tool.call' || frame.event === 'tool_call') {
+        this.logger.log(`[WS Event -> Frontend] tool.call: ${frame.payload?.tool || frame.payload?.name} (user: ${client.email})`);
         client.send(
           JSON.stringify({
             type: 'agent',
-            payload: frame.payload,
+            payload: {
+              status: 'tool_call',
+              tool: frame.payload?.tool || frame.payload?.name,
+              input: frame.payload?.input || frame.payload?.args,
+              ...frame.payload,
+            },
+            sessionKey: client.activeSessionKey,
+          }),
+        );
+      } else if (frame.event === 'tool.result' || frame.event === 'tool_result') {
+        this.logger.log(`[WS Event -> Frontend] tool.result: ${frame.payload?.tool || frame.payload?.name} (user: ${client.email})`);
+        client.send(
+          JSON.stringify({
+            type: 'agent',
+            payload: {
+              status: 'tool_result',
+              tool: frame.payload?.tool || frame.payload?.name,
+              output: frame.payload?.output,
+              ...frame.payload,
+            },
+            sessionKey: client.activeSessionKey,
+          }),
+        );
+      } else if (frame.event === 'thought' || frame.event === 'thinking') {
+        this.logger.log(`[WS Event -> Frontend] thought/thinking (user: ${client.email})`);
+        client.send(
+          JSON.stringify({
+            type: 'agent',
+            payload: {
+              status: 'thinking',
+              thought: frame.payload?.thought || frame.payload?.text || frame.payload?.delta || frame.payload?.reasoning_content,
+              ...frame.payload,
+            },
             sessionKey: client.activeSessionKey,
           }),
         );
