@@ -39,8 +39,9 @@ export class AiAssistantController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List user chat sessions' })
-  async listSessions(@Request() req: any) {
-    return this.aiAssistantService.listUserSessions(req.user.id || req.user.userId);
+  @ApiQuery({ name: 'q', required: false, description: 'Search query for filtering chat sessions' })
+  async listSessions(@Request() req: any, @Query('q') q?: string) {
+    return this.aiAssistantService.listUserSessions(req.user.id || req.user.userId, q);
   }
 
   @Post('sessions')

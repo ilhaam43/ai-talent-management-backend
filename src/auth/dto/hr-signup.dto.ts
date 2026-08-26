@@ -10,6 +10,12 @@ export class HrSignupDto {
   @IsNotEmpty()
   @MinLength(2, { message: 'Full name must be at least 2 characters' })
   name!: string;
+
+  @ApiProperty({ example: 'Acme Corp' })
+  @IsString()
+  @IsNotEmpty({ message: 'Company name is required' })
+  companyName!: string;
+
   @ApiProperty({ example: 'SecurePass123!', minLength: 8 })
   @IsString()
   @IsNotEmpty()

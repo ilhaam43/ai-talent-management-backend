@@ -44,11 +44,29 @@ export class AiAssistantService {
   }
 
   /**
-   * Get list of chat sessions for a user (from DB)
+   * Get list of chat sessions for a user (from DB) with optional search query
    */
-  async listUserSessions(userId: string) {
+  async listUserSessions(userId: string, query?: string) {
+    if (!query || !query.trim()) {
+      return this.prisma.chatSession.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
+
+    const words = query.trim().split(/\s+/).filter(Boolean);
+    const AND = words.map((word) => ({
+      OR: [
+        { title: { contains: word, mode: 'insensitive' as const } },
+        { lastMessage: { contains: word, mode: 'insensitive' as const } },
+      ],
+    }));
+
     return this.prisma.chatSession.findMany({
-      where: { userId },
+      where: {
+        userId,
+        AND,
+      },
       orderBy: { updatedAt: 'desc' },
     });
   }

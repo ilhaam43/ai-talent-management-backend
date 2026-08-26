@@ -25,6 +25,7 @@ import { CalendarModule } from './calendar/calendar.module';
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
 import { PipelineActionsModule } from './pipeline-actions/pipeline-actions.module';
+import { CompanyModule } from './company/company.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { PipelineActionsModule } from './pipeline-actions/pipeline-actions.modul
     DatabaseModule,
     UsersModule,
     AuthModule,
+    CompanyModule,
     CandidateProfileModule,
     CVParserModule,
     DocumentsModule,

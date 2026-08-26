@@ -105,7 +105,8 @@ export class AuthService {
           candidates: true, // Include candidate profile if exists
           employees: {
             include: {
-              userRole: true
+              userRole: true,
+              company: true,
             }
           }
         },
@@ -149,13 +150,18 @@ export class AuthService {
         throw new ForbiddenException('Please verify your email before logging in.')
       }
 
-      // Return user with candidate info
+      // Return user with candidate & company info
       const { password, ...userWithoutPassword } = user
       return {
         ...userWithoutPassword,
         candidateId: candidate?.id || null,
         candidateEmail: candidate?.candidateEmail || user.email,
-        role: role
+        role: role,
+        company: employee?.company ? {
+          id: employee.company.id,
+          name: employee.company.name,
+          logoUrl: employee.company.logoUrl,
+        } : null,
       }
     } catch (error) {
       console.error('validateUser error:', error)
@@ -301,7 +307,7 @@ export class AuthService {
   // ─── HR Signup + OTP Verification ──────────────────────────────────────────
 
   async hrSignup(dto: HrSignupDto) {
-    const { email, name, password } = dto
+    const { email, name, password, companyName } = dto
 
     // 1. Duplicate email check
     const existing = await this.prisma.user.findUnique({ where: { email } })
@@ -317,7 +323,7 @@ export class AuthService {
     const hashedOtp = await bcrypt.hash(otp, 10)
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
-    // 4. Transaction: User + Employee
+    // 4. Transaction: User + Employee + Company
     await this.prisma.$transaction(async (tx) => {
       // Create User (unverified)
       const user = await tx.user.create({
@@ -328,6 +334,13 @@ export class AuthService {
           isVerified: false,
           otpCode: hashedOtp,
           otpExpiry,
+        },
+      })
+
+      // Create Company
+      const company = await tx.company.create({
+        data: {
+          name: companyName,
         },
       })
 
@@ -360,6 +373,7 @@ export class AuthService {
           userRoleId: hrRole.id,
           employeePositionId: position.id,
           employeeIdentificationNumber: ein,
+          companyId: company.id,
         },
       })
     })

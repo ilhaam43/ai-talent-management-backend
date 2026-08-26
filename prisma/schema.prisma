@@ -189,6 +189,8 @@ model Employee {
   createdAt                    DateTime                       @default(now()) @map("created_at")
   updatedAt                    DateTime                       @updatedAt @map("updated_at")
   conductedPipelineStages      CandidateApplicationPipeline[]
+  companyId                    String?                        @map("company_id")
+  company                      Company?                       @relation(fields: [companyId], references: [id])
   department                   Department?                    @relation(fields: [departmentId], references: [id])
   directorate                  Directorate?                   @relation(fields: [directorateId], references: [id])
   division                     Division?                      @relation(fields: [divisionId], references: [id])
@@ -200,6 +202,17 @@ model Employee {
   talentPoolBatches            TalentPoolBatch[]
 
   @@map("employees")
+}
+
+model Company {
+  id        String     @id @default(uuid())
+  name      String
+  logoUrl   String?    @map("logo_url")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  employees Employee[]
+
+  @@map("companies")
 }
 
 model JobRole {
