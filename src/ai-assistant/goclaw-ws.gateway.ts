@@ -63,6 +63,19 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
       const secret = this.configService.get<string>('JWT_SECRET') || 'supersecretjwt';
       const payload = this.jwtService.verify(token, { secret });
 
+      // Verify user exists in database (e.g. after database reset/reseed)
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, email: true },
+      });
+
+      if (!user) {
+        this.logger.warn(`WS connection rejected: User ${payload.sub} (${payload.email}) not found in DB.`);
+        client.send(JSON.stringify({ type: 'error', error: 'User session expired or invalidated. Please login again.' }));
+        client.close(4001, 'Unauthorized');
+        return;
+      }
+
       client.userId = payload.sub;
       client.email = payload.email;
       client.name = payload.name;
@@ -187,17 +200,26 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
   private isToolAnnouncement(text: string): boolean {
     if (!text) return false;
     const trimmed = text.trim();
-    if (trimmed.length < 200) {
+    if (trimmed.length < 250) {
       const lower = trimmed.toLowerCase();
       if (
-        lower.startsWith('siap,') ||
-        lower.startsWith('oke,') ||
+        lower.startsWith('siap') ||
+        lower.startsWith('oke') ||
+        lower.startsWith('baik') ||
         lower.startsWith('mohon tunggu') ||
+        lower.startsWith('tunggu sebentar') ||
         lower.includes('mohon tunggu') ||
+        lower.includes('tunggu sebentar') ||
         lower.includes('saya cari di database') ||
+        lower.includes('saya akan mencari') ||
+        lower.includes('saya cek di database') ||
         lower.includes('saya cari di linkedin') ||
         lower.includes('searching cv database') ||
+        lower.includes('searching internal cv') ||
         lower.includes('searching linkedin') ||
+        lower.includes('sedang mencari') ||
+        lower.includes('sedang memeriksa') ||
+        lower.includes('sedang menelusuri') ||
         lower.includes('🔄')
       ) {
         return true;
@@ -403,10 +425,12 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           content = 'Siap, permintaan telah selesai diproses.';
         }
 
+        const thought = frame.payload?.thought || frame.payload?.thinking || frame.payload?.reasoning_content;
+
         client.send(
           JSON.stringify({
             type: 'agent_finish',
-            payload: { ...frame.payload, content },
+            payload: { ...frame.payload, content, thought },
             sessionKey: client.activeSessionKey,
           }),
         );
@@ -517,6 +541,13 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           let content = m.content || m.text || '';
           if (typeof content !== 'string') continue;
 
+          let thought = m.thought || m.thinking || m.reasoning_content || '';
+          const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/i);
+          if (thinkMatch) {
+            thought = (thought ? thought + '\n\n' : '') + thinkMatch[1].trim();
+            content = content.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+          }
+
           content = this.cleanMessageContent(content);
           if (!content.trim()) continue;
 
@@ -541,6 +572,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           cleanedMessages.push({
             role: m.role,
             content,
+            thought: thought ? this.cleanMessageContent(thought) : undefined,
           });
         }
 
