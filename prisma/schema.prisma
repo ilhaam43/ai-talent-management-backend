@@ -31,6 +31,7 @@ model User {
   isVerified                Boolean                   @default(false) @map("is_verified")
   otpCode                   String?                   @map("otp_code")
   otpExpiry                 DateTime?                 @map("otp_expiry")
+  guideDismissed            Boolean                   @default(false) @map("guide_dismissed")
   createdAt                 DateTime                  @default(now()) @map("created_at")
   updatedAt                 DateTime                  @updatedAt @map("updated_at")
   candidateAddresses        CandidateAddress[]

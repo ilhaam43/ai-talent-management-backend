@@ -7,7 +7,7 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Server, WebSocket } from 'ws';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -62,6 +62,19 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
       // Verify JWT
       const secret = this.configService.get<string>('JWT_SECRET') || 'supersecretjwt';
       const payload = this.jwtService.verify(token, { secret });
+
+      // Verify user exists in database (e.g. after database reset/reseed)
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, email: true },
+      });
+
+      if (!user) {
+        this.logger.warn(`WS connection rejected: User ${payload.sub} (${payload.email}) not found in DB.`);
+        client.send(JSON.stringify({ type: 'error', error: 'User session expired or invalidated. Please login again.' }));
+        client.close(4001, 'Unauthorized');
+        return;
+      }
 
       client.userId = payload.sub;
       client.email = payload.email;
@@ -181,6 +194,40 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     return this.cleanMessageContent(chunk);
   }
 
+  /**
+   * Check if a message is a transient tool announcement rather than a final assistant response.
+   */
+  private isToolAnnouncement(text: string): boolean {
+    if (!text) return false;
+    const trimmed = text.trim();
+    if (trimmed.length < 250) {
+      const lower = trimmed.toLowerCase();
+      if (
+        lower.startsWith('siap') ||
+        lower.startsWith('oke') ||
+        lower.startsWith('baik') ||
+        lower.startsWith('mohon tunggu') ||
+        lower.startsWith('tunggu sebentar') ||
+        lower.includes('mohon tunggu') ||
+        lower.includes('tunggu sebentar') ||
+        lower.includes('saya cari di database') ||
+        lower.includes('saya akan mencari') ||
+        lower.includes('saya cek di database') ||
+        lower.includes('saya cari di linkedin') ||
+        lower.includes('searching cv database') ||
+        lower.includes('searching internal cv') ||
+        lower.includes('searching linkedin') ||
+        lower.includes('sedang mencari') ||
+        lower.includes('sedang memeriksa') ||
+        lower.includes('sedang menelusuri') ||
+        lower.includes('🔄')
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private handleGoClawFrame(client: AuthenticatedSocket, frame: GoclawFrame) {
     if (client.readyState !== WebSocket.OPEN) return;
 
@@ -192,20 +239,163 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           let chunk = payload.chunk || payload.delta || '';
           chunk = this.sanitizeChunk(chunk);
           if (chunk.trim()) {
+            if (this.isToolAnnouncement(chunk)) {
+              client.send(
+                JSON.stringify({
+                  type: 'agent',
+                  payload: {
+                    status: 'announcement',
+                    announcement: chunk.trim(),
+                  },
+                  sessionKey: client.activeSessionKey,
+                }),
+              );
+            } else {
+              client.send(
+                JSON.stringify({
+                  type: 'chunk',
+                  chunk,
+                  sessionKey: client.activeSessionKey,
+                }),
+              );
+            }
+          }
+        }
+      } else if (frame.event === 'agent') {
+        const subType = frame.payload?.type;
+        const innerPayload = frame.payload?.payload || {};
+
+        if (subType === 'chunk') {
+          let chunk = innerPayload.content || innerPayload.delta || '';
+          chunk = this.sanitizeChunk(chunk);
+          if (chunk) {
+            if (this.isToolAnnouncement(chunk)) {
+              client.send(
+                JSON.stringify({
+                  type: 'agent',
+                  payload: {
+                    status: 'announcement',
+                    announcement: chunk.trim(),
+                  },
+                  sessionKey: client.activeSessionKey,
+                }),
+              );
+            } else {
+              client.send(
+                JSON.stringify({
+                  type: 'chunk',
+                  chunk,
+                  sessionKey: client.activeSessionKey,
+                }),
+              );
+            }
+          }
+        } else if (subType === 'block.reply') {
+          const content = innerPayload.content || '';
+          if (innerPayload.source === 'tool_announcement' || this.isToolAnnouncement(content)) {
             client.send(
               JSON.stringify({
-                type: 'chunk',
-                chunk,
+                type: 'agent',
+                payload: {
+                  status: 'announcement',
+                  announcement: content.trim(),
+                },
                 sessionKey: client.activeSessionKey,
               }),
             );
           }
+        } else if (subType === 'thinking') {
+          const thought = innerPayload.content || innerPayload.text || innerPayload.thinking || '';
+          this.logger.log(`[WS Event -> Frontend] thinking: ${thought.slice(0, 60)}... (user: ${client.email})`);
+          client.send(
+            JSON.stringify({
+              type: 'agent',
+              payload: {
+                status: 'thinking',
+                thought,
+                phase: 'thinking',
+              },
+              sessionKey: client.activeSessionKey,
+            }),
+          );
+        } else if (subType === 'tool.call') {
+          const tool = innerPayload.name || innerPayload.tool || '';
+          const args = innerPayload.arguments || innerPayload.args || innerPayload.input;
+          this.logger.log(`[WS Event -> Frontend] tool.call: ${tool} (user: ${client.email})`);
+          client.send(
+            JSON.stringify({
+              type: 'agent',
+              payload: {
+                status: 'tool_call',
+                tool,
+                args,
+                input: args,
+              },
+              sessionKey: client.activeSessionKey,
+            }),
+          );
+        } else if (subType === 'tool.result') {
+          const tool = innerPayload.name || innerPayload.tool || '';
+          this.logger.log(`[WS Event -> Frontend] tool.result: ${tool} (user: ${client.email})`);
+          client.send(
+            JSON.stringify({
+              type: 'agent',
+              payload: {
+                status: 'tool_result',
+                tool,
+                output: innerPayload.result,
+              },
+              sessionKey: client.activeSessionKey,
+            }),
+          );
+        } else {
+          this.logger.log(`[WS Event -> Frontend] agent: ${JSON.stringify(frame.payload)} (user: ${client.email})`);
+          client.send(
+            JSON.stringify({
+              type: 'agent',
+              payload: frame.payload,
+              sessionKey: client.activeSessionKey,
+            }),
+          );
         }
-      } else if (frame.event === 'agent') {
+      } else if (frame.event === 'tool.call' || frame.event === 'tool_call') {
+        this.logger.log(`[WS Event -> Frontend] tool.call: ${frame.payload?.tool || frame.payload?.name} (user: ${client.email})`);
         client.send(
           JSON.stringify({
             type: 'agent',
-            payload: frame.payload,
+            payload: {
+              status: 'tool_call',
+              tool: frame.payload?.tool || frame.payload?.name,
+              input: frame.payload?.input || frame.payload?.args,
+              ...frame.payload,
+            },
+            sessionKey: client.activeSessionKey,
+          }),
+        );
+      } else if (frame.event === 'tool.result' || frame.event === 'tool_result') {
+        this.logger.log(`[WS Event -> Frontend] tool.result: ${frame.payload?.tool || frame.payload?.name} (user: ${client.email})`);
+        client.send(
+          JSON.stringify({
+            type: 'agent',
+            payload: {
+              status: 'tool_result',
+              tool: frame.payload?.tool || frame.payload?.name,
+              output: frame.payload?.output,
+              ...frame.payload,
+            },
+            sessionKey: client.activeSessionKey,
+          }),
+        );
+      } else if (frame.event === 'thought' || frame.event === 'thinking') {
+        this.logger.log(`[WS Event -> Frontend] thought/thinking (user: ${client.email})`);
+        client.send(
+          JSON.stringify({
+            type: 'agent',
+            payload: {
+              status: 'thinking',
+              thought: frame.payload?.thought || frame.payload?.text || frame.payload?.delta || frame.payload?.reasoning_content,
+              ...frame.payload,
+            },
             sessionKey: client.activeSessionKey,
           }),
         );
@@ -235,10 +425,12 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           content = 'Siap, permintaan telah selesai diproses.';
         }
 
+        const thought = frame.payload?.thought || frame.payload?.thinking || frame.payload?.reasoning_content;
+
         client.send(
           JSON.stringify({
             type: 'agent_finish',
-            payload: { ...frame.payload, content },
+            payload: { ...frame.payload, content, thought },
             sessionKey: client.activeSessionKey,
           }),
         );
@@ -349,8 +541,20 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           let content = m.content || m.text || '';
           if (typeof content !== 'string') continue;
 
+          let thought = m.thought || m.thinking || m.reasoning_content || '';
+          const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/i);
+          if (thinkMatch) {
+            thought = (thought ? thought + '\n\n' : '') + thinkMatch[1].trim();
+            content = content.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+          }
+
           content = this.cleanMessageContent(content);
           if (!content.trim()) continue;
+
+          // Filter out transient tool announcements so history contains only clean Q&A
+          if (m.role === 'assistant' && (m.source === 'tool_announcement' || this.isToolAnnouncement(content))) {
+            continue;
+          }
 
           if (m.role === 'assistant') {
             // Check if any files were generated that match or belong to this chat
@@ -368,6 +572,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           cleanedMessages.push({
             role: m.role,
             content,
+            thought: thought ? this.cleanMessageContent(thought) : undefined,
           });
         }
 

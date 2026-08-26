@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   Delete,
+  Patch,
   Request,
   UseInterceptors,
   UploadedFile,
@@ -58,6 +59,22 @@ export class AiAssistantController {
   @ApiOperation({ summary: 'Delete a chat session' })
   async deleteSession(@Request() req: any, @Param('id') id: string) {
     return this.aiAssistantService.deleteSession(req.user.id || req.user.userId, id);
+  }
+
+  @Patch('sessions/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update chat session title' })
+  async updateSessionTitle(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body('title') title: string,
+  ) {
+    return this.aiAssistantService.updateSessionTitle(
+      req.user.id || req.user.userId,
+      id,
+      title,
+    );
   }
 
   @Get('quota')

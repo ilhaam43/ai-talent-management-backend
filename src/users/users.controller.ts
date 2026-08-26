@@ -5,6 +5,8 @@ import {
   Post,
   Body,
   Put,
+  Patch,
+  Request,
   UseGuards,
 } from "@nestjs/common";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -13,6 +15,7 @@ import { UsersService } from "./users.service";
 import { ApiBearerAuth, ApiBody, ApiTags, ApiOperation, ApiResponse, ApiParam } from "@nestjs/swagger";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user-dto";
+import { UpdateGuideStatusDto } from "./dto/update-guide-status.dto";
 import { AuthGuard } from "@nestjs/passport";
 
 @ApiTags("users")
@@ -21,6 +24,27 @@ import { AuthGuard } from "@nestjs/passport";
 @Controller("users")
 export class UsersController {
   constructor(private readonly service: UsersService) { }
+
+  @Get("me/guide-status")
+  @ApiOperation({ summary: 'Get guide dismissed status for the logged-in user' })
+  @ApiResponse({ status: 200, description: 'Return guide status' })
+  getGuideStatus(@Request() req: any) {
+    const userId = req.user?.id || req.user?.userId;
+    return this.service.getGuideStatus(userId);
+  }
+
+  @Patch("me/guide-status")
+  @ApiOperation({ summary: 'Update guide dismissed status for the logged-in user' })
+  @ApiBody({ type: UpdateGuideStatusDto })
+  @ApiResponse({ status: 200, description: 'Guide status updated successfully' })
+  updateGuideStatus(
+    @Request() req: any,
+    @Body() body: UpdateGuideStatusDto,
+  ) {
+    const userId = req.user?.id || req.user?.userId;
+    const guideDismissed = body?.guideDismissed !== undefined ? body.guideDismissed : true;
+    return this.service.updateGuideStatus(userId, guideDismissed);
+  }
 
   @Get("test/hr-only")
   @Roles("HUMAN RESOURCES")

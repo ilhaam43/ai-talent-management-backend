@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { ChatResponseDto, ChatMessageHistory } from './dto/chat.dto';
@@ -91,6 +91,26 @@ export class AiAssistantService {
   async deleteSession(userId: string, sessionId: string) {
     return this.prisma.chatSession.deleteMany({
       where: { id: sessionId, userId },
+    });
+  }
+
+  /**
+   * Update a chat session title
+   */
+  async updateSessionTitle(userId: string, sessionId: string, title: string) {
+    const trimmed = (title || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Title cannot be empty');
+    }
+    const session = await this.prisma.chatSession.findFirst({
+      where: { id: sessionId, userId },
+    });
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+    return this.prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { title: trimmed },
     });
   }
 
