@@ -173,7 +173,7 @@ async function main() {
         where: { email: 'hr@example.com' },
     });
     if (hrUser) {
-        await prisma.company.create({
+        const company = await prisma.company.create({
             data: {
                 name: 'Example Company',
                 logoUrl: '',
@@ -181,6 +181,18 @@ async function main() {
             },
         });
         console.log('Created company with HR admin:', hrUser.email);
+
+        // Link the HR user's employee record to this company
+        const hrEmployee = await prisma.employee.findFirst({
+            where: { userId: hrUser.id },
+        });
+        if (hrEmployee) {
+            await prisma.employee.update({
+                where: { id: hrEmployee.id },
+                data: { companyId: company.id },
+            });
+            console.log(`  - Linked employee ${hrEmployee.employeeIdentificationNumber} to company "${company.name}"`);
+        }
     }
 
     console.log('\n✅ HR and Hiring Manager seeding completed!');

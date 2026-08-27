@@ -337,10 +337,11 @@ export class AuthService {
         },
       })
 
-      // Create Company
+      // Create Company (first HR user becomes the HR Admin)
       const company = await tx.company.create({
         data: {
           name: companyName,
+          hrAdminId: user.id,
         },
       })
 
