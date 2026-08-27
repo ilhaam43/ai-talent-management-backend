@@ -118,4 +118,10 @@ export class MasterService {
             orderBy: { daysDuration: 'asc' },
         });
     }
+
+    async getUserRoles() {
+        return this.prisma.userRole.findMany({
+            orderBy: { roleName: 'asc' },
+        });
+    }
 }

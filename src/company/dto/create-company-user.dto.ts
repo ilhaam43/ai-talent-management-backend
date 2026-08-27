@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 export class CreateCompanyUserDto {
   @ApiProperty({ example: 'john.doe@company.com' })
@@ -13,11 +13,11 @@ export class CreateCompanyUserDto {
   @MinLength(2, { message: 'Full name must be at least 2 characters' })
   name!: string;
 
-  @ApiProperty({ example: 'SecurePass123!' })
+  @ApiPropertyOptional({ description: 'Password (auto-generated if not provided)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MinLength(8, { message: 'Password must be at least 8 characters' })
-  password!: string;
+  password?: string;
 
   @ApiProperty({ description: 'User role ID (e.g. HUMAN RESOURCES, HIRING MANAGER)' })
   @IsUUID()
@@ -25,6 +25,7 @@ export class CreateCompanyUserDto {
   roleId!: string;
 
   @ApiPropertyOptional({ example: 'EMP-001' })
+  @IsOptional()
   @IsString()
-  employeeIdentificationNumber!: string;
+  employeeIdentificationNumber?: string;
 }
