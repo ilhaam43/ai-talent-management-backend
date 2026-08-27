@@ -145,6 +145,44 @@ async function main() {
         }
     }
 
+    // Clean up any existing duplicate hrAdminId entries to satisfy unique constraint
+    const duplicateCompanies = await prisma.company.groupBy({
+        by: ['hrAdminId'],
+        where: { hrAdminId: { not: null } },
+        _count: { _all: true },
+    });
+    const duplicateIds = duplicateCompanies
+        .filter(c => c._count._all > 1)
+        .map(c => c.hrAdminId);
+    for (const hrAdminId of duplicateIds) {
+        const companies = await prisma.company.findMany({
+            where: { hrAdminId },
+            orderBy: { createdAt: 'desc' },
+        });
+        const idsToDelete = companies.slice(1).map(c => c.id);
+        await prisma.company.deleteMany({ id: { in: idsToDelete } });
+    }
+    console.log('Cleaned duplicate hrAdminId entries from companies');
+
+    // Reset companies to ensure uniqueness of hrAdminId
+    await prisma.company.deleteMany({});
+    console.log('Reset companies to ensure unique hrAdminId');
+
+    // Create sample company and assign HR admin
+    const hrUser = await prisma.user.findUnique({
+        where: { email: 'hr@example.com' },
+    });
+    if (hrUser) {
+        await prisma.company.create({
+            data: {
+                name: 'Example Company',
+                logoUrl: '',
+                hrAdminId: hrUser.id,
+            },
+        });
+        console.log('Created company with HR admin:', hrUser.email);
+    }
+
     console.log('\n✅ HR and Hiring Manager seeding completed!');
 }
 
