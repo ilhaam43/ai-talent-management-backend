@@ -39,21 +39,21 @@ const seeders = [
 ];
 
 async function main() {
-    const forceSeed = process.env.FORCE_SEED === 'true';
+    // const forceSeed = process.env.FORCE_SEED === 'true';
 
-    if (!forceSeed) {
-        try {
-            const roleCount = await prisma.userRole.count();
-            if (roleCount > 0) {
-                console.log('⚡ Database already contains seed data. Skipping master seeder for fast startup.');
-                console.log('   (To force re-seeding, run with environment variable FORCE_SEED=true)');
-                await prisma.$disconnect();
-                return;
-            }
-        } catch {
-            // Table might not exist yet before first migration; proceed to seed
-        }
-    }
+    // if (!forceSeed) {
+    //     try {
+    //         const roleCount = await prisma.userRole.count();
+    //         if (roleCount > 0) {
+    //             console.log('⚡ Database already contains seed data. Skipping master seeder for fast startup.');
+    //             console.log('   (To force re-seeding, run with environment variable FORCE_SEED=true)');
+    //             await prisma.$disconnect();
+    //             return;
+    //         }
+    //     } catch {
+    //         // Table might not exist yet before first migration; proceed to seed
+    //     }
+    // }
 
     console.log('Starting master seeder...\n');
 
