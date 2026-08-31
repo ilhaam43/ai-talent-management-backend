@@ -145,4 +145,11 @@ export class MasterController {
     async getJobVacancyDurations() {
         return this.masterService.getJobVacancyDurations();
     }
+
+    @Get('user-roles')
+    @ApiOperation({ summary: 'Get all user roles' })
+    @ApiResponse({ status: 200, description: 'List of user roles' })
+    async getUserRoles() {
+        return this.masterService.getUserRoles();
+    }
 }

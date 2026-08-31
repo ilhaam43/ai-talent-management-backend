@@ -67,12 +67,27 @@ export class CompanyService {
     return company;
   }
 
+  /**
+   * Generates a random 12-character password with uppercase, lowercase, digits, and symbols.
+   */
+  private generateRandomPassword(): string {
+    const length = 12;
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*';
+    let password = '';
+    const bytes = crypto.randomBytes(length);
+    for (let i = 0; i < length; i++) {
+      password += chars[bytes[i] % chars.length];
+    }
+    return password;
+  }
+
   async getCompanyConfig(userId: string) {
     const company = await this.getEmployeeCompany(userId);
     return {
       id: company.id,
       name: company.name,
       logoUrl: company.logoUrl,
+      hrAdminId: company.hrAdminId,
       createdAt: company.createdAt,
       updatedAt: company.updatedAt,
     };
@@ -239,8 +254,9 @@ export class CompanyService {
       throw new NotFoundException('User role not found.');
     }
 
-    // Auto-generate password hash
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    // Auto-generate password if not provided
+    const plainPassword = dto.password || this.generateRandomPassword();
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     // Auto-generate EIN if not provided
     const ein =
@@ -287,6 +303,7 @@ export class CompanyService {
 
     return {
       message: 'User created successfully',
+      generatedPassword: plainPassword,
       user: {
         id: result.user.id,
         name: result.user.name,
