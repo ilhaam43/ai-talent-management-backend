@@ -251,7 +251,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
    */
   private isOwnerCompanyUser(client: AuthenticatedSocket): boolean {
     const company = client.companyName || this.companyFromEmail(client.email);
-    if (!company) return true; // If we can't determine company, don't mask (safe default)
+    if (!company) return false; // Non-owner by default (Zero-Trust)
     return company === this.DATA_OWNER_COMPANY || company === 'example'; // example = demo accounts
   }
 
@@ -426,11 +426,22 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
             }),
           );
         } else {
-          this.logger.log(`[WS Event -> Frontend] agent: ${JSON.stringify(frame.payload)} (user: ${client.email})`);
+          // Deep clean & mask payload for client (handles run.completed and other event subtypes)
+          let cleanPayload = frame.payload;
+          if (cleanPayload) {
+            cleanPayload = JSON.parse(JSON.stringify(cleanPayload));
+            if (cleanPayload.payload?.content && typeof cleanPayload.payload.content === 'string') {
+              cleanPayload.payload.content = this.applyPiiMasking(client, this.cleanMessageContent(cleanPayload.payload.content));
+            }
+            if (cleanPayload.content && typeof cleanPayload.content === 'string') {
+              cleanPayload.content = this.applyPiiMasking(client, this.cleanMessageContent(cleanPayload.content));
+            }
+          }
+          this.logger.log(`[WS Event -> Frontend] agent: ${JSON.stringify(cleanPayload)} (user: ${client.email})`);
           client.send(
             JSON.stringify({
               type: 'agent',
-              payload: frame.payload,
+              payload: cleanPayload,
               sessionKey: client.activeSessionKey,
             }),
           );
@@ -450,6 +461,10 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           }),
         );
       } else if (frame.event === 'tool.result' || frame.event === 'tool_result') {
+        let output = frame.payload?.output;
+        if (typeof output === 'string') {
+          output = this.applyPiiMasking(client, output);
+        }
         this.logger.log(`[WS Event -> Frontend] tool.result: ${frame.payload?.tool || frame.payload?.name} (user: ${client.email})`);
         client.send(
           JSON.stringify({
@@ -457,7 +472,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
             payload: {
               status: 'tool_result',
               tool: frame.payload?.tool || frame.payload?.name,
-              output: frame.payload?.output,
+              output,
               ...frame.payload,
             },
             sessionKey: client.activeSessionKey,
@@ -588,9 +603,11 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     // Ensure connection active
     await this.goclawService.getConnection(client.userId, client.name);
 
-    // Send chat to GoClaw
+    // Send chat to GoClaw with user context header so agent tools know caller email/company
     try {
-      this.goclawService.sendChat(client.goclawUserId, message, targetSessionKey);
+      const userContextPrefix = `[User: ${client.email} | Company: ${client.companyName || 'unknown'}]\n`;
+      const messageWithContext = `${userContextPrefix}${message}`;
+      this.goclawService.sendChat(client.goclawUserId, messageWithContext, targetSessionKey);
     } catch (err: any) {
       client.send(
         JSON.stringify({
