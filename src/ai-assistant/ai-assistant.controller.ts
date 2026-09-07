@@ -16,6 +16,7 @@ import {
   UploadedFile,
   NotFoundException,
   BadRequestException,
+  Put,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -29,12 +30,17 @@ import {
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AiAssistantService } from './ai-assistant.service';
+import { LlmDashboardService } from './llm-dashboard.service';
 import { ChatRequestDto, ChatResponseDto } from './dto/chat.dto';
+import { UpdateCompanyLimitsDto } from './dto/update-company-limits.dto';
 
 @ApiTags('AI Assistant')
 @Controller('ai-assistant')
 export class AiAssistantController {
-  constructor(private readonly aiAssistantService: AiAssistantService) {}
+  constructor(
+    private readonly aiAssistantService: AiAssistantService,
+    private readonly llmDashboardService: LlmDashboardService,
+  ) {}
 
   @Get('sessions')
   @UseGuards(AuthGuard('jwt'))
@@ -83,6 +89,29 @@ export class AiAssistantController {
   @ApiOperation({ summary: 'Get current user token quota and usage' })
   async getQuota(@Request() req: any) {
     return this.aiAssistantService.getUserQuota(req.user.id || req.user.userId);
+  }
+
+  @Get('quota-summary')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get plan tier, message quota and company member overview (proxied from LLM dashboard)',
+  })
+  async getQuotaSummary(@Request() req: any) {
+    return this.llmDashboardService.getQuotaSummary(req.user.id || req.user.userId);
+  }
+
+  @Put('company-limits')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update company rolling message limits (5h / 1w, HR admin only)',
+  })
+  async updateCompanyLimits(@Request() req: any, @Body() dto: UpdateCompanyLimitsDto) {
+    return this.aiAssistantService.updateCompanyMessageLimits(
+      req.user.id || req.user.userId,
+      dto,
+    );
   }
 
   @Post('upload')

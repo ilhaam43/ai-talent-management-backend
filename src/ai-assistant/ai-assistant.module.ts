@@ -5,6 +5,7 @@ import { AiAssistantController } from './ai-assistant.controller';
 import { AiAssistantService } from './ai-assistant.service';
 import { GoclawService } from './goclaw.service';
 import { QuotaService } from './quota.service';
+import { LlmDashboardService } from './llm-dashboard.service';
 import { GoclawWsGateway } from './goclaw-ws.gateway';
 import { PrismaService } from '../database/prisma.service';
 
@@ -15,9 +16,10 @@ import { PrismaService } from '../database/prisma.service';
     AiAssistantService,
     GoclawService,
     QuotaService,
+    LlmDashboardService,
     GoclawWsGateway,
     PrismaService,
   ],
-  exports: [AiAssistantService, GoclawService, QuotaService],
+  exports: [AiAssistantService, GoclawService, QuotaService, LlmDashboardService],
 })
 export class AiAssistantModule {}

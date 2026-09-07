@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { GoclawService, GoclawFrame } from './goclaw.service';
 import { QuotaService } from './quota.service';
+import { LlmDashboardService } from './llm-dashboard.service';
 import { PrismaService } from '../database/prisma.service';
 import { parse } from 'url';
 
@@ -43,6 +44,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly configService: ConfigService,
     private readonly goclawService: GoclawService,
     private readonly quotaService: QuotaService,
+    private readonly llmDashboardService: LlmDashboardService,
     private readonly prisma: PrismaService,
     private readonly aiAssistantService: AiAssistantService,
   ) {}
@@ -97,8 +99,11 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       client.cleanupGoclawListener = removeListener;
 
-      // Check quota on connect
-      const quota = await this.quotaService.checkQuota(goclawUserId);
+      // Check quota on connect (token limits + message plan summary)
+      const [quota, planSummary] = await Promise.all([
+        this.quotaService.checkQuota(goclawUserId),
+        this.llmDashboardService.getQuotaSummary(payload.sub),
+      ]);
 
       client.send(
         JSON.stringify({
@@ -106,6 +111,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           payload: {
             user: { id: payload.sub, email: payload.email, name: payload.name },
             quota,
+            planSummary,
           },
         }),
       );
@@ -556,6 +562,23 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
         JSON.stringify({
           type: 'quota_exceeded',
           payload: quota,
+        }),
+      );
+      return;
+    }
+
+    // 1b. Message quota pre-check against the LLM dashboard (plan limits)
+    const messageQuota = await this.llmDashboardService.preflight(client.userId);
+    if (!messageQuota.allowed) {
+      client.send(
+        JSON.stringify({
+          type: 'quota_exceeded',
+          payload: {
+            ...quota,
+            messageQuota: true,
+            reason: messageQuota.reason || 'MESSAGE_QUOTA_EXHAUSTED',
+            details: messageQuota.details || null,
+          },
         }),
       );
       return;

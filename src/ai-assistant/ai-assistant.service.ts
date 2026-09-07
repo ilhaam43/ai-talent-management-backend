@@ -1,11 +1,20 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { ChatResponseDto, ChatMessageHistory } from './dto/chat.dto';
+import { UpdateCompanyLimitsDto } from './dto/update-company-limits.dto';
 import { v4 as uuidv4 } from 'uuid';
 
 import { GoclawService } from './goclaw.service';
 import { QuotaService, QuotaStatus } from './quota.service';
+import { LlmDashboardService } from './llm-dashboard.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -32,6 +41,7 @@ export class AiAssistantService {
     private readonly configService: ConfigService,
     private readonly goclawService: GoclawService,
     private readonly quotaService: QuotaService,
+    private readonly llmDashboardService: LlmDashboardService,
   ) {
     // Configure n8n chatbot webhook URL
     this.n8nChatbotUrl = this.configService.get<string>('N8N_CHATBOT_WEBHOOK_URL') 
@@ -119,6 +129,34 @@ export class AiAssistantService {
    */
   async getUserQuota(userId: string): Promise<QuotaStatus> {
     return this.quotaService.checkQuota(`aitm_${userId}`);
+  }
+
+  /**
+   * Update the company's rolling message limits (5h / 1w).
+   * Only the company's designated HR admin may change them.
+   */
+  async updateCompanyMessageLimits(userId: string, dto: UpdateCompanyLimitsDto) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId },
+      select: { companyId: true },
+    });
+    if (!employee?.companyId) {
+      throw new BadRequestException('User is not linked to a company');
+    }
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: employee.companyId },
+      select: { id: true, hrAdminId: true },
+    });
+    if (!company || company.hrAdminId !== userId) {
+      throw new ForbiddenException('Only the designated HR admin can change message limits');
+    }
+
+    const res = await this.llmDashboardService.updateCompanyLimits(company.id, dto, userId);
+    if (!res) {
+      throw new ServiceUnavailableException('LLM dashboard unreachable');
+    }
+    return res;
   }
 
   /**
