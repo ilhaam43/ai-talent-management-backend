@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "NotificationType" ADD VALUE 'QUOTA_WARNING';
+ALTER TYPE "NotificationType" ADD VALUE 'QUOTA_EXHAUSTED';

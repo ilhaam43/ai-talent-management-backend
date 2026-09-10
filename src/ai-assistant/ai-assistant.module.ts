@@ -8,9 +8,11 @@ import { QuotaService } from './quota.service';
 import { LlmDashboardService } from './llm-dashboard.service';
 import { GoclawWsGateway } from './goclaw-ws.gateway';
 import { PrismaService } from '../database/prisma.service';
+import { EmailModule } from '../email/email.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [ConfigModule, JwtModule],
+  imports: [ConfigModule, JwtModule, EmailModule, NotificationsModule],
   controllers: [AiAssistantController],
   providers: [
     AiAssistantService,

@@ -1,6 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+export interface MessageQuotaWindowState {
+  enabled: boolean;
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  pct: number;
+  freesAt: string | null;
+}
+
 export interface MessageQuotaPreflight {
   allowed: boolean;
   reason?: string;
@@ -9,6 +18,16 @@ export interface MessageQuotaPreflight {
     used?: number;
     limit?: number;
     freesAt?: string | null;
+  } | null;
+  hasMessageQuota?: boolean;
+  usedMessages?: number;
+  planMessages?: number | null;
+  planName?: string | null;
+  totalRemainingMessages?: number | null;
+  periodEnd?: string | null;
+  windows?: {
+    fiveHour?: MessageQuotaWindowState;
+    week?: MessageQuotaWindowState;
   } | null;
 }
 
@@ -104,6 +123,13 @@ export class LlmDashboardService {
       allowed: !!res.allowed,
       reason: res.reason || undefined,
       details: res.details || null,
+      hasMessageQuota: !!res.hasMessageQuota,
+      usedMessages: res.usedMessages ?? 0,
+      planMessages: res.planMessages ?? null,
+      planName: res.planName || null,
+      totalRemainingMessages: res.totalRemainingMessages ?? null,
+      periodEnd: res.periodEnd || null,
+      windows: res.windows || null,
     };
   }
 
@@ -124,5 +150,26 @@ export class LlmDashboardService {
    */
   async getQuotaSummary(userId: string): Promise<any | null> {
     return this.post('/api/internal/quota-summary', { userId });
+  }
+
+  /**
+   * Company headcount against the active plan's member cap. Returns null when
+   * the dashboard is unreachable; callers treat null as "no cap info" and fail
+   * open rather than blocking HR onboarding during a dashboard outage.
+   */
+  async getCompanyCap(
+    companyId: string,
+  ): Promise<{ memberCount: number; maxMembers: number | null; overMemberCap: boolean } | null> {
+    return this.post('/api/internal/company-cap', { companyId });
+  }
+
+  /**
+   * Drop a removed member's mapping and hand their standalone account the
+   * Demo Trial plan. Caller has already unlinked them in AITM.
+   */
+  async unlinkMember(
+    userId: string,
+  ): Promise<{ unlinked: boolean; demoPlanAssigned: boolean; planName: string | null } | null> {
+    return this.post('/api/internal/member-unlink', { userId });
   }
 }

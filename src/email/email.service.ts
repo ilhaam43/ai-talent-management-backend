@@ -3,6 +3,22 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 
+/**
+ * Company plan message-quota state, as reported by the LLM dashboard.
+ */
+export interface QuotaAlertDetails {
+  companyName: string;
+  planName: string | null;
+  usedMessages: number;
+  planMessages: number | null;
+  /** Member whose send attempt surfaced the threshold. */
+  triggeredByName?: string | null;
+  /** Percentage of the plan quota consumed — set for warnings. */
+  pct?: number;
+  /** When the plan period rolls over and the quota resets. */
+  periodEnd?: string | null;
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -675,6 +691,155 @@ export class EmailService {
 
               <p style="margin: 0; color: #888; font-size: 13px; line-height: 1.6;">
                 If you did not request this account, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 24px 30px; text-align: center; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; color: #aaa; font-size: 12px;">
+                © 2026 Lintasarta AI Talent Management. All rights reserved.<br>
+                This is an automated email — please do not reply.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Tell the company's HR admin that the shared plan message quota ran out.
+   */
+  async sendQuotaExhaustedEmail(
+    toEmail: string,
+    adminName: string,
+    details: QuotaAlertDetails,
+  ): Promise<void> {
+    await this.sendQuotaAlertEmail('exhausted', toEmail, adminName, details);
+  }
+
+  /**
+   * Tell the company's HR admin that the shared plan message quota is nearly gone.
+   */
+  async sendQuotaWarningEmail(
+    toEmail: string,
+    adminName: string,
+    details: QuotaAlertDetails,
+  ): Promise<void> {
+    await this.sendQuotaAlertEmail('warning', toEmail, adminName, details);
+  }
+
+  private async sendQuotaAlertEmail(
+    kind: 'exhausted' | 'warning',
+    toEmail: string,
+    adminName: string,
+    details: QuotaAlertDetails,
+  ): Promise<void> {
+    try {
+      const transporter = await this.createTransporter();
+      const fromEmail = this.configService.get<string>('GMAIL_FROM_EMAIL');
+      const fromName = this.configService.get<string>('GMAIL_FROM_NAME') || 'AI Talent Management';
+
+      const mailOptions = {
+        from: `"${fromName}" <${fromEmail}>`,
+        to: toEmail,
+        subject: kind === 'exhausted'
+          ? `AI Assistant quota exhausted — ${details.companyName}`
+          : `AI Assistant quota at ${details.pct ?? 0}% — ${details.companyName}`,
+        html: this.getQuotaAlertTemplate(kind, adminName, details),
+      };
+
+      const result = await transporter.sendMail(mailOptions);
+      this.logger.log(`Quota ${kind} email sent to ${toEmail} (Message ID: ${result.messageId})`);
+    } catch (error: any) {
+      this.logger.error(`Failed to send quota ${kind} email to ${toEmail}: ${error.message}`);
+      throw new Error(`Email sending failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Shared HTML template for the two company quota alerts.
+   */
+  private getQuotaAlertTemplate(
+    kind: 'exhausted' | 'warning',
+    adminName: string,
+    details: QuotaAlertDetails,
+  ): string {
+    const exhausted = kind === 'exhausted';
+    const heading = exhausted ? 'AI Assistant Quota Exhausted' : 'AI Assistant Quota Almost Exhausted';
+    const planClause = details.planName ? ` on the <strong>${details.planName}</strong> plan` : '';
+    const usage = details.planMessages
+      ? `${details.usedMessages} of ${details.planMessages} messages`
+      : `${details.usedMessages} messages`;
+    const remaining = details.planMessages
+      ? Math.max(0, details.planMessages - details.usedMessages)
+      : null;
+    const resetsOn = details.periodEnd && !Number.isNaN(new Date(details.periodEnd).getTime())
+      ? new Date(details.periodEnd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : null;
+    const row = (label: string, value: string) => `
+              <tr>
+                <td style="padding: 8px 0; color: #888; font-size: 14px; border-bottom: 1px solid #f0f0f0;">${label}</td>
+                <td style="padding: 8px 0; color: #1a1a2e; font-size: 14px; font-weight: bold; text-align: right; border-bottom: 1px solid #f0f0f0;">${value}</td>
+              </tr>`;
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${heading}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+  <table cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f4f4; padding: 20px;">
+    <tr>
+      <td align="center">
+        <table cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #1678E6 0%, #0C3C87 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: bold;">${heading}</h1>
+              <p style="margin: 8px 0 0; color: #c8dcf8; font-size: 14px;">AI Talent Management — Lintasarta</p>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <h2 style="margin: 0 0 16px; color: #1a1a2e; font-size: 22px;">Hello, ${adminName}</h2>
+
+              <p style="margin: 0 0 24px; color: #555; font-size: 16px; line-height: 1.6;">
+                ${exhausted
+                  ? `<strong>${details.companyName}</strong> has used its entire monthly AI Assistant message quota${planClause}. The AI Assistant is now blocked for every member of your company.`
+                  : `<strong>${details.companyName}</strong> has used <strong>${details.pct ?? 0}%</strong> of its monthly AI Assistant message quota${planClause}. Members can keep working for now, but the AI Assistant will be blocked once the quota runs out.`}
+              </p>
+
+              <table cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 24px;">
+                ${row('Messages used', usage)}
+                ${remaining !== null ? row('Messages remaining', String(remaining)) : ''}
+                ${details.planName ? row('Plan', details.planName) : ''}
+                ${resetsOn ? row(exhausted ? 'Quota resets on' : 'Period ends on', resetsOn) : ''}
+                ${details.triggeredByName ? row('Surfaced by', details.triggeredByName) : ''}
+              </table>
+
+              <div style="margin: 0 0 24px; padding: 16px 20px; background-color: ${exhausted ? '#fdecea' : '#fff3cd'}; border-left: 4px solid ${exhausted ? '#dc3545' : '#ffc107'}; border-radius: 4px;">
+                <p style="margin: 0; color: ${exhausted ? '#a02020' : '#856404'}; font-size: 14px; line-height: 1.6;">
+                  <strong>${exhausted ? '⛔ Access is currently blocked.' : '⚠️ No action is required yet.'}</strong>
+                  To restore or extend access, adjust the company plan or grant additional message quota in the LLM Usage Dashboard, or contact your Lintasarta account manager.
+                </p>
+              </div>
+
+              <p style="margin: 0; color: #888; font-size: 13px; line-height: 1.6;">
+                You are receiving this email because you are the HR administrator for ${details.companyName}.
               </p>
             </td>
           </tr>

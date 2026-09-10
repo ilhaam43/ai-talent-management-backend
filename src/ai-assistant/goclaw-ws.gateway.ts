@@ -13,8 +13,10 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { GoclawService, GoclawFrame } from './goclaw.service';
 import { QuotaService } from './quota.service';
-import { LlmDashboardService } from './llm-dashboard.service';
+import { LlmDashboardService, MessageQuotaPreflight } from './llm-dashboard.service';
 import { PrismaService } from '../database/prisma.service';
+import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { parse } from 'url';
 
 import { AiAssistantService } from './ai-assistant.service';
@@ -47,6 +49,8 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly llmDashboardService: LlmDashboardService,
     private readonly prisma: PrismaService,
     private readonly aiAssistantService: AiAssistantService,
+    private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket, req: any) {
@@ -388,7 +392,8 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
             );
           }
         } else if (subType === 'thinking') {
-          const thought = innerPayload.content || innerPayload.text || innerPayload.thinking || '';
+          let thought = innerPayload.content || innerPayload.text || innerPayload.thinking || '';
+          thought = this.applyPiiMasking(client, thought);
           this.logger.log(`[WS Event -> Frontend] thinking: ${thought.slice(0, 60)}... (user: ${client.email})`);
           client.send(
             JSON.stringify({
@@ -420,13 +425,24 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
         } else if (subType === 'tool.result') {
           const tool = innerPayload.name || innerPayload.tool || '';
           this.logger.log(`[WS Event -> Frontend] tool.result: ${tool} (user: ${client.email})`);
+          let rawResult = innerPayload.result;
+          let output = rawResult;
+          if (typeof rawResult === 'string') {
+            output = this.applyPiiMasking(client, rawResult);
+          } else if (rawResult && typeof rawResult === 'object') {
+            try {
+              output = JSON.parse(this.applyPiiMasking(client, JSON.stringify(rawResult)));
+            } catch {
+              output = rawResult;
+            }
+          }
           client.send(
             JSON.stringify({
               type: 'agent',
               payload: {
                 status: 'tool_result',
                 tool,
-                output: innerPayload.result,
+                output,
               },
               sessionKey: client.activeSessionKey,
             }),
@@ -486,12 +502,14 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
         );
       } else if (frame.event === 'thought' || frame.event === 'thinking') {
         this.logger.log(`[WS Event -> Frontend] thought/thinking (user: ${client.email})`);
+        let rawThought = frame.payload?.thought || frame.payload?.text || frame.payload?.delta || frame.payload?.reasoning_content;
+        let thought = typeof rawThought === 'string' ? this.applyPiiMasking(client, rawThought) : rawThought;
         client.send(
           JSON.stringify({
             type: 'agent',
             payload: {
               status: 'thinking',
-              thought: frame.payload?.thought || frame.payload?.text || frame.payload?.delta || frame.payload?.reasoning_content,
+              thought,
               ...frame.payload,
             },
             sessionKey: client.activeSessionKey,
@@ -526,7 +544,8 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
         // Apply PII masking for non-owner company users
         content = this.applyPiiMasking(client, content);
 
-        const thought = frame.payload?.thought || frame.payload?.thinking || frame.payload?.reasoning_content;
+        let rawThought = frame.payload?.thought || frame.payload?.thinking || frame.payload?.reasoning_content;
+        const thought = typeof rawThought === 'string' ? this.applyPiiMasking(client, rawThought) : rawThought;
 
         client.send(
           JSON.stringify({
@@ -569,6 +588,9 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     // 1b. Message quota pre-check against the LLM dashboard (plan limits)
     const messageQuota = await this.llmDashboardService.preflight(client.userId);
+    // Alerting rides on the same preflight result. Fire-and-forget: a failed
+    // notification must never delay or break the send itself.
+    void this.notifyQuotaState(client, messageQuota);
     if (!messageQuota.allowed) {
       client.send(
         JSON.stringify({
@@ -628,7 +650,9 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     // Send chat to GoClaw with user context header so agent tools know caller email/company
     try {
-      const userContextPrefix = `[User: ${client.email} | Company: ${client.companyName || 'unknown'}]\n`;
+      const isOwner = this.isOwnerCompanyUser(client);
+      const effectiveCompany = isOwner ? 'lintasarta' : (client.companyName || 'external');
+      const userContextPrefix = `[User: ${client.email} | Company: ${effectiveCompany}]\n`;
       const messageWithContext = `${userContextPrefix}${message}`;
       this.goclawService.sendChat(client.goclawUserId, messageWithContext, targetSessionKey);
     } catch (err: any) {
@@ -692,7 +716,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           cleanedMessages.push({
             role: m.role,
             content: m.role === 'assistant' ? this.applyPiiMasking(client, content) : content,
-            thought: thought ? this.cleanMessageContent(thought) : undefined,
+            thought: thought ? this.applyPiiMasking(client, this.cleanMessageContent(thought)) : undefined,
           });
         }
 
@@ -739,5 +763,184 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     } catch (err: any) {
       client.send(JSON.stringify({ type: 'error', error: err.message }));
     }
+  }
+
+  /** Share of a quota at which a warning is raised — matches QuotaService. */
+  private readonly QUOTA_WARNING_PCT = 80;
+
+  private readonly WINDOW_MS = {
+    fiveHour: 5 * 60 * 60 * 1000,
+    week: 7 * 24 * 60 * 60 * 1000,
+  } as const;
+
+  /** Plan alerts are scoped to a billing period; 30 days outlives any month. */
+  private readonly PLAN_ALERT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+  /**
+   * Alerts already raised, mapped to when each may be raised again. In-memory
+   * on purpose: a restart can re-send one alert, which beats a DB round trip
+   * on every chat message.
+   */
+  private readonly quotaAlertExpiry = new Map<string, number>();
+
+  private claimAlert(key: string, ttlMs: number): boolean {
+    const now = Date.now();
+    for (const [claimed, expiresAt] of this.quotaAlertExpiry) {
+      if (expiresAt <= now) this.quotaAlertExpiry.delete(claimed);
+    }
+    if ((this.quotaAlertExpiry.get(key) ?? 0) > now) return false;
+    this.quotaAlertExpiry.set(key, now + ttlMs);
+    return true;
+  }
+
+  /**
+   * The sending member's company, plus who must hear about a shared-quota
+   * problem: every member loses the assistant, but only the HR admin
+   * (companies.hrAdminId) can raise a limit or upgrade the plan.
+   */
+  private async resolveCompanyAudience(userId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId },
+      select: { companyId: true },
+    });
+    const companyId = employee?.companyId;
+    if (!companyId) return null;
+
+    const [company, employees] = await Promise.all([
+      this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true, hrAdmin: { select: { id: true, name: true, email: true } } },
+      }),
+      this.prisma.employee.findMany({
+        where: { companyId },
+        select: { userId: true },
+      }),
+    ]);
+    if (!company) return null;
+
+    return {
+      companyId,
+      companyName: company.name,
+      memberUserIds: employees.map((e) => e.userId),
+      admin: company.hrAdmin,
+    };
+  }
+
+  private async notifyQuotaState(
+    client: AuthenticatedSocket,
+    quota: MessageQuotaPreflight,
+  ): Promise<void> {
+    if (!client.userId) return;
+    try {
+      if (quota.allowed) {
+        await this.notifyQuotaThresholds(client, quota);
+      } else {
+        await this.notifyQuotaDenial(client, quota);
+      }
+    } catch (err: any) {
+      this.logger.error(`Quota alert failed for ${client.userId}: ${err.message}`);
+    }
+  }
+
+  /**
+   * A blocked send. Rolling 5h/1w limits are per member, so only that member
+   * is told; the plan quota is shared, so every member gets the bell and the
+   * HR admin gets the email.
+   */
+  private async notifyQuotaDenial(
+    client: AuthenticatedSocket,
+    quota: MessageQuotaPreflight,
+  ): Promise<void> {
+    const userId = client.userId!;
+    const window = quota.details?.window;
+
+    if (window) {
+      const limit = quota.details?.limit ?? 0;
+      const freesAt = quota.details?.freesAt ?? null;
+      // freesAt identifies this window instance, so the alert can fire again
+      // once the window rolls over and blocks the member a second time.
+      const key = `window:${userId}:${window}:${freesAt ?? 'none'}`;
+      if (!this.claimAlert(key, this.WINDOW_MS[window])) return;
+      await this.notificationsService.notifyQuotaWindowLimit(userId, {
+        window,
+        limit,
+        used: quota.details?.used ?? limit,
+        freesAt,
+      });
+      return;
+    }
+
+    const audience = await this.resolveCompanyAudience(userId);
+    if (!audience) return;
+
+    const periodKey = quota.periodEnd ?? 'unknown';
+    if (!this.claimAlert(`plan:${audience.companyId}:exhausted:${periodKey}`, this.PLAN_ALERT_TTL_MS)) return;
+
+    const details = {
+      companyName: audience.companyName,
+      planName: quota.planName ?? null,
+      usedMessages: quota.usedMessages ?? 0,
+      planMessages: quota.planMessages ?? null,
+      triggeredByName: client.name ?? undefined,
+      periodEnd: quota.periodEnd ?? null,
+    };
+
+    await this.notificationsService.notifyCompanyQuotaExhausted(audience.memberUserIds, details);
+    if (audience.admin) {
+      await this.emailService.sendQuotaExhaustedEmail(audience.admin.email, audience.admin.name, details);
+    }
+  }
+
+  /**
+   * An allowed send that crossed a warning threshold. Members are warned about
+   * their own rolling windows; the HR admin is warned about the shared plan
+   * quota by bell and email, because only they can act on it.
+   */
+  private async notifyQuotaThresholds(
+    client: AuthenticatedSocket,
+    quota: MessageQuotaPreflight,
+  ): Promise<void> {
+    const userId = client.userId!;
+
+    for (const window of ['fiveHour', 'week'] as const) {
+      const state = quota.windows?.[window];
+      if (!state?.enabled || !state.limit) continue;
+      // remaining === 0 belongs to the denial path, not the warning path.
+      if (state.pct < this.QUOTA_WARNING_PCT || state.remaining === 0) continue;
+      const bucket = Math.floor(Date.now() / this.WINDOW_MS[window]);
+      if (!this.claimAlert(`window:${userId}:${window}:warn:${bucket}`, this.WINDOW_MS[window])) continue;
+      await this.notificationsService.notifyQuotaWindowWarning(userId, {
+        window,
+        limit: state.limit,
+        used: state.used,
+        pct: state.pct,
+      });
+    }
+
+    const planMessages = quota.planMessages;
+    if (!quota.hasMessageQuota || !planMessages) return;
+    if ((quota.totalRemainingMessages ?? 0) <= 0) return;
+    const usedMessages = quota.usedMessages ?? 0;
+    const pct = Math.round((usedMessages / planMessages) * 100);
+    if (pct < this.QUOTA_WARNING_PCT) return;
+
+    const audience = await this.resolveCompanyAudience(userId);
+    if (!audience?.admin) return;
+
+    const periodKey = quota.periodEnd ?? 'unknown';
+    if (!this.claimAlert(`plan:${audience.companyId}:warn:${periodKey}`, this.PLAN_ALERT_TTL_MS)) return;
+
+    const details = {
+      companyName: audience.companyName,
+      planName: quota.planName ?? null,
+      usedMessages,
+      planMessages,
+      pct,
+      triggeredByName: client.name ?? undefined,
+      periodEnd: quota.periodEnd ?? null,
+    };
+
+    await this.notificationsService.notifyCompanyQuotaWarning(audience.admin.id, details);
+    await this.emailService.sendQuotaWarningEmail(audience.admin.email, audience.admin.name, details);
   }
 }

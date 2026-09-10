@@ -148,4 +148,115 @@ export class NotificationsService {
 
     this.logger.log(`Notified user ${uploadedByUserId} about Talent Pool batch completion`);
   }
+
+  /**
+   * Notify a member that their own rolling message window (5h / 1w) is full.
+   * Rolling windows are per member, so only the blocked user is told.
+   */
+  async notifyQuotaWindowLimit(
+    userId: string,
+    opts: { window: 'fiveHour' | 'week'; limit: number; used: number; freesAt: string | null },
+  ) {
+    const label = opts.window === 'fiveHour' ? '5-hour' : '1-week';
+
+    await this.repository.createNotification({
+      userId,
+      type: NotificationType.QUOTA_EXHAUSTED,
+      title: 'Message Limit Reached',
+      message: `Your ${label} message limit (${opts.limit} messages) is reached.${this.freesAtClause(opts.freesAt)}`,
+      data: { scope: 'window', window: opts.window, limit: opts.limit, used: opts.used, freesAt: opts.freesAt },
+    });
+
+    this.logger.log(`Notified user ${userId} about ${label} message window limit`);
+  }
+
+  /**
+   * Warn a member that their own rolling message window is nearly full.
+   */
+  async notifyQuotaWindowWarning(
+    userId: string,
+    opts: { window: 'fiveHour' | 'week'; limit: number; used: number; pct: number },
+  ) {
+    const label = opts.window === 'fiveHour' ? '5-hour' : '1-week';
+
+    await this.repository.createNotification({
+      userId,
+      type: NotificationType.QUOTA_WARNING,
+      title: 'Message Limit Almost Reached',
+      message: `You have used ${opts.pct}% of your ${label} message limit (${opts.used}/${opts.limit}).`,
+      data: { scope: 'window', window: opts.window, limit: opts.limit, used: opts.used, pct: opts.pct },
+    });
+
+    this.logger.log(`Warned user ${userId} at ${opts.pct}% of ${label} message window`);
+  }
+
+  /**
+   * Notify every member of a company that the shared plan message quota is
+   * exhausted — the AI assistant is now unavailable to all of them.
+   */
+  async notifyCompanyQuotaExhausted(
+    memberUserIds: string[],
+    opts: { companyName: string; planName: string | null; usedMessages: number; planMessages: number | null; triggeredByName?: string },
+  ) {
+    if (memberUserIds.length === 0) {
+      this.logger.warn('No company members found to notify about quota exhaustion');
+      return;
+    }
+
+    const planClause = opts.planName ? ` on the ${opts.planName} plan` : '';
+    const usageClause = opts.planMessages
+      ? ` (${opts.usedMessages}/${opts.planMessages} messages used)`
+      : '';
+    const byClause = opts.triggeredByName ? ` Triggered by ${opts.triggeredByName}.` : '';
+
+    const notifications = memberUserIds.map((userId) => ({
+      userId,
+      type: NotificationType.QUOTA_EXHAUSTED,
+      title: 'AI Assistant Quota Exhausted',
+      message: `${opts.companyName} has used its monthly AI Assistant message quota${planClause}${usageClause}. Contact your HR administrator to upgrade.${byClause}`,
+      data: {
+        scope: 'plan',
+        companyName: opts.companyName,
+        planName: opts.planName,
+        usedMessages: opts.usedMessages,
+        planMessages: opts.planMessages,
+      },
+    }));
+
+    await this.repository.createManyNotifications(notifications);
+    this.logger.log(`Notified ${memberUserIds.length} members of ${opts.companyName} about plan quota exhaustion`);
+  }
+
+  /**
+   * Warn the company's HR admin that the shared plan quota is nearly used up,
+   * while there is still headroom to act on.
+   */
+  async notifyCompanyQuotaWarning(
+    adminUserId: string,
+    opts: { companyName: string; planName: string | null; usedMessages: number; planMessages: number; pct: number },
+  ) {
+    await this.repository.createNotification({
+      userId: adminUserId,
+      type: NotificationType.QUOTA_WARNING,
+      title: 'AI Assistant Quota Almost Exhausted',
+      message: `${opts.companyName} has used ${opts.pct}% of its monthly AI Assistant message quota (${opts.usedMessages}/${opts.planMessages}${opts.planName ? ` on ${opts.planName}` : ''}).`,
+      data: {
+        scope: 'plan',
+        companyName: opts.companyName,
+        planName: opts.planName,
+        usedMessages: opts.usedMessages,
+        planMessages: opts.planMessages,
+        pct: opts.pct,
+      },
+    });
+
+    this.logger.log(`Warned HR admin ${adminUserId} at ${opts.pct}% of ${opts.companyName} plan quota`);
+  }
+
+  private freesAtClause(freesAt: string | null): string {
+    if (!freesAt) return '';
+    const when = new Date(freesAt);
+    if (Number.isNaN(when.getTime())) return '';
+    return ` A slot frees up at ${when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}.`;
+  }
 }

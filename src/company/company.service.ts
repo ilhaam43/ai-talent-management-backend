@@ -3,10 +3,12 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { LlmDashboardService } from '../ai-assistant/llm-dashboard.service';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CreateCompanyUserDto } from './dto/create-company-user.dto';
 import { UpdateCompanyUserDto } from './dto/update-company-user.dto';
@@ -15,9 +17,12 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class CompanyService {
+  private readonly logger = new Logger(CompanyService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
+    private readonly llmDashboardService: LlmDashboardService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -238,6 +243,16 @@ export class CompanyService {
   async createCompanyUser(userId: string, dto: CreateCompanyUserDto) {
     const company = await this.assertHrAdmin(userId);
 
+    // The plan's member cap counts AITM employees (true headcount), the same
+    // basis the dashboard enforces on plan assignment. Sitting exactly at the
+    // cap is within tier; adding one more would exceed it.
+    const cap = await this.llmDashboardService.getCompanyCap(company.id);
+    if (cap && cap.maxMembers !== null && cap.memberCount >= cap.maxMembers) {
+      throw new ConflictException(
+        `Plan member cap reached (${cap.memberCount}/${cap.maxMembers}). Remove a member or upgrade the plan before adding another.`,
+      );
+    }
+
     // Check for duplicate email
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -400,7 +415,9 @@ export class CompanyService {
 
   /**
    * Remove a user from the HR Admin's company.
-   * Deletes the employee record and the user record.
+   * The account itself is kept: the employee link is dropped and the dashboard
+   * hands the now-standalone account its own Demo Trial plan, so a removed
+   * member never keeps drawing on the company plan.
    */
   async removeCompanyUser(userId: string, targetUserId: string) {
     const company = await this.assertHrAdmin(userId);
@@ -422,12 +439,19 @@ export class CompanyService {
       throw new NotFoundException('User not found in your company.');
     }
 
-    // Delete employee first (due to FK), then user
-    await this.prisma.$transaction(async (tx) => {
-      await tx.employee.delete({ where: { id: targetEmployee.id } });
-      await tx.user.delete({ where: { id: targetUserId } });
-    });
+    await this.prisma.employee.delete({ where: { id: targetEmployee.id } });
 
-    return { message: 'User removed successfully' };
+    // Drops the dashboard mapping (it lives in another database with no FK back
+    // to AITM users, so it would otherwise linger as a ghost) and assigns the
+    // Demo Trial plan to the standalone account. Fail-soft: the member is
+    // already unlinked here, so a dashboard outage must not fail the request.
+    const unlink = await this.llmDashboardService.unlinkMember(targetUserId);
+    if (!unlink) {
+      this.logger.warn(
+        `Dashboard unreachable while unlinking member ${targetUserId}; mapping cleanup and Demo Trial assignment must be retried.`,
+      );
+    }
+
+    return { message: 'User removed from company successfully' };
   }
 }
