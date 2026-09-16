@@ -27,6 +27,7 @@ interface AuthenticatedSocket extends WebSocket {
   email?: string;
   name?: string;
   activeSessionKey?: string;
+  activeSessionCreatedAt?: number;
   cleanupGoclawListener?: () => void;
   /** Derived company name from user email domain (e.g. 'lintasarta') */
   companyName?: string;
@@ -523,13 +524,26 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           this.logger.warn(`Filtered internal error from agent response for user ${client.email}`);
           content = this.FRIENDLY_ERROR;
         } else if (client.userId) {
-          // Check for generated files in user's workspace
+          // Attach workspace files only when they belong to THIS session:
+          // either the agent named the file in its response, or the file was
+          // created after this chat session started. The workspace dir is
+          // per-user across sessions, so a blanket attach leaks other chats'
+          // uploads into this one.
           try {
-            const recentFiles = this.aiAssistantService.getRecentGeneratedFiles(client.userId, 7 * 24 * 3600 * 1000);
-            for (const file of recentFiles) {
-              const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file)}`;
-              if (!content.includes(`/ai-assistant/download/${encodeURIComponent(file)}`)) {
-                content += `\n\n📥 **Download File:** [${file}](${downloadUrl})`;
+            const sessionStart = client.activeSessionCreatedAt;
+            const candidates = this.aiAssistantService.getRecentGeneratedFilesWithAge(
+              client.userId,
+              7 * 24 * 3600 * 1000,
+            );
+            const lower = content.toLowerCase();
+            for (const file of candidates) {
+              const mentioned = lower.includes(file.name.toLowerCase());
+              const createdInSession =
+                sessionStart !== undefined ? file.mtimeMs >= sessionStart : false;
+              if (!mentioned && !createdInSession) continue;
+              const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file.name)}`;
+              if (!content.includes(`/ai-assistant/download/${encodeURIComponent(file.name)}`)) {
+                content += `\n\n📥 **Download File:** [${file.name}](${downloadUrl})`;
               }
             }
           } catch (err: any) {
@@ -615,7 +629,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (!targetSessionKey) {
       targetSessionKey = `agent:${this.goclawService.agentKey}:direct:${client.goclawUserId}:${Date.now()}`;
       // Save session in DB
-      await this.prisma.chatSession.create({
+      const createdSession = await this.prisma.chatSession.create({
         data: {
           userId: client.userId,
           sessionKey: targetSessionKey,
@@ -623,6 +637,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           lastMessage: message,
         },
       });
+      client.activeSessionCreatedAt = createdSession.createdAt.getTime();
 
       // Notify client about created session
       client.send(
@@ -634,13 +649,14 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
       );
     } else {
       // Update last message & timestamp
-      await this.prisma.chatSession.update({
+      const updatedSession = await this.prisma.chatSession.update({
         where: { sessionKey: targetSessionKey },
         data: {
           lastMessage: message,
           updatedAt: new Date(),
         },
       }).catch(() => null);
+      client.activeSessionCreatedAt = updatedSession?.createdAt.getTime();
     }
 
     client.activeSessionKey = targetSessionKey;
@@ -652,8 +668,12 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const isOwner = this.isOwnerCompanyUser(client);
       const effectiveCompany = isOwner ? 'lintasarta' : (client.companyName || 'external');
-      const userContextPrefix = `[User: ${client.email} | Company: ${effectiveCompany}]\n`;
+      const userContextPrefix = `[User: ${client.email} | UserId: ${client.userId} | Company: ${effectiveCompany}]\n`;
       const messageWithContext = `${userContextPrefix}${message}`;
+      void this.llmDashboardService.recordPendingMessage(
+        client.userId,
+        `${targetSessionKey}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+      );
       this.goclawService.sendChat(client.goclawUserId, messageWithContext, targetSessionKey);
     } catch (err: any) {
       client.send(
@@ -673,7 +693,14 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (!client.goclawUserId || !client.userId) return;
     try {
       const rawMessages = await this.goclawService.getChatHistory(client.goclawUserId, data.sessionKey);
-      const userFiles = this.aiAssistantService.getRecentGeneratedFiles(client.userId, 7 * 24 * 3600 * 1000);
+      // Workspace files are per-user across sessions: attach them to a history
+      // message only when the message names the file, or (fallback) when the
+      // file was created inside this session's own time window.
+      const candidates = this.aiAssistantService.getRecentGeneratedFilesWithAge(
+        client.userId,
+        7 * 24 * 3600 * 1000,
+      );
+      const linkedFiles = new Set<string>();
 
       const cleanedMessages: Array<{ role: string; content: string; thought?: string }> = [];
 
@@ -684,6 +711,12 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
 
           let content = m.content || m.text || '';
           if (typeof content !== 'string') continue;
+
+          // GoClaw stores the user message with our routing header prepended
+          // ([User: ... | Company: ...]) — never show it back to the user.
+          if (m.role === 'user') {
+            content = content.replace(/^\[User:[^\]]*\]\s*/, '');
+          }
 
           let thought = m.thought || m.thinking || m.reasoning_content || '';
           const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/i);
@@ -702,13 +735,14 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
 
           if (m.role === 'assistant') {
             // Check if any files were generated that match or belong to this chat
-            for (const file of userFiles) {
-              const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file)}`;
+            for (const file of candidates) {
+              const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file.name)}`;
               if (
-                content.toLowerCase().includes(file.toLowerCase()) &&
-                !content.includes(`/ai-assistant/download/${encodeURIComponent(file)}`)
+                content.toLowerCase().includes(file.name.toLowerCase()) &&
+                !content.includes(`/ai-assistant/download/${encodeURIComponent(file.name)}`)
               ) {
-                content += `\n\n📥 **Download File:** [${file}](${downloadUrl})`;
+                content += `\n\n📥 **Download File:** [${file.name}](${downloadUrl})`;
+                linkedFiles.add(file.name);
               }
             }
           }
@@ -720,14 +754,26 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
           });
         }
 
-        // If there are user files and none of the assistant messages have download links, attach to the last assistant message
-        if (userFiles.length > 0) {
-          const lastAssistant = [...cleanedMessages].reverse().find((m) => m.role === 'assistant');
-          if (lastAssistant) {
-            for (const file of userFiles) {
-              const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file)}`;
-              if (!lastAssistant.content.includes(`/ai-assistant/download/${encodeURIComponent(file)}`)) {
-                lastAssistant.content += `\n\n📥 **Download File:** [${file}](${downloadUrl})`;
+        // Fallback: files generated during this session's lifetime that the
+        // agent never named (e.g. silent report exports) attach to the last
+        // assistant message. Files from other sessions stay out.
+        const windowFiles = candidates.filter((f) => !linkedFiles.has(f.name));
+        if (windowFiles.length > 0) {
+          const sessionRow = await this.prisma.chatSession.findUnique({
+            where: { sessionKey: data.sessionKey },
+            select: { createdAt: true, updatedAt: true },
+          });
+          if (sessionRow) {
+            const from = sessionRow.createdAt.getTime();
+            const to = sessionRow.updatedAt.getTime() + 60_000;
+            const inWindow = windowFiles.filter((f) => f.mtimeMs >= from && f.mtimeMs <= to);
+            const lastAssistant = [...cleanedMessages].reverse().find((m) => m.role === 'assistant');
+            if (lastAssistant) {
+              for (const file of inWindow) {
+                const downloadUrl = `https://backend-ai-recruitment.lintasarta.dev/ai-assistant/download/${encodeURIComponent(file.name)}`;
+                if (!lastAssistant.content.includes(`/ai-assistant/download/${encodeURIComponent(file.name)}`)) {
+                  lastAssistant.content += `\n\n📥 **Download File:** [${file.name}](${downloadUrl})`;
+                }
               }
             }
           }

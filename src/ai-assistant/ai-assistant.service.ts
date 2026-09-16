@@ -229,9 +229,15 @@ export class AiAssistantService {
   }
 
   /**
-   * Get list of recently generated files in the user's GoClaw agent workspace.
+   * Get recently generated files in the user's GoClaw agent workspace with
+   * their mtimes, so callers can scope attachments to a chat session window.
+   * The workspace dir is per USER, not per session — never attach these
+   * wholesale to a response without session/mention scoping.
    */
-  getRecentGeneratedFiles(userId: string, maxAgeMs = 180000): string[] {
+  getRecentGeneratedFilesWithAge(
+    userId: string,
+    maxAgeMs = 180000,
+  ): Array<{ name: string; mtimeMs: number }> {
     try {
       const goclawUserId = `aitm_${userId}`;
       const workspaceDir = this.goclawService.agentWorkspace;
@@ -240,20 +246,27 @@ export class AiAssistantService {
 
       const files = fs.readdirSync(userDir);
       const now = Date.now();
-      const recent: string[] = [];
+      const recent: Array<{ name: string; mtimeMs: number }> = [];
 
       for (const file of files) {
         if (file.startsWith('.')) continue;
         const fullPath = path.join(userDir, file);
         const stats = fs.statSync(fullPath);
         if (stats.isFile() && (now - stats.mtimeMs) < maxAgeMs) {
-          recent.push(file);
+          recent.push({ name: file, mtimeMs: stats.mtimeMs });
         }
       }
       return recent;
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Get list of recently generated files in the user's GoClaw agent workspace.
+   */
+  getRecentGeneratedFiles(userId: string, maxAgeMs = 180000): string[] {
+    return this.getRecentGeneratedFilesWithAge(userId, maxAgeMs).map((f) => f.name);
   }
 
   /**

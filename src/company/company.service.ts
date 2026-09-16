@@ -243,15 +243,10 @@ export class CompanyService {
   async createCompanyUser(userId: string, dto: CreateCompanyUserDto) {
     const company = await this.assertHrAdmin(userId);
 
-    // The plan's member cap counts AITM employees (true headcount), the same
-    // basis the dashboard enforces on plan assignment. Sitting exactly at the
-    // cap is within tier; adding one more would exceed it.
-    const cap = await this.llmDashboardService.getCompanyCap(company.id);
-    if (cap && cap.maxMembers !== null && cap.memberCount >= cap.maxMembers) {
-      throw new ConflictException(
-        `Plan member cap reached (${cap.memberCount}/${cap.maxMembers}). Remove a member or upgrade the plan before adding another.`,
-      );
-    }
+    // No plan-cap gate here: headcount is not seats. A company may employ more
+    // people than its plan covers; only seat allocation (company plan-seats)
+    // is limited by max_members, and unseated employees fall back to the
+    // standalone Demo Trial quota.
 
     // Check for duplicate email
     const existing = await this.prisma.user.findUnique({
@@ -453,5 +448,115 @@ export class CompanyService {
     }
 
     return { message: 'User removed from company successfully' };
+  }
+
+  /**
+   * Get company plan seats status (allocated members and capacity).
+   */
+  async getCompanyPlanSeats(userId: string) {
+    const company = await this.assertHrAdmin(userId);
+    const seats = await this.llmDashboardService.getCompanyPlanSeats(company.id);
+    return seats || {
+      companyId: company.id,
+      planName: null,
+      plan: null,
+      maxMembers: null,
+      seatsAllocated: 0,
+      availableSeats: null,
+      canAllocateMore: true,
+      allocatedMembers: [],
+    };
+  }
+
+  /**
+   * Search available employees in the same company who are not yet allocated a plan seat.
+   */
+  async getAvailableEmployees(userId: string, search?: string) {
+    const company = await this.assertHrAdmin(userId);
+    const seats = await this.llmDashboardService.getCompanyPlanSeats(company.id);
+    const allocatedUserIds = new Set(
+      (seats?.allocatedMembers || []).map((m: any) => m.userId),
+    );
+
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        companyId: company.id,
+        ...(search && search.trim()
+          ? {
+              OR: [
+                { user: { name: { contains: search.trim(), mode: 'insensitive' } } },
+                { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        userRole: { select: { id: true, roleName: true } },
+        employeePosition: { select: { id: true, employeePosition: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    });
+
+    return employees
+      .filter((emp) => !allocatedUserIds.has(emp.user.id))
+      .map((emp) => ({
+        userId: emp.user.id,
+        employeeId: emp.id,
+        name: emp.user.name,
+        email: emp.user.email,
+        role: emp.userRole.roleName,
+        position: emp.employeePosition?.employeePosition || null,
+      }));
+  }
+
+  /**
+   * Allocate an employee to a company AI plan seat.
+   */
+  async allocatePlanSeat(userId: string, targetUserId: string) {
+    const company = await this.assertHrAdmin(userId);
+
+    // Verify target is an employee of this company
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId: targetUserId, companyId: company.id },
+    });
+    if (!employee) {
+      throw new NotFoundException('Karyawan tidak ditemukan di perusahaan ini.');
+    }
+
+    const result = await this.llmDashboardService.allocateCompanyPlanSeat(
+      company.id,
+      targetUserId,
+      userId,
+    );
+
+    if (result?.error === 'PLAN_SEAT_LIMIT_REACHED') {
+      throw new ConflictException(result.message);
+    }
+    if (!result || result.error) {
+      throw new BadRequestException(result?.message || 'Gagal mengalokasikan kursi plan.');
+    }
+
+    return { success: true, message: 'Kursi plan berhasil dialokasikan.' };
+  }
+
+  /**
+   * Revoke an employee's company AI plan seat.
+   */
+  async revokePlanSeat(userId: string, targetUserId: string) {
+    const company = await this.assertHrAdmin(userId);
+
+    const result = await this.llmDashboardService.revokeCompanyPlanSeat(
+      company.id,
+      targetUserId,
+      userId,
+    );
+
+    if (!result || !result.success) {
+      throw new BadRequestException('Gagal mencabut kursi plan.');
+    }
+
+    return { success: true, message: 'Kursi plan berhasil dicabut.' };
   }
 }
