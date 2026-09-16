@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -128,5 +129,45 @@ export class CompanyController {
   async removeCompanyUser(@Req() req: any, @Param('userId') targetUserId: string) {
     const userId = req.user.id || req.user.sub;
     return this.companyService.removeCompanyUser(userId, targetUserId);
+  }
+
+  // ─── AI Plan Seat Allocation ───────────────────────────────────────────────
+
+  @Get('plan-seats')
+  @ApiOperation({ summary: 'Get company AI plan seat allocation and limits (HR Admin only)' })
+  @ApiResponse({ status: 200, description: 'Returns seat allocation and plan details.' })
+  @ApiResponse({ status: 403, description: 'User is not the HR Admin.' })
+  async getCompanyPlanSeats(@Req() req: any) {
+    const userId = req.user.id || req.user.sub;
+    return this.companyService.getCompanyPlanSeats(userId);
+  }
+
+  @Get('available-employees')
+  @ApiOperation({ summary: 'Search company employees not yet allocated an AI plan seat' })
+  @ApiResponse({ status: 200, description: 'Returns list of unassigned employees.' })
+  @ApiResponse({ status: 403, description: 'User is not the HR Admin.' })
+  async getAvailableEmployees(@Req() req: any, @Query('search') search?: string) {
+    const userId = req.user.id || req.user.sub;
+    return this.companyService.getAvailableEmployees(userId, search);
+  }
+
+  @Post('plan-seats')
+  @ApiOperation({ summary: 'Allocate an employee to an AI plan seat (HR Admin only)' })
+  @ApiResponse({ status: 200, description: 'Seat allocated successfully.' })
+  @ApiResponse({ status: 403, description: 'User is not the HR Admin.' })
+  @ApiResponse({ status: 409, description: 'Plan seat limit reached.' })
+  async allocatePlanSeat(@Req() req: any, @Body('userId') targetUserId: string) {
+    const userId = req.user.id || req.user.sub;
+    return this.companyService.allocatePlanSeat(userId, targetUserId);
+  }
+
+  @Delete('plan-seats/:userId')
+  @ApiOperation({ summary: 'Revoke an employee from an AI plan seat (HR Admin only)' })
+  @ApiParam({ name: 'userId', description: 'Target user ID whose seat is to be revoked' })
+  @ApiResponse({ status: 200, description: 'Seat revoked successfully.' })
+  @ApiResponse({ status: 403, description: 'User is not the HR Admin.' })
+  async revokePlanSeat(@Req() req: any, @Param('userId') targetUserId: string) {
+    const userId = req.user.id || req.user.sub;
+    return this.companyService.revokePlanSeat(userId, targetUserId);
   }
 }
