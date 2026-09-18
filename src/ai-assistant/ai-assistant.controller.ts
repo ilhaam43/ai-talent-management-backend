@@ -145,6 +145,19 @@ export class AiAssistantController {
     if (!filePath) {
       throw new NotFoundException('File not found');
     }
+
+    // Zero-trust: text artifacts (extraction JSON, reports, notes) are masked
+    // at serve time for non-owner companies — agent-written files bypass the
+    // chat-level masking, so the download endpoint is the last line of defense.
+    const company = companyFromEmail(req.user?.email);
+    if (/\.(json|md|txt|csv|html|log)$/i.test(sanitized) && !isDataOwnerCompany(company)) {
+      const raw = await fsp.readFile(filePath, 'utf8');
+      const masked = maskPiiInText(raw);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${sanitized}"`);
+      return res.send(masked);
+    }
+
     res.download(filePath, sanitized);
   }
 
