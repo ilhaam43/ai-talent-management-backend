@@ -19,6 +19,8 @@ import {
   Put,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { promises as fsp } from 'fs';
+import { companyFromEmail, isDataOwnerCompany, maskPiiInText } from './pii-masking.util';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
