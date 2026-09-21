@@ -8,6 +8,8 @@ import { SignupDto } from './dto/signup.dto'
 import { SetPasswordDto } from './dto/set-password.dto'
 import { HrSignupDto } from './dto/hr-signup.dto'
 import { VerifyOtpDto } from './dto/verify-otp.dto'
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto'
+import { ResetPasswordDto } from './dto/reset-password.dto'
 
 @ApiTags('auth')
 @Controller('auth')
@@ -161,6 +163,25 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Current password is incorrect' })
   async changePassword(@Req() req: any, @Body() body: { currentPassword: string; newPassword: string }) {
     return this.authService.changePassword(req.user.id, body.currentPassword, body.newPassword)
+  }
+
+  @Post('forgot-password')
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send a password-reset OTP to the account email' })
+  @ApiResponse({ status: 200, description: 'Returns the same response whether or not the account exists' })
+  async forgotPassword(@Body() dto: RequestPasswordResetDto) {
+    return this.authService.requestPasswordReset(dto.email)
+  }
+
+  @Post('reset-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset a password using the emailed OTP' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired reset code' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPasswordWithOtp(dto.email, dto.otp, dto.password)
   }
 
   @Post('set-password')

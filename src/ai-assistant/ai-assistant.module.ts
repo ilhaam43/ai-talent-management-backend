@@ -9,6 +9,7 @@ import { LlmDashboardService } from './llm-dashboard.service';
 import { GoclawWsGateway } from './goclaw-ws.gateway';
 import { PrismaService } from '../database/prisma.service';
 import { EmailModule } from '../email/email.module';
+import { ChatTitleService } from './chat-title.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     LlmDashboardService,
     GoclawWsGateway,
     PrismaService,
+    ChatTitleService,
   ],
   exports: [AiAssistantService, GoclawService, QuotaService, LlmDashboardService],
 })

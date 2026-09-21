@@ -21,6 +21,7 @@ import { parse } from 'url';
 
 import { AiAssistantService } from './ai-assistant.service';
 import { companyFromEmail, isDataOwnerCompany, maskPiiInText } from './pii-masking.util';
+import { ChatTitleAttachment, ChatTitleService } from './chat-title.service';
 
 interface AuthenticatedSocket extends WebSocket {
   userId?: string;
@@ -53,6 +54,7 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly aiAssistantService: AiAssistantService,
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
+    private readonly chatTitleService: ChatTitleService,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket, req: any) {
@@ -545,7 +547,11 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
   @SubscribeMessage('send_message')
   async handleSendMessage(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { message: string; sessionKey?: string },
+    @MessageBody() data: {
+      message: string;
+      sessionKey?: string;
+      attachments?: ChatTitleAttachment[];
+    },
   ) {
     if (!client.goclawUserId || !client.userId) {
       return { type: 'error', error: 'Not authenticated' };
@@ -585,29 +591,63 @@ export class GoclawWsGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     const { message, sessionKey: inputSessionKey } = data;
     if (!message || !message.trim()) return;
+    const attachments = Array.isArray(data.attachments)
+      ? data.attachments
+          .filter((item) =>
+            item && typeof item.filename === 'string' &&
+            typeof item.storedName === 'string',
+          )
+          .slice(0, 3)
+      : [];
 
     let targetSessionKey = inputSessionKey;
 
     // Create sessionKey if not provided
     if (!targetSessionKey) {
       targetSessionKey = `agent:${this.goclawService.agentKey}:direct:${client.goclawUserId}:${Date.now()}`;
+      const initialTitle = this.chatTitleService.getImmediateTitle(message, attachments);
       // Save session in DB
       const createdSession = await this.prisma.chatSession.create({
         data: {
           userId: client.userId,
           sessionKey: targetSessionKey,
-          title: message.length > 30 ? message.slice(0, 30) + '...' : message,
+          title: initialTitle,
           lastMessage: message,
         },
       });
       client.activeSessionCreatedAt = createdSession.createdAt.getTime();
+
+      // Document extraction and the LLM fallback must not delay the chat.
+      void this.chatTitleService.refineTitle(message, attachments)
+        .then(async (refinedTitle) => {
+          if (!refinedTitle || refinedTitle === initialTitle) return;
+          const updated = await this.prisma.chatSession.updateMany({
+            where: {
+              id: createdSession.id,
+              userId: client.userId,
+              title: initialTitle,
+            },
+            data: { title: refinedTitle },
+          });
+          if (updated.count !== 1 || client.readyState !== WebSocket.OPEN) return;
+          client.send(JSON.stringify({
+            type: 'session_title_updated',
+            sessionKey: targetSessionKey,
+            payload: { sessionKey: targetSessionKey, title: refinedTitle },
+          }));
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Unable to refine chat title: ${error instanceof Error ? error.message : 'unknown error'}`,
+          );
+        });
 
       // Notify client about created session
       client.send(
         JSON.stringify({
           type: 'session_created',
           sessionKey: targetSessionKey,
-          payload: { sessionKey: targetSessionKey },
+          payload: { sessionKey: targetSessionKey, title: initialTitle },
         }),
       );
     } else {

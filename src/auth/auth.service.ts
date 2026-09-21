@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException, NotFoundException, ForbiddenException, InternalServerErrorException } from '@nestjs/common'
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, NotFoundException, ForbiddenException, InternalServerErrorException, ServiceUnavailableException } from '@nestjs/common'
 import { PrismaService } from '../database/prisma.service'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
@@ -274,6 +274,77 @@ export class AuthService {
     })
 
     return { message: 'Password changed successfully' }
+  }
+
+  async requestPasswordReset(email: string) {
+    const response = {
+      message: 'If an account exists for this email, a reset code has been sent.',
+    }
+    const normalizedEmail = email.trim().toLowerCase()
+    const otp = String(crypto.randomInt(100000, 1000000))
+    // Hash before looking up the account to reduce response-time differences
+    // between registered and unregistered email addresses.
+    const hashedOtp = await bcrypt.hash(otp, 10)
+    const resetExpiry = new Date(Date.now() + 10 * 60 * 1000)
+
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+    })
+    if (!user) return response
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: hashedOtp,
+        passwordResetExpiry: resetExpiry,
+      },
+    })
+
+    try {
+      await this.emailService.sendOtpEmail(user.email, user.name, otp, 'password-reset')
+    } catch (error) {
+      // Do not leave a usable code behind when delivery failed. The token
+      // condition avoids clearing a newer request that raced this one.
+      await this.prisma.user.updateMany({
+        where: { id: user.id, passwordResetToken: hashedOtp },
+        data: { passwordResetToken: null, passwordResetExpiry: null },
+      })
+      throw new ServiceUnavailableException('Unable to send reset code. Please try again later.')
+    }
+
+    return response
+  }
+
+  async resetPasswordWithOtp(email: string, otp: string, newPassword: string) {
+    const normalizedEmail = email.trim().toLowerCase()
+    const invalidCode = new UnauthorizedException('Invalid or expired reset code.')
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+    })
+
+    if (!user?.passwordResetToken || !user.passwordResetExpiry) throw invalidCode
+    if (user.passwordResetExpiry <= new Date()) throw invalidCode
+
+    const isOtpValid = await bcrypt.compare(otp, user.passwordResetToken)
+    if (!isOtpValid) throw invalidCode
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+    const result = await this.prisma.user.updateMany({
+      where: {
+        id: user.id,
+        passwordResetToken: user.passwordResetToken,
+        passwordResetExpiry: { gt: new Date() },
+      },
+      data: {
+        password: hashedPassword,
+        passwordSetRequired: false,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+      },
+    })
+
+    if (result.count !== 1) throw invalidCode
+    return { message: 'Password reset successfully.' }
   }
 
   async setPasswordFromToken(token: string, newPassword: string) {

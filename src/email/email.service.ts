@@ -615,21 +615,29 @@ export class EmailService {
   /**
    * Send OTP verification email to new HR user
    */
-  async sendOtpEmail(toEmail: string, name: string, otp: string): Promise<void> {
+  async sendOtpEmail(
+    toEmail: string,
+    name: string,
+    otp: string,
+    purpose: 'signup' | 'password-reset' = 'signup',
+  ): Promise<void> {
     try {
       const transporter = await this.createTransporter();
       const fromEmail = this.configService.get<string>('GMAIL_FROM_EMAIL');
       const fromName = this.configService.get<string>('GMAIL_FROM_NAME') || 'AI Talent Management';
+      const isPasswordReset = purpose === 'password-reset';
 
       const mailOptions = {
         from: `"${fromName}" <${fromEmail}>`,
         to: toEmail,
-        subject: 'Your Verification Code — AI Talent Management',
-        html: this.getOtpTemplate(name, otp),
+        subject: isPasswordReset
+          ? 'Password Reset Code — AI Talent Management'
+          : 'Your Verification Code — AI Talent Management',
+        html: this.getOtpTemplate(name, otp, purpose),
       };
 
       const result = await transporter.sendMail(mailOptions);
-      this.logger.log(`OTP email sent to ${toEmail} (Message ID: ${result.messageId})`);
+      this.logger.log(`${purpose} OTP email sent to ${toEmail} (Message ID: ${result.messageId})`);
     } catch (error: any) {
       this.logger.error(`Failed to send OTP email to ${toEmail}: ${error.message}`);
       throw new Error(`Email sending failed: ${error.message}`);
@@ -639,14 +647,24 @@ export class EmailService {
   /**
    * OTP email HTML template
    */
-  private getOtpTemplate(name: string, otp: string): string {
+  private getOtpTemplate(name: string, otp: string, purpose: 'signup' | 'password-reset'): string {
+    const isPasswordReset = purpose === 'password-reset';
+    const emailTitle = isPasswordReset ? 'Password Reset' : 'Email Verification';
+    const heading = isPasswordReset ? 'Reset Your Password' : 'HR Account Verification';
+    const message = isPasswordReset
+      ? 'Use the verification code below to reset your password.'
+      : "You've requested to create an HR account. Use the verification code below to complete your registration.";
+    const ignoreMessage = isPasswordReset
+      ? 'If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.'
+      : 'If you did not request this account, you can safely ignore this email.';
+
     return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Email Verification</title>
+  <title>${emailTitle}</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
   <table cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f4f4; padding: 20px;">
@@ -657,7 +675,7 @@ export class EmailService {
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #1678E6 0%, #0C3C87 100%); padding: 40px 30px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: bold;">HR Account Verification</h1>
+              <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: bold;">${heading}</h1>
               <p style="margin: 8px 0 0; color: #c8dcf8; font-size: 14px;">AI Talent Management — Lintasarta</p>
             </td>
           </tr>
@@ -668,7 +686,7 @@ export class EmailService {
               <h2 style="margin: 0 0 16px; color: #1a1a2e; font-size: 22px;">Hello, ${name}</h2>
 
               <p style="margin: 0 0 24px; color: #555; font-size: 16px; line-height: 1.6;">
-                You've requested to create an HR account. Use the verification code below to complete your registration.
+                ${message}
               </p>
 
               <!-- OTP Box -->
@@ -690,7 +708,7 @@ export class EmailService {
               </div>
 
               <p style="margin: 0; color: #888; font-size: 13px; line-height: 1.6;">
-                If you did not request this account, you can safely ignore this email.
+                ${ignoreMessage}
               </p>
             </td>
           </tr>
