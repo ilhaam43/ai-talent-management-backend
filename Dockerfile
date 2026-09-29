@@ -1,24 +1,20 @@
 # Multi-stage build for production
 
 # Stage 1: Build
-FROM node:20-bookworm-slim AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
 # Install build dependencies for native modules (canvas, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssl \
+RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    pkg-config \
-    libcairo2-dev \
-    libjpeg62-turbo-dev \
-    libpango1.0-dev \
-    libgif-dev \
-    libpixman-1-dev \
-    librsvg2-dev \
-    && rm -rf /var/lib/apt/lists/*
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    giflib-dev \
+    pixman-dev
 
 # Set Python for node-gyp
 ENV PYTHON=/usr/bin/python3
@@ -40,24 +36,20 @@ RUN npm run prisma:generate
 RUN npm run build
 
 # Stage 2: Production
-FROM node:20-bookworm-slim AS production
+FROM node:20-alpine AS production
 
 WORKDIR /usr/src/app
 
 # Install build dependencies for native modules (canvas, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssl \
+RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    pkg-config \
-    libcairo2-dev \
-    libjpeg62-turbo-dev \
-    libpango1.0-dev \
-    libgif-dev \
-    libpixman-1-dev \
-    librsvg2-dev \
-    && rm -rf /var/lib/apt/lists/*
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    giflib-dev \
+    pixman-dev
 
 # Set Python for node-gyp
 ENV PYTHON=/usr/bin/python3
@@ -69,10 +61,8 @@ RUN npm ci --only=production --legacy-peer-deps
 # Copy Prisma schema
 COPY --from=builder /usr/src/app/prisma ./prisma
 
-# Reuse the Prisma Client generated in the builder. The Prisma CLI is a
-# development dependency and is intentionally absent from this stage.
-COPY --from=builder /usr/src/app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /usr/src/app/node_modules/@prisma/client ./node_modules/@prisma/client
+# Generate Prisma client
+RUN npm run prisma:generate
 
 # Copy built application
 COPY --from=builder /usr/src/app/dist ./dist
@@ -93,3 +83,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Start application
 CMD ["node", "dist/main.js"]
+
+

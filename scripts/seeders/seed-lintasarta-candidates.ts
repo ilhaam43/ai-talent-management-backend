@@ -34,14 +34,12 @@ async function main() {
             where: { email: candidateData.email },
             update: {
                 password: hashedPassword, // Update password if re-seeding
-                isVerified: true,
             },
             create: {
                 email: candidateData.email,
                 name: candidateData.name,
                 password: hashedPassword,
                 emailVerified: new Date(),
-                isVerified: true,
             },
         });
         console.log(`✓ User ensured: ${user.email} (${user.id})`);
