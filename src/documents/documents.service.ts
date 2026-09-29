@@ -251,20 +251,60 @@ export class DocumentsService {
 
   /**
    * Get presigned download URL
+   * For MINIO documents: returns presigned S3 URL directly
+   * For LOCAL documents: attempts on-the-fly migration to MinIO, otherwise returns backend download URL
    */
   async getPresignedDownloadUrl(documentId: string, candidateId: string, isHrOrAdmin = false) {
     const document = await this.getDocumentById(documentId, candidateId, isHrOrAdmin);
 
+    // 1. Already in MinIO — return presigned URL
     if (document.storageType === 'MINIO' && document.objectKey) {
       const url = await this.storageService.getPresignedDownloadUrl(document.objectKey, 300); // 5 min
-      return {
-        url,
-        expiresIn: 300,
-      };
+      return { url, expiresIn: 300 };
     }
 
-    // Fallback: build backend endpoint download URL
-    const host = process.env.BACKEND_URL || '';
+    // 2. LOCAL document — try to migrate to MinIO on-the-fly
+    if (document.filePath) {
+      try {
+        const localPath = document.filePath.startsWith('./')
+          ? document.filePath
+          : `./${document.filePath}`;
+
+        const buffer = await fs.readFile(localPath);
+        const objectKey = this.storageService.buildKey(
+          'cv',
+          document.candidateId,
+          document.originalName || path.basename(document.filePath),
+        );
+
+        await this.storageService.uploadBuffer(
+          objectKey,
+          buffer,
+          document.mimeType || 'application/pdf',
+        );
+
+        // Update the document record to MINIO
+        await this.prisma.candidateDocument.update({
+          where: { id: documentId },
+          data: {
+            objectKey,
+            bucket: this.storageService.getDocumentsBucket(),
+            storageType: 'MINIO',
+          },
+        });
+
+        // Return presigned URL for the newly migrated object
+        const url = await this.storageService.getPresignedDownloadUrl(objectKey, 300);
+        return { url, expiresIn: 300 };
+      } catch (migrationErr: any) {
+        // Migration failed — fall through to backend download URL
+      }
+    }
+
+    // 3. Fallback: build absolute backend download URL
+    const host = process.env.BACKEND_URL
+      || process.env.MINIO_EXTERNAL_ENDPOINT?.replace(/:\d+$/, '').replace('http://', 'https://').replace(/\/$/, '')
+      || 'https://backend-ai-recruitment.lintasarta.dev';
     return {
       url: `${host}/documents/${documentId}/download`,
       expiresIn: 300,

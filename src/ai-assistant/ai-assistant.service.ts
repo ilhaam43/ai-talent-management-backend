@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { ChatResponseDto, ChatMessageHistory } from './dto/chat.dto';
 import { v4 as uuidv4 } from 'uuid';
+import { UsageTrackerService } from '../common/usage-tracker.service';
 
 interface ChatSession {
   messages: ChatMessageHistory[];
@@ -29,6 +30,7 @@ export class AiAssistantService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly usageTracker: UsageTrackerService,
   ) {
     // Configure n8n chatbot webhook URL
     this.n8nChatbotUrl = this.configService.get<string>('N8N_CHATBOT_WEBHOOK_URL') 
@@ -47,6 +49,7 @@ export class AiAssistantService {
   async processMessage(
     message: string,
     sessionId?: string,
+    userId?: string,
   ): Promise<ChatResponseDto> {
     const sid = sessionId || uuidv4();
     
@@ -71,7 +74,21 @@ export class AiAssistantService {
 
     try {
       // Forward message to n8n chatbot
+      const startTime = Date.now();
       const response = await this.callN8nChatbot(message, sid);
+      const latencyMs = Date.now() - startTime;
+
+      // Track N8N chatbot usage (fire-and-forget)
+      if (userId) {
+        this.usageTracker.trackEvent({
+          userId,
+          featureName: 'n8n_chatbot',
+          sourceService: 'BACKEND',
+          status: 'SUCCESS',
+          latencyMs,
+          metadata: { sessionId: sid, messageLength: message.length },
+        });
+      }
 
       // Add assistant response to local history
       session.messages.push({

@@ -214,7 +214,13 @@ export class DocumentsController {
       isHrOrAdmin,
     );
 
-    // Check if file exists
+    // If stored in MinIO, redirect to presigned download URL
+    if (document.storageType === 'MINIO' && document.objectKey) {
+      const presigned = await this.documentsService.getPresignedDownloadUrl(documentId, candidateId || '', isHrOrAdmin);
+      return res.redirect(presigned.url);
+    }
+
+    // Check if local file exists
     const fileExists = await this.documentsService.fileExists(
       document.filePath,
     );
